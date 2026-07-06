@@ -1,0 +1,93 @@
+# ========================================
+# Unreal Engine 5 - .gitignore
+# ========================================
+
+# ---- Visual Studio / IDE ----
+.vs/
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+.vscode/
+.idea/
+
+# ---- Unreal Engine Generated Files ----
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+*.VC.db
+*.VC.VC.opendb
+*.opensdf
+
+# ---- Unreal Engine cooked/bulk data ----
+# Note: .uasset and .umap are NOT ignored -
+# they are the actual game assets and should be tracked.
+# Only ignore their local cache companions.
+*.uexp
+*.ubulk
+*.ufont
+*.uptnl
+
+# ---- Unreal Engine Content (source assets kept, cooked excluded) ----
+# If you work with source art assets in the Content folder, uncomment:
+# Content/
+
+# ---- Pak files ----
+*.pak
+*.utoc
+*.ucas
+
+# ---- UnrealBuildTool ----
+Engine/Binaries/
+Engine/Intermediate/
+
+# ---- Backup / Logs ----
+*.log
+*.backup
+*.tmp
+*.temp
+
+# ---- OS Generated ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Tt]humbs.db
+*.pid
+
+# ---- macOS ----
+*.dSYM.zip
+*.dSYM
+
+# ---- Crashlytics ----
+CrashReportClient/
+
+# ---- Shader / Material -------
+ShaderCache/
+
+# ---- Config ----
+# Keep Config/ but ignore local user overrides
+Config/*.ini
+!Config/Default*.ini
+
+# ---- Plugins ----
+# Ignore Binaries/Intermediate in plugins too
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+
+# ---- Node / Web ----
+node_modules/

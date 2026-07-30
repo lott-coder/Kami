@@ -89,5 +89,8 @@ __pycache__/
 .env
 venv/
 
+# ---- External Resources ----
+Resource/
+
 # ---- Node / Web ----
 node_modules/

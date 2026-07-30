@@ -77,6 +77,23 @@
 
 **判断标准：** 如果两行数据用同一个 C++ 类、只改 DataTable 数值就能表现所有差异 → 不需要 Class 列。如果需要不同代码才能区分 → 需要 Class 列。
 
+### 2026-07-30 | 程序
+
+**事项：** 动画实例重构 — DaleAnimInstance 重命名为 RoleAnimInstance（持有 ARole* 引用），新建 EnemyAnimInstance。
+
+**处理过程：**
+1. `Animation/RoleAnimInstance.h/.cpp` — `UDaleAnimInstance` 重命名为 `URoleAnimInstance`，缓存引用从 `ABaseCharacter*` 改为 `ARole*`（更精确的类型约束）
+2. `Animation/EnemyAnimInstance.h/.cpp` — 新建 `UEnemyAnimInstance : UAnimInstance`，持有 `AEnemy* OwnerEnemy`，暴露 Speed / Direction / bIsMoving / bIsInAir / VerticalVelocity / GroundDistance 六项运动数据
+3. 删除旧文件 `Animation/DaleAnimInstance.h/.cpp`
+4. 编译通过（0 error / 0 warning）
+
+**设计理由：**
+- 命名与类层级对齐：`ARole`（玩家中间抽象类）→ `URoleAnimInstance`，`AEnemy` → `UEnemyAnimInstance`
+- 两者当前逻辑相同（通用移动数据），但分离可各自扩展：Role 后续可加输入驱动的动画状态（冲刺、闪避），Enemy 后续可加 AI 驱动的战斗动画状态
+- 持有引用改回具体类型（`ARole*` / `AEnemy*`）而非 `ABaseCharacter*`，避免在 AnimInstance 中做基类通用假设
+
+**后续待办：** 在 UE 编辑器中更新 ABP_Dale 的父类为 `URoleAnimInstance`，为新敌人创建 ABP_Enemy 指向 `UEnemyAnimInstance`
+
 ### 2026-07-29 | 程序
 
 **事项：** 实现模块化角色系统 — 支持身体/眼睛/头发/上衣/裤子/鞋子 6 个独立网格体组合。

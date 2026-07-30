@@ -4,18 +4,20 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
-#include "DaleAnimInstance.generated.h"
+#include "RoleAnimInstance.generated.h"
 
-class ABaseCharacter;
+class ARole;
 
 /**
- * UDaleAnimInstance — 主角 Dale 的动画数据层
+ * URoleAnimInstance — 玩家角色（Role 分支）的动画数据层
  *
  * 暴露角色运动状态给 Animation Blueprint。
  * 状态机逻辑在 ABP 中实现，C++ 仅负责更新数据。
+ *
+ * 所有继承 ARole 的角色（Dale 等）共用此 AnimInstance。
  */
 UCLASS(Blueprintable)
-class HOLE_API UDaleAnimInstance : public UAnimInstance
+class HOLE_API URoleAnimInstance : public UAnimInstance
 {
 	GENERATED_BODY()
 
@@ -43,12 +45,12 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	float VerticalVelocity = 0.0f;
 
-	/** 离地距离 (cm)，通过 LineTrace 计算。用于落地预测，提前混合 Jump Land */
+	/** 离地距离 (cm)，通过 Sphere Sweep 计算。用于落地预测，提前混合 Jump Land */
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	float GroundDistance = 0.0f;
 
 private:
 	/** 缓存的拥有者角色引用 */
 	UPROPERTY()
-	TObjectPtr<ABaseCharacter> OwnerCharacter;
+	TObjectPtr<ARole> OwnerRole;
 };

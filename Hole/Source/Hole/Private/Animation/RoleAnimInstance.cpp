@@ -1,40 +1,40 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "Animation/DaleAnimInstance.h"
-#include "Character/BaseCharacter.h"
+#include "Animation/RoleAnimInstance.h"
+#include "Character/Role.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Engine/World.h"
 #include "WorldCollision.h"
 #include "CollisionQueryParams.h"
 
-void UDaleAnimInstance::NativeInitializeAnimation()
+void URoleAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 
 	if (AActor* Owner = GetOwningActor())
 	{
-		OwnerCharacter = Cast<ABaseCharacter>(Owner);
+		OwnerRole = Cast<ARole>(Owner);
 	}
 }
 
-void UDaleAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+void URoleAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 {
 	Super::NativeUpdateAnimation(DeltaSeconds);
 
-	if (!OwnerCharacter)
+	if (!OwnerRole)
 	{
 		return;
 	}
 
 	// ---- Speed ----
-	const FVector Velocity = OwnerCharacter->GetVelocity();
+	const FVector Velocity = OwnerRole->GetVelocity();
 	Speed = Velocity.Size2D();
 
 	// ---- Direction ----
 	if (Speed > 0.0f)
 	{
-		const FRotator ActorRotation = OwnerCharacter->GetActorRotation();
+		const FRotator ActorRotation = OwnerRole->GetActorRotation();
 		const FVector VelocityDirection = Velocity.GetSafeNormal2D();
 		const FVector ForwardVector = ActorRotation.Vector();
 
@@ -52,7 +52,7 @@ void UDaleAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bIsMoving = Speed > 10.0f;
 
 	// ---- bIsInAir ----
-	if (const UCharacterMovementComponent* MovementComp = OwnerCharacter->GetCharacterMovement())
+	if (const UCharacterMovementComponent* MovementComp = OwnerRole->GetCharacterMovement())
 	{
 		bIsInAir = MovementComp->IsFalling();
 	}
@@ -64,20 +64,20 @@ void UDaleAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	// ---- GroundDistance (落地预测) ----
 	// 使用 Sphere Sweep（球体扫描）而非单点 LineTrace
 	// 球体半径 = 胶囊体半径，解决胶囊体悬在平台边缘时中心点 Trace 打空的问题
-	const UWorld* World = OwnerCharacter->GetWorld();
+	const UWorld* World = OwnerRole->GetWorld();
 	if (World)
 	{
-		const UCapsuleComponent* Capsule = OwnerCharacter->GetCapsuleComponent();
+		const UCapsuleComponent* Capsule = OwnerRole->GetCapsuleComponent();
 		const float CapsuleHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 88.0f;
 		const float CapsuleRadius      = Capsule ? Capsule->GetScaledCapsuleRadius()      : 34.0f;
 
 		// 扫描起点：脚底
-		const FVector SweepStart = OwnerCharacter->GetActorLocation()
+		const FVector SweepStart = OwnerRole->GetActorLocation()
 			- FVector::UpVector * CapsuleHalfHeight;
 		const FVector SweepEnd   = SweepStart - FVector::UpVector * 2000.0f;
 
 		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(OwnerCharacter);
+		QueryParams.AddIgnoredActor(OwnerRole);
 
 		const FCollisionShape SphereShape = FCollisionShape::MakeSphere(CapsuleRadius);
 

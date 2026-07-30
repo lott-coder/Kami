@@ -1,91 +1,43 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Character/BaseCharacter.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
+#include "Component/AttributeComponent.h"
 
 ABaseCharacter::ABaseCharacter()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// 默认属性值
-	MaxHealth = 100.0f;
-	CurrentHealth = MaxHealth;
+	// 身份默认值
+	CharacterID = NAME_None;
 	ElementalColor = EElementalColor::None;
+
+	// 创建属性容器组件
+	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
+
+	// 运行时状态（不再是硬编码 100 —— 由 InitializeAttributes() 从 DataTable 加载后覆盖）
+	CurrentHealth = 1.0f;
 }
 
 void ABaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 确保初始生命值有效
-	if (CurrentHealth <= 0.0f)
+	// 若子类尚未调用 InitializeAttributes，在此处兜底
+	if (CurrentHealth <= 0.0f || CharacterID != NAME_None)
 	{
-		CurrentHealth = MaxHealth;
-	}
-}
-
-void ABaseCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-	// 添加 Input Mapping Context
-	if (const APlayerController* PlayerController = Cast<APlayerController>(GetController()))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
-			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
-
-	// 绑定输入动作
-	if (UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent))
-	{
-		if (MoveAction)
-		{
-			EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ABaseCharacter::Move);
-		}
-
-		if (LookAction)
-		{
-			EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ABaseCharacter::Look);
-		}
-	}
-}
-
-void ABaseCharacter::Move(const FInputActionValue& Value)
-{
-	const FVector2D MovementVector = Value.Get<FVector2D>();
-
-	if (Controller)
-	{
-		const FRotator ControlRotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0.0f, ControlRotation.Yaw, 0.0f);
-
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
-	}
-}
-
-void ABaseCharacter::Look(const FInputActionValue& Value)
-{
-	const FVector2D LookVector = Value.Get<FVector2D>();
-
-	if (Controller)
-	{
-		AddControllerYawInput(LookVector.X);
-		AddControllerPitchInput(LookVector.Y);
+		InitializeAttributes();
 	}
 }
 
 void ABaseCharacter::InitializeAttributes()
 {
-	CurrentHealth = MaxHealth;
+	// 基类实现：从 DataTable 加载属性，重置生命值
+	if (AttributeComponent && CharacterID != NAME_None)
+	{
+		AttributeComponent->InitializeFromCharacterConfig(CharacterID);
+	}
+
+	CurrentHealth = GetMaxHealth();
 }
 
 void ABaseCharacter::ReceiveDamage(float DamageAmount, AActor* DamageCauser)
@@ -115,11 +67,12 @@ bool ABaseCharacter::IsDead() const
 
 float ABaseCharacter::GetHealthPercent() const
 {
-	if (MaxHealth <= 0.0f)
+	const float MaxHP = GetMaxHealth();
+	if (MaxHP <= 0.0f)
 	{
 		return 0.0f;
 	}
-	return CurrentHealth / MaxHealth;
+	return CurrentHealth / MaxHP;
 }
 
 void ABaseCharacter::Heal(float HealAmount)
@@ -129,5 +82,14 @@ void ABaseCharacter::Heal(float HealAmount)
 		return;
 	}
 
-	CurrentHealth = FMath::Min(MaxHealth, CurrentHealth + HealAmount);
+	CurrentHealth = FMath::Min(GetMaxHealth(), CurrentHealth + HealAmount);
+}
+
+float ABaseCharacter::GetMaxHealth() const
+{
+	if (AttributeComponent)
+	{
+		return AttributeComponent->GetFinal(AttributeNames::MaxHP());
+	}
+	return CurrentHealth; // 回退：没有 AttributeComponent 时（不应该发生）
 }

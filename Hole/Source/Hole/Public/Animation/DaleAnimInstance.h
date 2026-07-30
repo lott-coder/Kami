@@ -39,6 +39,14 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	bool bIsInAir = false;
 
+	/** 垂直速度 (cm/s)，正值=上升，负值=下落。用作 InAir Blend Space 1D 的输入轴 */
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float VerticalVelocity = 0.0f;
+
+	/** 离地距离 (cm)，通过 LineTrace 计算。用于落地预测，提前混合 Jump Land */
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	float GroundDistance = 0.0f;
+
 private:
 	/** 缓存的拥有者角色引用 */
 	UPROPERTY()

@@ -4,12 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "InputActionValue.h"
-
-class UInputMappingContext;
-class UInputAction;
-
 #include "BaseCharacter.generated.h"
+
+class UAttributeComponent;
 
 /**
  * 三色属性枚举 — 红克制蓝、蓝克制白、白克制红
@@ -27,6 +24,7 @@ enum class EElementalColor : uint8
  * ABaseCharacter — 所有角色的基类
  *
  * 提供生命值、颜色属性和死亡处理等基础功能。
+ * 战斗属性（MaxHP / 伤害修正 / 窗口时间 等）统一由 UAttributeComponent 管理。
  * 后续所有角色（主角、魔法师、NPC 等）均继承此类。
  */
 UCLASS(Abstract, Blueprintable)
@@ -39,45 +37,36 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-
-	// ---- 输入回调（子类可重写以扩展输入处理） ----
-
-	virtual void Move(const FInputActionValue& Value);
-	virtual void Look(const FInputActionValue& Value);
 
 public:
-	// ---- 属性 ----
+	// ---- 身份 ----
 
-	/** 当前生命值 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|Attributes")
-	float CurrentHealth;
-
-	/** 最大生命值 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|Attributes")
-	float MaxHealth;
+	/**
+	 * 角色配置 ID，对应 DT_CharacterConfig 的 RowName。
+	 * 子类构造函数中设置（如 "drifter"、"ace"）。
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|Identity")
+	FName CharacterID;
 
 	/** 角色颜色属性（红/蓝/白） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|Attributes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|Identity")
 	EElementalColor ElementalColor;
 
-	// ---- 输入配置（在蓝图子类中设置对应资产） ----
+	// ---- 组件 ----
 
-	/** 默认 Input Mapping Context */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Input")
-	TObjectPtr<UInputMappingContext> DefaultMappingContext;
+	/** 运行时属性容器（MaxHP / 伤害修正 / 窗口时间 等所有可被 buff 修改的属性） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Component")
+	TObjectPtr<UAttributeComponent> AttributeComponent;
 
-	/** 移动输入动作（WASD / 左摇杆） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Input")
-	TObjectPtr<UInputAction> MoveAction;
+	// ---- 运行时状态 ----
 
-	/** 视角输入动作（鼠标 / 右摇杆） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Input")
-	TObjectPtr<UInputAction> LookAction;
+	/** 当前生命值（高频变化，保留在 Character 上） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BaseCharacter|State")
+	float CurrentHealth;
 
 	// ---- 接口 ----
 
-	/** 初始化角色属性（子类可重写以设置不同的默认值） */
+	/** 初始化角色属性（从 DataTable 加载，子类重写以指定 CharacterID） */
 	UFUNCTION(BlueprintCallable, Category = "BaseCharacter")
 	virtual void InitializeAttributes();
 
@@ -93,11 +82,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "BaseCharacter")
 	bool IsDead() const;
 
-	/** 获取当前生命值百分比 */
+	/** 获取当前生命值百分比（从 AttributeComponent 读取 MaxHP） */
 	UFUNCTION(BlueprintPure, Category = "BaseCharacter")
 	float GetHealthPercent() const;
 
-	/** 治疗角色 */
+	/** 治疗角色（上限从 AttributeComponent 读取） */
 	UFUNCTION(BlueprintCallable, Category = "BaseCharacter")
 	virtual void Heal(float HealAmount);
+
+	/** 便捷访问：获取当前最大生命值 */
+	UFUNCTION(BlueprintPure, Category = "BaseCharacter")
+	float GetMaxHealth() const;
 };

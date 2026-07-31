@@ -94,6 +94,25 @@
 
 **后续待办：** 在 UE 编辑器中更新 ABP_Dale 的父类为 `URoleAnimInstance`，为新敌人创建 ABP_Enemy 指向 `UEnemyAnimInstance`
 
+### 2026-07-31 | 程序 ⚡
+
+**事项：** 实现 Boss 出场动画系统 — `UBossIntroComponent` 模块化组件，Tag 驱动的玩家检测，可复用于任意 Boss。
+
+**处理过程：**
+1. `Component/BossIntroComponent.h/.cpp` — 新建 `UBossIntroComponent : UActorComponent`（ClassGroup=Boss, Blueprintable, BlueprintSpawnableComponent），提供三态状态机（Idle/Playing/Combat）、球形触发器、跳过输入绑定、玩家输入锁定/解锁
+2. `Component/BossIntroComponent.cpp` — 全 C++ 实现 Level Sequence 播放（`CreateLevelSequencePlayer` + `ALevelSequenceActor::SetBindingByTag` 动态绑定 Player/Boss Actor）、镜头混合切换（`SetViewTargetWithBlend` Cubic/EaseOut）、`OnFinished` 委托回调；四个事件从 BlueprintImplementableEvent 改为 protected virtual 方法（`PlayIntroSequence` / `StopIntroSequence` / `CinematicCameraIn` / `CinematicCameraOut`）
+3. `Character/Role.h/.cpp` — 新增 `DisablePlayerInput()` / `EnablePlayerInput()` 薄封装（内部调用堆叠安全的 `APawn::DisableInput`）；`BeginPlay` 中添加 `Tags.Add("Player")` 标签
+4. `Hole.Build.cs` — 添加 `"LevelSequence"` + `"MovieScene"` 模块依赖
+5. 编译通过（0 error / 0 warning）
+
+**设计理由：**
+- **Tag vs Cast**：用 `ActorHasTag("Player")` 检测玩家 — FName 索引比较（~几个 CPU 周期）vs `Cast<ARole>` 的 UHT 类型层级遍历（~几十个周期），且零耦合
+- **组件 vs 基类**：`UActorComponent` 方案让 Boss 选择性挂载，AEnemy 不膨胀
+- **全 C++ 动画**：Level Sequence 播放、动态 Actor 绑定、镜头混合切换均在 C++ 完成，BP 侧零节点
+- **APawn 内置机制**：`DisableInput`/`EnableInput` 是 UE5 堆叠安全的 API；`ClearBindingsForObject(this)` 精确解绑跳过输入
+
+**后续待办：** 在 BP_Satan 上挂载组件，创建 `IA_Skip` InputAction 资产，制作 `LS_SatanIntro` Level Sequence
+
 ### 2026-07-29 | 程序
 
 **事项：** 实现模块化角色系统 — 支持身体/眼睛/头发/上衣/裤子/鞋子 6 个独立网格体组合。
@@ -323,6 +342,73 @@
 **事项：** 项目初始化 — 创建 UE5.6 项目 `Hole`，建立策划案大纲和开发日志。
 **处理过程：** 完成。
 **备注：** 策划案已扩充至 v0.3，见 `GDD_Outline.md`。
+
+---
+
+### 2026-07-31 | 程序
+
+**事项：** 动画实例类重命名 — DaleAnimInstance → RoleAnimInstance，新建 EnemyAnimInstance。
+
+**处理过程：**
+1. `DaleAnimInstance.h/.cpp` 重命名为 `RoleAnimInstance.h/.cpp`，类名改为 `URoleAnimInstance`，持有 `TObjectPtr<ARole> OwnerRole`
+2. 新建 `EnemyAnimInstance.h/.cpp`，`UEnemyAnimInstance : UAnimInstance`，持有 `TObjectPtr<AEnemy> OwnerEnemy`，提供相同的地面移动数据接口
+3. 二进制编辑 `ABP_Dale.uasset`：将所有 12 处 `DaleAnimInstance` 替换为 `RoleAnimInstance`（等长字符串，安全替换）
+4. `Role.cpp` BeginPlay 中 `Tags.Add(FName(TEXT("Player")))`，供 BossIntroComponent 用 Tag 检测代替 Cast<ARole>
+
+**设计理由：**
+- 动画实例层级与角色层级对齐：ABaseCharacter → ARole(Uses RoleAnimInstance) / AEnemy(Uses EnemyAnimInstance)
+- Tag 检测（FName 索引比较）比 Cast<ARole>（UHT 类型层级遍历）更快，且零耦合
+
+---
+
+### 2026-07-31 | Bug修复
+
+**问题：** 每次打开编辑器时地图被重置为 OpenWorld 模板。
+
+**解决：** `DefaultEngine.ini` 中 `GameDefaultMap` 从 `/Engine/Maps/Templates/OpenWorld` 改为 `/Game/Map/Untitled`。
+
+---
+
+### 2026-07-31 | 程序 ⚡
+
+**事项：** 创建 Boss 出场动画系统 — `UBossIntroComponent`。
+
+**处理过程：**
+1. 新建 `Component/BossIntroComponent.h/.cpp`，UActorComponent（Blueprintable, BlueprintSpawnableComponent）
+2. 三态状态机：Idle → Playing → Combat，通过 `ResetIntro()` 回到 Idle
+3. 触发器：`USphereComponent`（CreateDefaultSubobject），仅响应 ECC_Pawn Overlap，半径可配置
+4. 镜头管理：播放时 `SetViewTargetWithBlend(SequenceActor)`，结束时 `SetViewTarget(Player)` 即时切回
+5. Level Sequence 播放：`ULevelSequencePlayer::CreateLevelSequencePlayer` + `bPauseAtEnd` + `OnFinished` 委托
+6. 跳过支持：EnhancedInput `IA_Skip`，绑定到玩家 Pawn 的 EIC，Playing 进入时绑定/退出时解绑
+7. 输入锁定：`ARole::SetCinematicLocked(bool)` 门控 Move/Sprint/Jump，不影响 EnhancedInput 处理
+8. `Hole.Build.cs` 添加 `"LevelSequence"` 和 `"MovieScene"` 模块依赖
+
+**设计理由：**
+- 组件模式：任意 Boss 只需在蓝图挂载组件 + 配置属性即可，无需修改 AEnemy 基类
+- `ActorHasTag("Player")` 替代 `Cast<ARole>()`：FName 索引比较比 UHT 类型层级遍历快一个数量级
+- 纯 C++ 实现：Sequence 播放、镜头切换、输入绑定全部在 C++ 完成，无需 BP 事件
+- 离开触发区域即重置到 Idle，支持每次进入都重播（回合制战斗不需要持久化标记）
+
+**修复历程：**
+1. **相机不回玩家**：根因是 `CompleteIntro` 只把指针置 nullptr 但未销毁 `ALevelSequenceActor`，该 Actor 仍存活抢占相机。修复：`StopIntroSequence` 中调用 `SequenceActor->Destroy()`，`CompleteIntro`/`SkipIntro` 先 Stop+Destroy 再 `SetViewTarget(Player)`
+2. **Skip 按键无效**：`BindAction` 使用了函数名字符串版本（需 UFUNCTION），但 `OnSkipPressed` 没有 UFUNCTION 宏。修复：改用模板方法指针版本 `&UBossIntroComponent::OnSkipPressed`
+3. **IA_Skip 无按键映射**：IA_Skip 未添加到 IMC_PlayerInputMapping，EnhancedInput 链路断裂（按键→IMC→IA→回调）。需在编辑器中手动映射
+
+**经验教训：**
+- `ULevelSequencePlayer::CreateLevelSequencePlayer` 创建的 `ALevelSequenceActor` 必须手动 `Destroy()`，否则即使序列播放完毕也持续占用相机控制
+- EnhancedInput 的 `BindAction` 方法指针版本（模板）不需要 UFUNCTION，函数名字符串版本需要
+- `SetViewTarget` 必须在 `Stop()`+`Destroy()` 序列 Actor 之后调用，否则会被覆盖
+
+---
+
+### 2026-07-31 | 程序
+
+**事项：** 动画蓝图修复 — ABP_Dale 在 C++ 类重命名后显示损坏。
+
+**处理过程：**
+二进制编辑 `ABP_Dale.uasset`：将 `DaleAnimInstance` 替换为 `RoleAnimInstance`（12 字节等长），蓝图正常打开。
+
+**经验教训：** `.uasset` 中类名引用是行内文本，等长替换安全。不等长需要修改偏移表，不推荐手动操作。
 
 ---
 

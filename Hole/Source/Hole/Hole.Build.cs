@@ -14,7 +14,9 @@ public class Hole : ModuleRules
 			"CoreUObject",
 			"Engine",
 			"InputCore",
-			"EnhancedInput"
+			"EnhancedInput",
+			"LevelSequence",
+				"MovieScene"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

@@ -105,7 +105,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Role|Modular")
 	void SetupModularMasterPose();
 
+	// ---- 输入控制（供外部系统调用，如 BossIntroComponent） ----
+
+	/** 锁定/解锁过场动画模式（门控移动/跳跃/跑动，不影响 EnhancedInput） */
+	UFUNCTION(BlueprintCallable, Category = "Role|Input")
+	void SetCinematicLocked(bool bLocked);
+
 private:
+	/** 过场动画锁定标记（门控 Move/Look/Sprint/Jump，不影响 EnhancedInput） */
+	bool bCinematicLocked = false;
+
 	/** 当前是否正在跑动 */
 	bool bIsSprinting;
 

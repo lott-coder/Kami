@@ -61,6 +61,10 @@ void ARole::BeginPlay()
 
 	// 设置模块化部件共享身体骨骼动画
 	SetupModularMasterPose();
+
+	// 添加 "Player" 标签供 BossIntroComponent 快速检测
+	// Tag 检测（FName 索引比较）比 Cast<ARole>（UHT 类型层级遍历）更快
+	Tags.Add(FName(TEXT("Player")));
 }
 
 float ARole::GetWalkSpeed() const
@@ -125,7 +129,7 @@ void ARole::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 void ARole::Move(const FInputActionValue& Value)
 {
 	// 落地锁定期间忽略移动输入，防止落地动画滑步
-	if (bLandingLocked)
+	if (bLandingLocked || bCinematicLocked)
 	{
 		return;
 	}
@@ -162,6 +166,10 @@ void ARole::Look(const FInputActionValue& Value)
 
 void ARole::OnSprintStarted(const FInputActionValue& Value)
 {
+	if (bCinematicLocked)
+	{
+		return;
+	}
 	bIsSprinting = true;
 	GetCharacterMovement()->MaxWalkSpeed = GetSprintSpeed();
 }
@@ -176,6 +184,10 @@ void ARole::OnSprintCompleted(const FInputActionValue& Value)
 
 void ARole::OnJumpStarted(const FInputActionValue& Value)
 {
+	if (bCinematicLocked)
+	{
+		return;
+	}
 	Jump();
 }
 
@@ -250,4 +262,11 @@ float ARole::GetLandingLockTime() const
 		return AttributeComponent->GetFinal(AttributeNames::LandingLockTime());
 	}
 	return 0.3f; // 回退默认值
+}
+
+// ---- 输入控制 ----
+
+void ARole::SetCinematicLocked(bool bLocked)
+{
+	bCinematicLocked = bLocked;
 }

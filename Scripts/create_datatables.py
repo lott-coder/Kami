@@ -119,7 +119,7 @@ characters = [
         "DisplayName": "艾斯", "MaxHP": 100.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 0.95, "BlueAttackBonus": 5.0, "WhiteAttackBonus": 0.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": True, "bHasSmokeGland": True, "UnlockCondition_Round": 1,
+        "bIsPlayable": True, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
     }),
     ("inept_char", {
         "DisplayName": "[待定] 无能力者", "MaxHP": 90.0, "MaxSmokeReserve": 10.0,
@@ -461,9 +461,9 @@ areas = [
                 "bIsSafeZone": False, "bIsLinear": False, "EnemyLevelScale": 1.0}),
     ("mansion", {"DisplayName": "统领者宅院", "UnlockRound": 1, "DifficultyStars": 3,
                  "bIsSafeZone": False, "bIsLinear": True, "EnemyLevelScale": 1.0}),
-    ("border", {"DisplayName": "边境", "UnlockRound": 4, "DifficultyStars": 4,
+    ("border", {"DisplayName": "边境", "UnlockRound": 3, "DifficultyStars": 4,
                 "bIsSafeZone": False, "bIsLinear": False, "EnemyLevelScale": 1.0}),
-    ("hell", {"DisplayName": "地狱", "UnlockRound": 4, "DifficultyStars": 5,
+    ("hell", {"DisplayName": "地狱", "UnlockRound": 3, "DifficultyStars": 5,
               "bIsSafeZone": False, "bIsLinear": True, "EnemyLevelScale": 1.0}),
 ]
 

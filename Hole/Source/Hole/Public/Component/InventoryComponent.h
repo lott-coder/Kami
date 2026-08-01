@@ -9,6 +9,7 @@
 class ABaseCharacter;
 class UCombatFormulaSubsystem;
 struct FMaskConfigRow;
+struct FWeaponConfigRow;
 
 /**
  * UInventoryComponent — 物品/装备容器
@@ -43,6 +44,24 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory|Mask")
 	bool HasMaskEquipped() const { return EquippedMaskID != NAME_None; }
 
+	// ---- 武器 ----
+
+	/** 装备武器（先卸下旧武器；找不到配置行返回 false），武器修正通过 AddModifier 施加 */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Weapon")
+	bool EquipWeapon(FName WeaponID);
+
+	/** 卸下武器（移除该武器的全部属性修正） */
+	UFUNCTION(BlueprintCallable, Category = "Inventory|Weapon")
+	void UnequipWeapon();
+
+	/** 当前装备的武器 ID（NAME_None = 未装备） */
+	UFUNCTION(BlueprintPure, Category = "Inventory|Weapon")
+	FName GetEquippedWeaponID() const { return EquippedWeaponID; }
+
+	/** 是否已装备武器 */
+	UFUNCTION(BlueprintPure, Category = "Inventory|Weapon")
+	bool HasWeaponEquipped() const { return EquippedWeaponID != NAME_None; }
+
 private:
 	/** 应用/移除面具修正（bApply=true 添加，false 移除） */
 	void ApplyMaskModifiers(const FMaskConfigRow& Row, bool bApply);
@@ -50,10 +69,20 @@ private:
 	/** 面具修正的来源标签（用于 RemoveModifiersBySource） */
 	FName MakeMaskSourceTag(FName MaskID) const;
 
+	/** 应用/移除武器修正（bApply=true 添加，false 移除） */
+	void ApplyWeaponModifiers(const FWeaponConfigRow& Row, bool bApply);
+
+	/** 武器修正的来源标签（用于 RemoveModifiersBySource） */
+	FName MakeWeaponSourceTag(FName WeaponID) const;
+
 	/** 获取战斗公式子系统（无 GameInstance 时返回 nullptr） */
 	UCombatFormulaSubsystem* GetCombatSubsystem() const;
 
 	/** 当前装备的面具 ID */
 	UPROPERTY(VisibleAnywhere, Category = "Inventory|Mask")
 	FName EquippedMaskID;
+
+	/** 当前装备的武器 ID */
+	UPROPERTY(VisibleAnywhere, Category = "Inventory|Weapon")
+	FName EquippedWeaponID;
 };

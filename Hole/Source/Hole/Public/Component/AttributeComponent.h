@@ -54,6 +54,23 @@ namespace AttributeNames
 	FORCEINLINE FName WhiteDamageScale()	{ return FName(TEXT("WhiteDamageScale")); }
 	FORCEINLINE FName HPRegenOnKill()		{ return FName(TEXT("HPRegenOnKill")); }
 	FORCEINLINE FName SkillCostScale()		{ return FName(TEXT("SkillCostScale")); }
+
+	// -- 武器/装备 --
+	FORCEINLINE FName BlueAttackDamageScale()	{ return FName(TEXT("BlueAttackDamageScale")); }
+	FORCEINLINE FName WhiteAttackDamageScale()	{ return FName(TEXT("WhiteAttackDamageScale")); }
+	FORCEINLINE FName BlueAttackDamageMod()		{ return FName(TEXT("BlueAttackDamageMod")); }
+	FORCEINLINE FName WhiteAttackDamageMod()	{ return FName(TEXT("WhiteAttackDamageMod")); }
+	FORCEINLINE FName BlockWindowBonus()		{ return FName(TEXT("BlockWindowBonus")); }
+	FORCEINLINE FName DodgeWindowBonus()		{ return FName(TEXT("DodgeWindowBonus")); }
+	FORCEINLINE FName ExtraChargeTurns()		{ return FName(TEXT("ExtraChargeTurns")); }
+
+	// -- 暴击/增益/技能树被动 --
+	FORCEINLINE FName BlueCritChance()			{ return FName(TEXT("BlueCritChance")); }
+	FORCEINLINE FName NextAttackDamageScale()	{ return FName(TEXT("NextAttackDamageScale")); }
+	FORCEINLINE FName WhiteDmgBonus()			{ return FName(TEXT("WhiteDmgBonus")); }
+	FORCEINLINE FName InterruptDmgScale()		{ return FName(TEXT("InterruptDmgScale")); }
+	FORCEINLINE FName BlockDmgReduce()			{ return FName(TEXT("BlockDmgReduce")); }
+	FORCEINLINE FName DodgeBuffBonus()			{ return FName(TEXT("DodgeBuffBonus")); }
 }
 
 // ============================================================================

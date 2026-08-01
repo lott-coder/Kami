@@ -58,6 +58,10 @@ void ABaseCharacter::InitializeAttributes()
 						{
 							InventoryComponent->EquipMask(Row->DefaultMaskID);
 						}
+						if (Row->DefaultWeaponID != NAME_None)
+						{
+							InventoryComponent->EquipWeapon(Row->DefaultWeaponID);
+						}
 					}
 				}
 			}

@@ -48,6 +48,10 @@ struct HOLE_API FAreaConfigRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area|Progress")
 	bool bIsLinear = false;
 
+	/** 仅第0次轮回（首次游戏）可进入（如序章洞穴） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area|Progress")
+	bool bFirstLoopOnly = false;
+
 	/** 敌人等级缩放（影响 HP/伤害） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Area|Progress")
 	float EnemyLevelScale = 1.0f;

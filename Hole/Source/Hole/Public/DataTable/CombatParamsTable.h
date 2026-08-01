@@ -73,6 +73,38 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float DodgeFailDamageScale = 1.2f;
 
+	// ---- 暴击 ----
+
+	/** 蓝色攻击暴击伤害倍率（默认 ×1.5），[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Crit")
+	float CritDamageMultiplier = 1.5f;
+
+	// ---- 闪避Buff ----
+
+	/** 闪避成功后的下回合伤害倍率（1.2 = +20%），[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|DodgeBuff")
+	float DodgeBuffDamageScale = 1.2f;
+
+	/** 闪避Buff持续回合数 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|DodgeBuff")
+	int32 DodgeBuffTurns = 1;
+
+	// ---- 先制 ----
+
+	/** 玩家先制攻击的伤害比例（相对白攻基础伤害，0.3 = 30%），[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|FirstStrike")
+	float FirstStrikeDamageScale = 0.3f;
+
+	// ---- 金色攻击（格挡反击） ----
+
+	/** 金色攻击（格挡反击）最小伤害，[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|GoldAttack")
+	float GoldAttackDamageMin = 25.0f;
+
+	/** 金色攻击（格挡反击）最大伤害，[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|GoldAttack")
+	float GoldAttackDamageMax = 35.0f;
+
 	// ---- 特殊规则 ----
 
 	/** 先制攻击使敌人禁用蓄力的回合数 */

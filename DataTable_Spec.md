@@ -1,6 +1,6 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.3
+> **版本：** v0.4
 > **日期：** 2026-08-01
 > **关联策划案：** GDD_Outline.md v0.3
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
@@ -127,6 +127,12 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | `BlockWindowSeconds` | `float` | 0.25 | GDD §5.2.7 | 格挡判定窗口（秒），[PLAYTEST] |
 | `DodgeWindowSeconds` | `float` | 0.35 | GDD §5.2.7 | 闪避判定窗口（秒），[PLAYTEST] |
 | `DodgeFailDamageScale` | `float` | 1.2 | GDD §5.2.7 | 闪避失败额外伤害倍率 |
+| `CritDamageMultiplier` | `float` | 1.5 | GDD §5.2.7 | 蓝攻暴击伤害倍率，[PLAYTEST] |
+| `DodgeBuffDamageScale` | `float` | 1.2 | GDD §5.2.5 | 闪避成功后下回合伤害倍率，[PLAYTEST] |
+| `DodgeBuffTurns` | `int32` | 1 | GDD §5.2.5 | 闪避Buff持续回合数 |
+| `FirstStrikeDamageScale` | `float` | 0.3 | GDD §5.2.1 | 玩家先制攻击伤害比例（相对白攻基础），[PLAYTEST] |
+| `GoldAttackDamageMin` | `float` | 25.0 | GDD §5.2.5 | 金色攻击（反击）最小伤害，[PLAYTEST] |
+| `GoldAttackDamageMax` | `float` | 35.0 | GDD §5.2.5 | 金色攻击（反击）最大伤害，[PLAYTEST] |
 | `FirstStrikeDisableChargeTurns` | `int32` | 1 | GDD §5.2.7 | 先制攻击使敌人禁用蓄力的回合数 |
 | `PlayerDefaultHP` | `float` | 100.0 | GDD §5.2.7 | 玩家初始 HP（用于新角色默认值） |
 | `RunAwayHPThreshold` | `float` | 0.3 | §5.2.1 类比 | 教学战斗敌人逃跑血量百分比阈值，[待定] |
@@ -169,6 +175,8 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | `DefaultMaskID` | `FName` | — | 初始面具 ID（引用 DT_MaskConfig） |
 | `bIsPlayable` | `bool` | false | 是否可被玩家操控 |
 | `bHasSmokeGland` | `bool` | true | 是否有烟囊（魔法师=有，洞穴人类=无） |
+| `DailySmokeRecoveryMin` | `float` | 0.0 | 每日自动回复烟储备最小值（艾斯=1，0=不回复） |
+| `DailySmokeRecoveryMax` | `float` | 0.0 | 每日自动回复烟储备最大值（艾斯=2，0=不回复） |
 | `UnlockCondition_Round` | `int32` | 1 | 第几次轮回后解锁 |
 | `UnlockCondition_Desc` | `FText` | — | `[待定]` 解锁条件文字描述 |
 | `PortraitTexture` | `TSoftObjectPtr<UTexture2D>` | — | 角色头像 |
@@ -176,6 +184,7 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 ### 4.3 行数据
 
 > **数据口径（2026-08-01）：** 已按本节落库；`CharacterClass` 列保留现有蓝图引用（drifter → BP_Dale），其余角色待 BP 制作后补填。
+> **艾斯烟回复：** `DailySmokeRecoveryMin/Max = 1/2`（每游戏日自动回复烟储备，GDD §5.3.3）。
 
 | RowName | DisplayName | MaxHP | DmgScale | BlueBonus | WhiteBonus | WalkSpd | SprintSpd | bPlayable | bSmokeGland | UnlockRound | GDD 来源 |
 |---------|-------------|-------|:--------:|:---------:|:----------:|:-------:|:---------:|-----------|-------------|-------------|----------|
@@ -196,18 +205,27 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
     DT_CombatParams.BlueAttackDamage(随机 20~30)
   × DT_CharacterConfig.BaseDamageScale       ← 角色天赋倍率
   × DT_WeaponConfig.BlueAttackDamageScale     ← 武器蓝攻倍率
+  × 蓝攻面具倍率（DT_MaskConfig.ColorDamageScale_Blue）
+  × 下回合伤害倍率（闪避Buff：NextAttackDamageScale）
   × 蓄力倍率(1.0 / 1.5 / 2.25)
 ) + DT_CharacterConfig.BlueAttackBonus       ← 角色蓝攻固定加成
   + DT_WeaponConfig.BlueAttackDamageMod       ← 武器蓝攻固定加成
   + DT_SkillTreeConfig 已解锁蓝攻被动         ← 局外永久加成
+暴击：若 BlueCritChance 判定成功 → 最终伤害 × CritDamageMultiplier
 
 白色攻击伤害 = (
     DT_CombatParams.WhiteAttackDamage(随机 15~25)
   × DT_CharacterConfig.BaseDamageScale
   × DT_WeaponConfig.WhiteAttackDamageScale
+  × 白攻面具倍率（DT_MaskConfig.ColorDamageScale_White）
+  × 下回合伤害倍率（闪避Buff：NextAttackDamageScale）
 ) + DT_CharacterConfig.WhiteAttackBonus
   + DT_WeaponConfig.WhiteAttackDamageMod
+  + WhiteDmgBonus（白攻被动）
   + DT_SkillTreeConfig 已解锁白攻被动
+
+金色攻击（反击）伤害 = Rand(GoldAttackDamageMin~Max) × (1 + CounterDmgBonus)
+先制伤害 = 白攻基础伤害 × FirstStrikeDamageScale（玩家先制时）
 ```
 
 #### 4.4.2 三层数据流 —— 默认值、配置值与运行时状态
@@ -784,6 +802,7 @@ enum class ESkillTarget : uint8
 | `time_rewind_turn` | TimeMagic | 10.0 | 0 | Self | 0 | 0 | `[TBD]` | 时间魔法（1次/轮回） |
 
 > `[待定]` 完整技能表需策划填充 ~15 个额外技能条目。
+> **`[暂缓]`：** 时间回溯技能暂不实现（时间轮回 = 新一轮游戏），`time_rewind_turn` 行保留但停用。
 
 ---
 
@@ -850,6 +869,24 @@ enum class ESkillTreeBranch : uint8
 | `dodge_buff_up` | DodgeSpecialty | 2 | `dodge_window_up` | `hunter_smoke` | DodgeBuffBonus | 10% | 闪避Buff+ |
 | `legendary_node` | Foundation | 3 | `defense_block_reduce` | `demon_smoke` | `[待定]` | `[待定]` | 最深传说节点 |
 
+### 10.5 EffectType 字典（2026-08-01 定案）
+
+技能树节点的 `EffectType` 字符串与运行时属性常量的映射，代码按此表统一解析：
+
+| EffectType 字符串 | AttributeNames 常量 | 基值 | 语义 |
+|-------------------|---------------------|------|------|
+| `MaxHP` | `MaxHP` | 由角色行 | 最大生命值 |
+| `BlockWindow` | `BlockWindow` | 由战斗参数（0.25s） | 格挡判定窗口 |
+| `ChargeSpeedBonus` | `ChargeSpeedBonus` | 0 | 蓄力速度加成 |
+| `BlueCritChance` | `BlueCritChance` | 0 | 蓝攻暴击率（0~1） |
+| `WhiteDmgBonus` | `WhiteDmgBonus` | 0 | 白攻固定伤害加成 |
+| `InterruptDmgScale` | `InterruptDmgScale` | 1.0 | 白攻 vs 蓄力抵抗伤害倍率 |
+| `BlockDmgReduce` | `BlockDmgReduce` | 0 | 格挡减伤比例 |
+| `CounterDmgBonus` | `CounterDmgBonus` | 0 | 反击伤害加成（金色攻击 ×(1+值)） |
+| `CounterHealPercent` | `CounterHealPercent` | 0 | 反击回血百分比 |
+| `DodgeWindow` | `DodgeWindow` | 由战斗参数（0.35s） | 闪避判定窗口 |
+| `DodgeBuffBonus` | `DodgeBuffBonus` | 0 | 闪避Buff强度加成 |
+
 ---
 
 ## 11. 09 — 区域配置
@@ -875,6 +912,7 @@ enum class ESkillTreeBranch : uint8
 | `PrimaryColor` | `FColor` | — | 主色调（RGB） |
 | `bIsSafeZone` | `bool` | false | 是否为安全区（无强制战斗） |
 | `bIsLinear` | `bool` | false | 是否为线性关卡（不可返回） |
+| `bFirstLoopOnly` | `bool` | false | 仅第0次轮回（首次游戏）可进入（序章洞穴=true） |
 | `SpecialMechanics` | `FText` | — | 特殊机制描述 |
 | `EnemyLevelScale` | `float` | 1.0 | 敌人等级缩放（影响 HP/伤害） |
 | `LevelAsset` | `TSoftObjectPtr<UWorld>` | — | 关卡资产路径 |
@@ -883,7 +921,7 @@ enum class ESkillTreeBranch : uint8
 
 | RowName | DisplayName | Round | Stars | SafeZone | Linear | GDD §7.1 |
 |---------|-------------|-------|-------|----------|--------|----------|
-| `hole` | 洞穴 | 1（仅序章） | 教学 | ❌ | ❌ | 第1行 |
+| `hole` | 洞穴 | 0（仅第0次轮回） | 教学 | ❌ | ❌ | 第1行 |
 | `town` | 小镇 | 1 | ★☆☆☆☆ | ✅ | ❌ | 第2行 |
 | `market` | 市中心 | 1 | ★★☆☆☆ | ❌ | ❌ | 第3行 |
 | `mansion` | 统领者宅院 | 1 | ★★★☆☆ | ❌ | ✅ | 第4行 |
@@ -1059,7 +1097,7 @@ DT_CombatParams (单例，无外键)
 | TBD-05 | DT_SkillConfig | 完整技能表（目标20-30） | 技能系统 |
 | TBD-06 | DT_SkillTreeConfig | 最深传说节点效果 | 技能树 |
 | TBD-07 | DT_ConsumableConfig | 回复药/增益道具的完整参数 | 消耗品 |
-| TBD-08 | DT_EconomyConfig | 货币名称 | 全局命名 |
+| ~~TBD-08~~ | DT_EconomyConfig | 货币名称 → **金币**（2026-08-01 定案） | 全局命名 |
 | TBD-09 | DT_CombatParams | 耐力系统参数（奔跑消耗） | 移动系统 |
 | TBD-10 | DT_CombatParams | 翻滚无敌帧数 | 探索模式 |
 
@@ -1079,3 +1117,4 @@ DT_CombatParams (单例，无外键)
 > | v0.1 | 2026-07-29 | 初始版本，覆盖 GDD §5-§8, §14 全部数值配置 |
 > | v0.2 | 2026-08-01 | 数据落库与一致性修订：敌人移动列、面具倍率默认值（0.0→1.0）、表行数实况、枚举清单更新；11 张表全部生成并校验 |
 > | v0.3 | 2026-08-01 | 解锁轮回口径修正：艾斯 UnlockRound 0、边境/地狱 UnlockRound 3（第0次轮回 = 首次游戏） |
+> | v0.4 | 2026-08-01 | 战斗方案定案落库：新增暴击/闪避Buff/先制/金色攻击参数、艾斯每日烟回复、区域 bFirstLoopOnly、武器槽属性与公式改造、EffectType 字典；货币定名金币 |

@@ -97,6 +97,16 @@ struct HOLE_API FCharacterConfigRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character|Identity")
 	bool bHasSmokeGland = true;
 
+	// ---- 烟回复（队友协助） ----
+
+	/** 每日自动回复烟储备最小值（如艾斯 1），0 = 不回复 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character|Smoke")
+	float DailySmokeRecoveryMin = 0.0f;
+
+	/** 每日自动回复烟储备最大值（如艾斯 2），0 = 不回复 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character|Smoke")
+	float DailySmokeRecoveryMax = 0.0f;
+
 	// ---- 解锁条件 ----
 
 	/** 第几次轮回后解锁（0 = 初始可用） */

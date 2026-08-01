@@ -82,6 +82,8 @@ COMBATPARAMS_HEADERS = [
     "MaxChargeStacks", "WhiteInterruptChargeDamageScale", "BlockWindowSeconds",
     "DodgeWindowSeconds", "DodgeFailDamageScale", "FirstStrikeDisableChargeTurns",
     "RunAwayHPThreshold", "PlayerDefaultHP", "Movement_BackwardSpeedScale",
+    "CritDamageMultiplier", "DodgeBuffDamageScale", "DodgeBuffTurns",
+    "FirstStrikeDamageScale", "GoldAttackDamageMin", "GoldAttackDamageMax",
 ]
 combat_params = [
     ("Default", {
@@ -93,6 +95,8 @@ combat_params = [
         "DodgeFailDamageScale": 1.2, "FirstStrikeDisableChargeTurns": 1,
         "RunAwayHPThreshold": 0.3, "PlayerDefaultHP": 100.0,
         "Movement_BackwardSpeedScale": 0.6,
+        "CritDamageMultiplier": 1.5, "DodgeBuffDamageScale": 1.2, "DodgeBuffTurns": 1,
+        "FirstStrikeDamageScale": 0.3, "GoldAttackDamageMin": 25.0, "GoldAttackDamageMax": 35.0,
     }),
 ]
 
@@ -103,7 +107,8 @@ CHARACTER_HEADERS = [
     "DisplayName", "PortraitTexture", "CharacterClass", "MaxHP", "MaxSmokeReserve",
     "BaseDamageScale", "BlueAttackBonus", "WhiteAttackBonus", "WalkSpeed", "SprintSpeed",
     "LandingLockTime", "DefaultWeaponID", "DefaultMaskID", "bIsPlayable",
-    "bHasSmokeGland", "UnlockCondition_Round", "UnlockCondition_Desc",
+    "bHasSmokeGland", "DailySmokeRecoveryMin", "DailySmokeRecoveryMax",
+    "UnlockCondition_Round", "UnlockCondition_Desc",
 ]
 # CharacterClass/EnemyClass 保留现有蓝图引用（BP_Dale / BP_Satan），其余按 DataTable_Spec §4.3/§5.4
 BP_DALE_CLASS = "/Script/Engine.BlueprintGeneratedClass'/Game/Blueprint/Character/Roles/Dale/BP_Dale.BP_Dale_C'"
@@ -113,31 +118,41 @@ characters = [
         "MaxHP": 120.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 1.05, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 3.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": True, "bHasSmokeGland": False, "UnlockCondition_Round": 0,
+        "bIsPlayable": True, "bHasSmokeGland": False,
+        "DailySmokeRecoveryMin": 0.0, "DailySmokeRecoveryMax": 0.0,
+        "UnlockCondition_Round": 0,
     }),
     ("ace", {
         "DisplayName": "艾斯", "MaxHP": 100.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 0.95, "BlueAttackBonus": 5.0, "WhiteAttackBonus": 0.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": True, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
+        "bIsPlayable": True, "bHasSmokeGland": True,
+        "DailySmokeRecoveryMin": 1.0, "DailySmokeRecoveryMax": 2.0,
+        "UnlockCondition_Round": 0,
     }),
     ("inept_char", {
         "DisplayName": "[待定] 无能力者", "MaxHP": 90.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 1.0, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": True, "bHasSmokeGland": False, "UnlockCondition_Round": 0,
+        "bIsPlayable": True, "bHasSmokeGland": False,
+        "DailySmokeRecoveryMin": 0.0, "DailySmokeRecoveryMax": 0.0,
+        "UnlockCondition_Round": 0,
     }),
     ("doctor", {
         "DisplayName": "博士", "MaxHP": 80.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 0.8, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": False, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
+        "bIsPlayable": False, "bHasSmokeGland": True,
+        "DailySmokeRecoveryMin": 0.0, "DailySmokeRecoveryMax": 0.0,
+        "UnlockCondition_Round": 0,
     }),
     ("time_mage", {
         "DisplayName": "时间魔法师", "MaxHP": 100.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 1.3, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
-        "bIsPlayable": False, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
+        "bIsPlayable": False, "bHasSmokeGland": True,
+        "DailySmokeRecoveryMin": 0.0, "DailySmokeRecoveryMax": 0.0,
+        "UnlockCondition_Round": 0,
     }),
 ]
 
@@ -450,21 +465,27 @@ skill_tree = [
 # ---------------------------------------------------------------------------
 AREA_HEADERS = [
     "DisplayName", "VisualTheme", "SpecialMechanics", "UnlockRound", "DifficultyStars",
-    "bIsSafeZone", "bIsLinear", "EnemyLevelScale", "PrimaryColor", "LevelAsset",
+    "bIsSafeZone", "bIsLinear", "bFirstLoopOnly", "EnemyLevelScale", "PrimaryColor", "LevelAsset",
 ]
 areas = [
-    ("hole", {"DisplayName": "洞穴", "UnlockRound": 1, "DifficultyStars": 1,
-              "bIsSafeZone": False, "bIsLinear": False, "EnemyLevelScale": 1.0}),
+    ("hole", {"DisplayName": "洞穴", "UnlockRound": 0, "DifficultyStars": 1,
+              "bIsSafeZone": False, "bIsLinear": False, "bFirstLoopOnly": True,
+              "EnemyLevelScale": 1.0}),
     ("town", {"DisplayName": "小镇", "UnlockRound": 1, "DifficultyStars": 1,
-              "bIsSafeZone": True, "bIsLinear": False, "EnemyLevelScale": 1.0}),
+              "bIsSafeZone": True, "bIsLinear": False, "bFirstLoopOnly": False,
+              "EnemyLevelScale": 1.0}),
     ("market", {"DisplayName": "市中心", "UnlockRound": 1, "DifficultyStars": 2,
-                "bIsSafeZone": False, "bIsLinear": False, "EnemyLevelScale": 1.0}),
+                "bIsSafeZone": False, "bIsLinear": False, "bFirstLoopOnly": False,
+                "EnemyLevelScale": 1.0}),
     ("mansion", {"DisplayName": "统领者宅院", "UnlockRound": 1, "DifficultyStars": 3,
-                 "bIsSafeZone": False, "bIsLinear": True, "EnemyLevelScale": 1.0}),
+                 "bIsSafeZone": False, "bIsLinear": True, "bFirstLoopOnly": False,
+                 "EnemyLevelScale": 1.0}),
     ("border", {"DisplayName": "边境", "UnlockRound": 3, "DifficultyStars": 4,
-                "bIsSafeZone": False, "bIsLinear": False, "EnemyLevelScale": 1.0}),
+                "bIsSafeZone": False, "bIsLinear": False, "bFirstLoopOnly": False,
+                "EnemyLevelScale": 1.0}),
     ("hell", {"DisplayName": "地狱", "UnlockRound": 3, "DifficultyStars": 5,
-              "bIsSafeZone": False, "bIsLinear": True, "EnemyLevelScale": 1.0}),
+              "bIsSafeZone": False, "bIsLinear": True, "bFirstLoopOnly": False,
+              "EnemyLevelScale": 1.0}),
 ]
 
 # ---------------------------------------------------------------------------

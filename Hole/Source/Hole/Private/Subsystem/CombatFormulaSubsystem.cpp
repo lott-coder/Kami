@@ -6,6 +6,7 @@
 #include "DataTable/CombatParamsTable.h"
 #include "DataTable/EnemyConfigTable.h"
 #include "DataTable/MaskConfigTable.h"
+#include "DataTable/WeaponConfigTable.h"
 #include "Engine/DataTable.h"
 
 UDataTable* UCombatFormulaSubsystem::GetTable(TObjectPtr<UDataTable>& Cache, const TCHAR* Path) const
@@ -39,6 +40,12 @@ const FMaskConfigRow* UCombatFormulaSubsystem::GetMaskRow(FName MaskID) const
 {
 	UDataTable* Table = GetTable(MaskTable, TEXT("/Game/DataTable/DT_MaskConfig"));
 	return Table ? Table->FindRow<FMaskConfigRow>(MaskID, TEXT("CombatFormula::Mask")) : nullptr;
+}
+
+const FWeaponConfigRow* UCombatFormulaSubsystem::GetWeaponRow(FName WeaponID) const
+{
+	UDataTable* Table = GetTable(WeaponTable, TEXT("/Game/DataTable/DT_WeaponConfig"));
+	return Table ? Table->FindRow<FWeaponConfigRow>(WeaponID, TEXT("CombatFormula::Weapon")) : nullptr;
 }
 
 TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName CharacterID) const
@@ -93,6 +100,23 @@ TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName Chara
 	Out.Add(AttributeNames::WhiteDamageScale(), 1.0f);
 	Out.Add(AttributeNames::HPRegenOnKill(), 0.0f);
 	Out.Add(AttributeNames::SkillCostScale(), 1.0f);
+
+	// 武器基值（无武器 = 1.0/0）
+	Out.Add(AttributeNames::BlueAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::BlueAttackDamageMod(), 0.0f);
+	Out.Add(AttributeNames::WhiteAttackDamageMod(), 0.0f);
+	Out.Add(AttributeNames::BlockWindowBonus(), 0.0f);
+	Out.Add(AttributeNames::DodgeWindowBonus(), 0.0f);
+	Out.Add(AttributeNames::ExtraChargeTurns(), 0.0f);
+
+	// 暴击/增益/技能树被动基值
+	Out.Add(AttributeNames::BlueCritChance(), 0.0f);
+	Out.Add(AttributeNames::NextAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteDmgBonus(), 0.0f);
+	Out.Add(AttributeNames::InterruptDmgScale(), 1.0f);
+	Out.Add(AttributeNames::BlockDmgReduce(), 0.0f);
+	Out.Add(AttributeNames::DodgeBuffBonus(), 0.0f);
 
 	return Out;
 }
@@ -152,6 +176,23 @@ TMap<FName, float> UCombatFormulaSubsystem::BuildEnemyAttributes(FName EnemyID) 
 	Out.Add(AttributeNames::HPRegenOnKill(), 0.0f);
 	Out.Add(AttributeNames::SkillCostScale(), 1.0f);
 
+	// 武器基值（无武器 = 1.0/0）
+	Out.Add(AttributeNames::BlueAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::BlueAttackDamageMod(), 0.0f);
+	Out.Add(AttributeNames::WhiteAttackDamageMod(), 0.0f);
+	Out.Add(AttributeNames::BlockWindowBonus(), 0.0f);
+	Out.Add(AttributeNames::DodgeWindowBonus(), 0.0f);
+	Out.Add(AttributeNames::ExtraChargeTurns(), 0.0f);
+
+	// 暴击/增益/技能树被动基值
+	Out.Add(AttributeNames::BlueCritChance(), 0.0f);
+	Out.Add(AttributeNames::NextAttackDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteDmgBonus(), 0.0f);
+	Out.Add(AttributeNames::InterruptDmgScale(), 1.0f);
+	Out.Add(AttributeNames::BlockDmgReduce(), 0.0f);
+	Out.Add(AttributeNames::DodgeBuffBonus(), 0.0f);
+
 	return Out;
 }
 
@@ -185,31 +226,60 @@ float UCombatFormulaSubsystem::GetAttrFinal(const UAttributeComponent* Attr, FNa
 	return Attr ? Attr->GetFinal(AttributeName) : Fallback;
 }
 
-float UCombatFormulaSubsystem::CalculateWhiteDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus) const
+float UCombatFormulaSubsystem::CalculateWhiteDamage(const UAttributeComponent* Attr, float SkillTreeFlatBonus) const
 {
 	const FCombatParamsRow Defaults;
 	const FCombatParamsRow& P = GetCombatParams() ? *GetCombatParams() : Defaults;
 
 	const float Base = FMath::FRandRange(P.WhiteAttackDamageMin, P.WhiteAttackDamageMax);
 	const float CharScale = GetAttrFinal(Attr, AttributeNames::BaseDamageScale(), 1.0f);
+	const float WeaponScale = GetAttrFinal(Attr, AttributeNames::WhiteAttackDamageScale(), 1.0f);
 	const float MaskScale = GetAttrFinal(Attr, AttributeNames::WhiteDamageScale(), 1.0f);
-	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::WhiteAttackBonus(), 0.0f) + WeaponDamageMod + SkillTreeFlatBonus;
+	const float NextAtkScale = GetAttrFinal(Attr, AttributeNames::NextAttackDamageScale(), 1.0f);
+	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::WhiteAttackBonus(), 0.0f)
+		+ GetAttrFinal(Attr, AttributeNames::WhiteAttackDamageMod(), 0.0f)
+		+ GetAttrFinal(Attr, AttributeNames::WhiteDmgBonus(), 0.0f)
+		+ SkillTreeFlatBonus;
 
-	return Base * CharScale * WeaponDamageScale * MaskScale + FlatBonus;
+	return Base * CharScale * WeaponScale * MaskScale * NextAtkScale + FlatBonus;
 }
 
-float UCombatFormulaSubsystem::CalculateBlueDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus, int32 ChargeStacks) const
+float UCombatFormulaSubsystem::CalculateBlueDamage(const UAttributeComponent* Attr, float SkillTreeFlatBonus, int32 ChargeStacks) const
 {
 	const FCombatParamsRow Defaults;
 	const FCombatParamsRow& P = GetCombatParams() ? *GetCombatParams() : Defaults;
 
 	const float Base = FMath::FRandRange(P.BlueAttackDamageMin_0Charge, P.BlueAttackDamageMax_0Charge);
 	const float CharScale = GetAttrFinal(Attr, AttributeNames::BaseDamageScale(), 1.0f);
+	const float WeaponScale = GetAttrFinal(Attr, AttributeNames::BlueAttackDamageScale(), 1.0f);
 	const float MaskScale = GetAttrFinal(Attr, AttributeNames::BlueDamageScale(), 1.0f);
-	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::BlueAttackBonus(), 0.0f) + WeaponDamageMod + SkillTreeFlatBonus;
+	const float NextAtkScale = GetAttrFinal(Attr, AttributeNames::NextAttackDamageScale(), 1.0f);
+	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::BlueAttackBonus(), 0.0f)
+		+ GetAttrFinal(Attr, AttributeNames::BlueAttackDamageMod(), 0.0f)
+		+ SkillTreeFlatBonus;
 
 	const int32 Stacks = FMath::Clamp(ChargeStacks, 0, P.MaxChargeStacks);
 	const float ChargeMult = Stacks <= 0 ? 1.0f : (Stacks == 1 ? P.ChargeDamageMultiplier_1 : P.ChargeDamageMultiplier_2);
 
-	return Base * CharScale * WeaponDamageScale * MaskScale * ChargeMult + FlatBonus;
+	float Damage = Base * CharScale * WeaponScale * MaskScale * NextAtkScale * ChargeMult + FlatBonus;
+
+	// 暴击：蓝攻暴击率由技能树/装备提供（如 blue_crit_15 = 15%）
+	const float CritChance = GetAttrFinal(Attr, AttributeNames::BlueCritChance(), 0.0f);
+	if (CritChance > 0.0f && FMath::FRand() < CritChance)
+	{
+		Damage *= P.CritDamageMultiplier;
+	}
+
+	return Damage;
+}
+
+float UCombatFormulaSubsystem::CalculateGoldDamage(const UAttributeComponent* Attr) const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow& P = GetCombatParams() ? *GetCombatParams() : Defaults;
+
+	const float Base = FMath::FRandRange(P.GoldAttackDamageMin, P.GoldAttackDamageMax);
+	const float CounterBonus = GetAttrFinal(Attr, AttributeNames::CounterDmgBonus(), 0.0f);
+
+	return Base * (1.0f + CounterBonus);
 }

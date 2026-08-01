@@ -38,6 +38,22 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-01 | 程序 ⚡
+
+**事项：** 按用户方案定案落地：战斗规则/数值字段/武器槽/文档同步（GDD v0.6 / DataTable_Spec v0.4）。
+
+**处理过程：**
+1. DT_CombatParams 新增 6 参数：`CritDamageMultiplier`(1.5)、`DodgeBuffDamageScale`(1.2)、`DodgeBuffTurns`(1)、`FirstStrikeDamageScale`(0.3)、`GoldAttackDamageMin/Max`(25/35)，均标 [PLAYTEST]。
+2. DT_CharacterConfig 新增 `DailySmokeRecoveryMin/Max`（艾斯=1/2，每日烟回复）；DT_AreaConfig 新增 `bFirstLoopOnly`（洞穴=True，UnlockRound 1→0）。
+3. `AttributeNames` 新增 14 个常量（武器倍率/修正、暴击、闪避Buff、技能树被动），子系统为角色/敌人注入全部基值。
+4. 公式改造：白/蓝攻从属性读取武器修正，加入 `NextAttackDamageScale`（闪避Buff）；蓝攻加入暴击判定（BlueCritChance × CritDamageMultiplier）；新增 `CalculateGoldDamage`（金色攻击=反击，×(1+CounterDmgBonus)）。
+5. `UInventoryComponent` 新增武器槽 `EquipWeapon/UnequipWeapon`（修正全部走 AddModifier），`ABaseCharacter` 自动装备 `DefaultWeaponID`。
+6. 文档同步 26 项决策：同时选择/共用回合、红色反击、蓄力抵抗白攻+额外回合、蓝攻全额打断蓄力、红vs红跳过、金色攻击、暴击、闪避Buff、先制参数、时间回溯技能停用、货币定名金币、主角=Dale 无能力者、洞穴仅首轮回、技能树/博士第0次轮回、多阶段与难度暂缓、面具改掉落不走烟转化、SpwanAreas 定案保持 FString。
+
+**结果/解决方案：** 编译通过；11 张表重建并校验（新字段值、洞穴 UnlockRound=0、BP 类引用保留）。
+
+**经验教训：** 武器/装备效果统一走 AddModifier，公式只读属性，保持"数据驱动"单一链路；方案先定案再落代码，避免返工。
+
 ### 2026-08-01 | 策划 ⚡
 
 **事项：** 解锁轮回口径修正 + 全文档逻辑/运行链路检查。

@@ -12,6 +12,7 @@ struct FCharacterConfigRow;
 struct FEnemyConfigRow;
 struct FCombatParamsRow;
 struct FMaskConfigRow;
+struct FWeaponConfigRow;
 struct FAttributeModifier;
 
 /**
@@ -44,6 +45,9 @@ public:
 	/** DT_MaskConfig 行（找不到返回 nullptr） */
 	const FMaskConfigRow* GetMaskRow(FName MaskID) const;
 
+	/** DT_WeaponConfig 行（找不到返回 nullptr） */
+	const FWeaponConfigRow* GetWeaponRow(FName WeaponID) const;
+
 	// ---- 跨表合并（角色/敌人基础属性） ----
 
 	/** 玩家基础属性 = DT_CharacterConfig 行 + DT_CombatParams + 默认值 */
@@ -60,20 +64,26 @@ public:
 	// ---- 战斗公式（GDD §5.2.7 / DataTable_Spec §4.4.1） ----
 
 	/**
-	 * 白色攻击伤害 = (Rand(白攻Min~Max) × 角色BaseDamageScale × 武器白攻Scale × 白攻面具倍率)
-	 *                + 角色白攻加成 + 武器白攻Mod + 技能树加值
-	 * @param Attr 属性组件（可空，空时按 1.0/0.0 回退）
+	 * 白色攻击伤害 = (Rand(白攻Min~Max) × 角色Scale × 武器白攻Scale × 白攻面具倍率 × 下回合伤害倍率)
+	 *                + 角色白攻加成 + 武器白攻Mod + 白攻被动 + 技能树加值
+	 * 武器修正从 Attr 读取（装备槽通过 AddModifier 施加）。
 	 */
 	UFUNCTION(BlueprintCallable, Category = "CombatFormula")
-	float CalculateWhiteDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus) const;
+	float CalculateWhiteDamage(const UAttributeComponent* Attr, float SkillTreeFlatBonus) const;
 
 	/**
-	 * 蓝色攻击伤害 = (Rand(蓝攻Min~Max) × 角色BaseDamageScale × 武器蓝攻Scale × 蓝攻面具倍率 × 蓄力倍率)
-	 *                + 角色蓝攻加成 + 武器蓝攻Mod + 技能树加值
+	 * 蓝色攻击伤害 = (Rand(蓝攻Min~Max) × 角色Scale × 武器蓝攻Scale × 蓝攻面具倍率 × 下回合伤害倍率 × 蓄力倍率)
+	 *                + 角色蓝攻加成 + 武器蓝攻Mod + 技能树加值；暴击时 × CritDamageMultiplier
 	 * @param ChargeStacks 蓄力层数（0~MaxChargeStacks，超出按最大值截断）
 	 */
 	UFUNCTION(BlueprintCallable, Category = "CombatFormula")
-	float CalculateBlueDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus, int32 ChargeStacks) const;
+	float CalculateBlueDamage(const UAttributeComponent* Attr, float SkillTreeFlatBonus, int32 ChargeStacks) const;
+
+	/**
+	 * 金色攻击（格挡反击）伤害 = Rand(金攻Min~Max) × (1 + 反击伤害加成)
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CombatFormula")
+	float CalculateGoldDamage(const UAttributeComponent* Attr) const;
 
 private:
 	/** 懒加载并缓存 DataTable */
@@ -86,4 +96,5 @@ private:
 	mutable TObjectPtr<UDataTable> EnemyTable;
 	mutable TObjectPtr<UDataTable> CombatParamsTable;
 	mutable TObjectPtr<UDataTable> MaskTable;
+	mutable TObjectPtr<UDataTable> WeaponTable;
 };

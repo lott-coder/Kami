@@ -4,6 +4,7 @@
 #include "Character/BaseCharacter.h"
 #include "Component/AttributeComponent.h"
 #include "DataTable/MaskConfigTable.h"
+#include "DataTable/WeaponConfigTable.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "Engine/GameInstance.h"
 
@@ -87,6 +88,90 @@ void UInventoryComponent::ApplyMaskModifiers(const FMaskConfigRow& Row, bool bAp
 	{
 		Attr->RemoveModifiersBySource(SourceTag);
 	}
+}
+
+bool UInventoryComponent::EquipWeapon(FName WeaponID)
+{
+	if (WeaponID == NAME_None || WeaponID == EquippedWeaponID)
+	{
+		return false;
+	}
+
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	if (!Subsystem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UInventoryComponent::EquipWeapon - 无法获取 UCombatFormulaSubsystem"));
+		return false;
+	}
+
+	const FWeaponConfigRow* Row = Subsystem->GetWeaponRow(WeaponID);
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UInventoryComponent::EquipWeapon - 找不到武器行: %s"), *WeaponID.ToString());
+		return false;
+	}
+
+	// 先卸下旧武器，再装备新武器
+	UnequipWeapon();
+
+	EquippedWeaponID = WeaponID;
+	ApplyWeaponModifiers(*Row, true);
+	return true;
+}
+
+void UInventoryComponent::UnequipWeapon()
+{
+	if (!HasWeaponEquipped())
+	{
+		return;
+	}
+
+	const FName OldTag = MakeWeaponSourceTag(EquippedWeaponID);
+	EquippedWeaponID = NAME_None;
+
+	if (ABaseCharacter* Character = Cast<ABaseCharacter>(GetOwner()))
+	{
+		if (Character->AttributeComponent)
+		{
+			Character->AttributeComponent->RemoveModifiersBySource(OldTag);
+		}
+	}
+}
+
+void UInventoryComponent::ApplyWeaponModifiers(const FWeaponConfigRow& Row, bool bApply)
+{
+	ABaseCharacter* Character = Cast<ABaseCharacter>(GetOwner());
+	if (!Character || !Character->AttributeComponent)
+	{
+		return;
+	}
+
+	UAttributeComponent* Attr = Character->AttributeComponent;
+	const FName SourceTag = MakeWeaponSourceTag(EquippedWeaponID);
+
+	if (bApply)
+	{
+		// 倍率类（默认 1.0，Multiply）
+		Attr->AddModifier(AttributeNames::BlueAttackDamageScale(), EModifierOp::Multiply, Row.BlueAttackDamageScale, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::WhiteAttackDamageScale(), EModifierOp::Multiply, Row.WhiteAttackDamageScale, 0, SourceTag);
+
+		// 加法类（默认 0.0，Add）
+		Attr->AddModifier(AttributeNames::BlueAttackDamageMod(), EModifierOp::Add, Row.BlueAttackDamageMod, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::WhiteAttackDamageMod(), EModifierOp::Add, Row.WhiteAttackDamageMod, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::BlockWindowBonus(), EModifierOp::Add, Row.BlockWindowBonus, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::DodgeWindowBonus(), EModifierOp::Add, Row.DodgeWindowBonus, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::RedPenetrationScale(), EModifierOp::Add, Row.RedPenetrationScale, 0, SourceTag);
+		Attr->AddModifier(AttributeNames::ExtraChargeTurns(), EModifierOp::Add, static_cast<float>(Row.ExtraChargeTurns), 0, SourceTag);
+	}
+	else
+	{
+		Attr->RemoveModifiersBySource(SourceTag);
+	}
+}
+
+FName UInventoryComponent::MakeWeaponSourceTag(FName WeaponID) const
+{
+	return FName(*FString::Printf(TEXT("Weapon_%s"), *WeaponID.ToString()));
 }
 
 FName UInventoryComponent::MakeMaskSourceTag(FName MaskID) const

@@ -54,21 +54,21 @@ struct HOLE_API FMaskConfigRow : public FTableRowBase
 
 	// ---- 属性修正（全部通过 AddModifier 实现） ----
 
-	/** 烟获取量加成（倍率） */
+	/** 烟获取量倍率（1.0 = 无加成，如 1.1 = +10%） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask|Modifier")
-	float SmokeGainScale = 0.0f;
+	float SmokeGainScale = 1.0f;
 
-	/** 红色攻击伤害加成 */
+	/** 红色攻击伤害倍率（1.0 = 无加成，如 1.15 = +15%） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask|Modifier")
-	float ColorDamageScale_Red = 0.0f;
+	float ColorDamageScale_Red = 1.0f;
 
-	/** 蓝色攻击伤害加成 */
+	/** 蓝色攻击伤害倍率（1.0 = 无加成） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask|Modifier")
-	float ColorDamageScale_Blue = 0.0f;
+	float ColorDamageScale_Blue = 1.0f;
 
-	/** 白色攻击伤害加成 */
+	/** 白色攻击伤害倍率（1.0 = 无加成） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask|Modifier")
-	float ColorDamageScale_White = 0.0f;
+	float ColorDamageScale_White = 1.0f;
 
 	/** 击败敌人后回复 HP 百分比（如 0.05 = 5%） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mask|Modifier")

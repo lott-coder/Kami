@@ -10,6 +10,7 @@ class UDataTable;
 struct FCharacterConfigRow;
 struct FEnemyConfigRow;
 struct FCombatParamsRow;
+struct FMaskConfigRow;
 struct FAttributeModifier;
 
 /**
@@ -39,6 +40,9 @@ public:
 	/** DT_CombatParams 单行 "Default"（表缺失返回 nullptr） */
 	const FCombatParamsRow* GetCombatParams() const;
 
+	/** DT_MaskConfig 行（找不到返回 nullptr） */
+	const FMaskConfigRow* GetMaskRow(FName MaskID) const;
+
 	// ---- 跨表合并（角色/敌人基础属性） ----
 
 	/** 玩家基础属性 = DT_CharacterConfig 行 + DT_CombatParams + 默认值 */
@@ -59,4 +63,5 @@ private:
 	mutable TObjectPtr<UDataTable> CharacterTable;
 	mutable TObjectPtr<UDataTable> EnemyTable;
 	mutable TObjectPtr<UDataTable> CombatParamsTable;
+	mutable TObjectPtr<UDataTable> MaskTable;
 };

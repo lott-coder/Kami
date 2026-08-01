@@ -7,6 +7,7 @@
 #include "BaseCharacter.generated.h"
 
 class UAttributeComponent;
+class UInventoryComponent;
 
 /**
  * 三色属性枚举 — 红克制蓝、蓝克制白、白克制红
@@ -60,6 +61,10 @@ public:
 	/** 运行时属性容器（MaxHP / 伤害修正 / 窗口时间 等所有可被 buff 修改的属性） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Component")
 	TObjectPtr<UAttributeComponent> AttributeComponent;
+
+	/** 物品/装备容器（面具等装备槽） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Component")
+	TObjectPtr<UInventoryComponent> InventoryComponent;
 
 	// ---- 运行时状态 ----
 

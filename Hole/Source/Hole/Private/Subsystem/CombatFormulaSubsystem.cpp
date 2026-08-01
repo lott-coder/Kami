@@ -5,6 +5,7 @@
 #include "DataTable/CharacterConfigTable.h"
 #include "DataTable/CombatParamsTable.h"
 #include "DataTable/EnemyConfigTable.h"
+#include "DataTable/MaskConfigTable.h"
 #include "Engine/DataTable.h"
 
 UDataTable* UCombatFormulaSubsystem::GetTable(TObjectPtr<UDataTable>& Cache, const TCHAR* Path) const
@@ -32,6 +33,12 @@ const FCombatParamsRow* UCombatFormulaSubsystem::GetCombatParams() const
 {
 	UDataTable* Table = GetTable(CombatParamsTable, TEXT("/Game/DataTable/DT_CombatParams"));
 	return Table ? Table->FindRow<FCombatParamsRow>(FName(TEXT("Default")), TEXT("CombatFormula::Params")) : nullptr;
+}
+
+const FMaskConfigRow* UCombatFormulaSubsystem::GetMaskRow(FName MaskID) const
+{
+	UDataTable* Table = GetTable(MaskTable, TEXT("/Game/DataTable/DT_MaskConfig"));
+	return Table ? Table->FindRow<FMaskConfigRow>(MaskID, TEXT("CombatFormula::Mask")) : nullptr;
 }
 
 TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName CharacterID) const
@@ -78,6 +85,14 @@ TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName Chara
 	Out.Add(AttributeNames::DamageTakenScale(), 1.0f);
 	Out.Add(AttributeNames::CounterDmgBonus(), 0.0f);
 	Out.Add(AttributeNames::CounterHealPercent(), 0.0f);
+
+	// 面具/装备基值（面具通过 AddModifier 施加永久修正，基值 = 无修正状态）
+	Out.Add(AttributeNames::SmokeGainScale(), 1.0f);
+	Out.Add(AttributeNames::RedDamageScale(), 1.0f);
+	Out.Add(AttributeNames::BlueDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteDamageScale(), 1.0f);
+	Out.Add(AttributeNames::HPRegenOnKill(), 0.0f);
+	Out.Add(AttributeNames::SkillCostScale(), 1.0f);
 
 	return Out;
 }
@@ -128,6 +143,14 @@ TMap<FName, float> UCombatFormulaSubsystem::BuildEnemyAttributes(FName EnemyID) 
 	Out.Add(AttributeNames::DamageTakenScale(), 1.0f);
 	Out.Add(AttributeNames::CounterDmgBonus(), 0.0f);
 	Out.Add(AttributeNames::CounterHealPercent(), 0.0f);
+
+	// 面具/装备基值（敌人同样可佩戴面具类装备时使用）
+	Out.Add(AttributeNames::SmokeGainScale(), 1.0f);
+	Out.Add(AttributeNames::RedDamageScale(), 1.0f);
+	Out.Add(AttributeNames::BlueDamageScale(), 1.0f);
+	Out.Add(AttributeNames::WhiteDamageScale(), 1.0f);
+	Out.Add(AttributeNames::HPRegenOnKill(), 0.0f);
+	Out.Add(AttributeNames::SkillCostScale(), 1.0f);
 
 	return Out;
 }

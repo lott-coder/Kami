@@ -46,6 +46,14 @@ namespace AttributeNames
 
 	// -- AI --
 	FORCEINLINE FName AIDifficulty()		{ return FName(TEXT("AIDifficulty")); }
+
+	// -- 面具/装备 --
+	FORCEINLINE FName SmokeGainScale()		{ return FName(TEXT("SmokeGainScale")); }
+	FORCEINLINE FName RedDamageScale()		{ return FName(TEXT("RedDamageScale")); }
+	FORCEINLINE FName BlueDamageScale()		{ return FName(TEXT("BlueDamageScale")); }
+	FORCEINLINE FName WhiteDamageScale()	{ return FName(TEXT("WhiteDamageScale")); }
+	FORCEINLINE FName HPRegenOnKill()		{ return FName(TEXT("HPRegenOnKill")); }
+	FORCEINLINE FName SkillCostScale()		{ return FName(TEXT("SkillCostScale")); }
 }
 
 // ============================================================================

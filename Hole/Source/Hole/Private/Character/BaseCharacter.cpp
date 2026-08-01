@@ -2,6 +2,10 @@
 
 #include "Character/BaseCharacter.h"
 #include "Component/AttributeComponent.h"
+#include "Component/InventoryComponent.h"
+#include "DataTable/CharacterConfigTable.h"
+#include "Subsystem/CombatFormulaSubsystem.h"
+#include "Engine/GameInstance.h"
 
 ABaseCharacter::ABaseCharacter()
 {
@@ -13,6 +17,9 @@ ABaseCharacter::ABaseCharacter()
 
 	// 创建属性容器组件
 	AttributeComponent = CreateDefaultSubobject<UAttributeComponent>(TEXT("AttributeComponent"));
+
+	// 创建物品/装备容器组件
+	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
 
 	// 运行时状态（不再是硬编码 100 —— 由 InitializeAttributes() 从 DataTable 加载后覆盖）
 	CurrentHealth = 1.0f;
@@ -37,6 +44,24 @@ void ABaseCharacter::InitializeAttributes()
 		AttributeComponent->InitializeFromCharacterConfig(CharacterID);
 		CurrentHealth = GetMaxHealth();
 		bAttributesInitialized = true;
+
+		// 自动装备默认面具（DT_CharacterConfig.DefaultMaskID）
+		if (InventoryComponent)
+		{
+			if (UGameInstance* GameInstance = GetGameInstance())
+			{
+				if (UCombatFormulaSubsystem* Subsystem = GameInstance->GetSubsystem<UCombatFormulaSubsystem>())
+				{
+					if (const FCharacterConfigRow* Row = Subsystem->GetCharacterRow(CharacterID))
+					{
+						if (Row->DefaultMaskID != NAME_None)
+						{
+							InventoryComponent->EquipMask(Row->DefaultMaskID);
+						}
+					}
+				}
+			}
+		}
 	}
 }
 

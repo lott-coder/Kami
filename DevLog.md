@@ -40,6 +40,20 @@
 
 ### 2026-08-01 | 程序 ⚡
 
+**事项：** 完成代码审计后续优化 — 动画实例去重、面具/装备 AddModifier 链路、补齐 7 张 DataTable USTRUCT 与 8 张数据表资产。
+
+**处理过程：**
+1. 新增 `UBaseCharacterAnimInstance` 公共基类，`URoleAnimInstance` / `UEnemyAnimInstance` 改为薄壳（ABP 兼容），消除两份重复的逐帧逻辑。
+2. 新增 `UInventoryComponent`（面具装备槽）：`EquipMask` / `UnequipMask` 把 `FMaskConfigRow` 的修正字段转为永久 AddModifier（倍率类 Multiply / 百分比类 Add），按 SourceTag 整组移除；`ABaseCharacter` 自动创建组件并按 `DT_CharacterConfig.DefaultMaskID` 自动装备；`AttributeNames` 新增 6 个面具属性，`UCombatFormulaSubsystem` 提供 `GetMaskRow` 并注入基值。
+3. 按 DataTable_Spec v0.1 补齐 `FWeaponConfigRow` / `FSmokeConfigRow` / `FSkillConfigRow` / `FSkillTreeConfigRow` / `FAreaConfigRow` / `FConsumableConfigRow` / `FEconomyConfigRow` 及配套枚举；新增 `AWeapon` / `ASkill` / `AConsumable` 占位基类（`TSubclassOf` 引用需要，UHT 不允许纯前置声明）。
+4. 用编辑器命令let + Python 创建 8 张表：DT_WeaponConfig(4) / DT_MaskConfig(5) / DT_SmokeConfig(9) / DT_SkillConfig(10) / DT_SkillTreeConfig(15) / DT_AreaConfig(6) / DT_ConsumableConfig(10) / DT_EconomyConfig(8)，保留 `Scripts/create_datatables.py` 与 `verify_datatables.py` 供重建/校验。
+
+**结果/解决方案：** 每步编译通过；8 张表创建完成，行数与关键字段值经命令let 校验正确（含面具倍率、技能跨轮回保留、消耗品携带量）。
+
+**经验教训：** UE 5.6 Python 的 `DataTable` 没有 `add_row`，需要用 `fill_from_csv_string`；CSV 未显式填写的字段会变成 0/False 而非 USTRUCT 默认值，倍率/布尔类字段必须逐行显式写入。Python 布尔属性名不带 `b_` 前缀。
+
+### 2026-08-01 | 程序 ⚡
+
 **事项：** 代码审计后修复底层基础问题 — 敌人属性初始化断链、三层架构落地（新增 UCombatFormulaSubsystem）、动画性能、BossIntro 生命周期。
 
 **处理过程：**

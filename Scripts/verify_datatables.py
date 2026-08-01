@@ -41,5 +41,15 @@ def main():
         for line in consumable.export_to_csv_string().splitlines()[:3]:
             print("CONSUMABLE_CSV: " + line)
 
+    character = unreal.load_asset("/Game/DataTable/DT_CharacterConfig")
+    if character is not None:
+        for line in character.export_to_csv_string().splitlines()[:6]:
+            print("CHARACTER_CSV: " + line)
+
+    enemy = unreal.load_asset("/Game/DataTable/DT_EnemyConfig")
+    if enemy is not None:
+        for line in enemy.export_to_csv_string().splitlines()[:9]:
+            print("ENEMY_CSV: " + line)
+
 
 main()

@@ -38,6 +38,23 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-01 | 策划 ⚡
+
+**事项：** 通读 GDD v0.3 与 DataTable_Spec v0.1，确认数据逻辑/运行链路，按规范补全 3 张基础表。
+
+**处理过程：**
+1. 确认链路：DataTable → UCombatFormulaSubsystem（跨表合并）→ UAttributeComponent / UInventoryComponent → 角色/敌人；蓝/白攻伤害公式尚未接入子系统（战斗系统未落地，属后续工作）。
+2. 核对 11 张表与 GDD 数值一致性：武器/面具/技能树/经济/区域均对齐；DT_CombatParams 原本已完整（15 字段 = 规范值），未改动数值。
+3. 发现并修正：`drifter` 行 MaxHP 100→120、BaseDamageScale 1.1→1.05、WhiteAttackBonus 0→3、WalkSpeed 200→300（规范 §4.3）；`satan` 行补显示名、AI 偏好 Balanced→Adaptive、掉落 `satan_smoke`、区域 `hell`（规范 §5.4）；新增 ace / inept_char / doctor / time_mage 与 7 种敌人行。
+4. 保留 BP 类引用：drifter→BP_Dale、satan→BP_Satan（CSV 往返导入成功）。
+5. 占位处理：`[待定]` 项（inept_char 解锁条件、time_mage HP、satan MaxHP=80 保持原值）用 0/原值占位，待策划确定。
+
+**结果/解决方案：** 11 张表全部生成并校验：CombatParams 1 行、CharacterConfig 5 行、EnemyConfig 8 行、Weapon 4、Mask 5、Smoke 9、Skill 10、SkillTree 15、Area 6、Consumable 10、Economy 8；BP 类引用保留验证通过。
+
+**经验教训：** 重建带 `TSubclassOf` 引用的表时，CSV 必须使用 UE 导出的类路径格式，否则会丢失蓝图绑定；`[待定]` 数值在 DataTable 中只能先用占位值并在 DevLog 标注。
+
+**可优化点（后续）：** ① 伤害公式函数（Blue/WhiteDamage）未实现；② `AttributeNames` 缺技能树 EffectType 对应常量（BlueCritChance / WhiteDmgBonus / InterruptDmgScale / BlockDmgReduce / DodgeBuffBonus）；③ `Movement_BackwardSpeedScale` / `FirstStrikeDisableChargeTurns` / `RunAwayHPThreshold` 等表字段代码未消费；④ 武器修正未接 AddModifier。
+
 ### 2026-08-01 | 程序 ⚡
 
 **事项：** 完成代码审计后续优化 — 动画实例去重、面具/装备 AddModifier 链路、补齐 7 张 DataTable USTRUCT 与 8 张数据表资产。

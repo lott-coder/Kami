@@ -74,6 +74,143 @@ def save(asset_name):
 
 
 # ---------------------------------------------------------------------------
+# 01 — DT_CombatParams (already complete; regenerated for single-source consistency)
+# ---------------------------------------------------------------------------
+COMBATPARAMS_HEADERS = [
+    "WhiteAttackDamageMin", "WhiteAttackDamageMax", "BlueAttackDamageMin_0Charge",
+    "BlueAttackDamageMax_0Charge", "ChargeDamageMultiplier_1", "ChargeDamageMultiplier_2",
+    "MaxChargeStacks", "WhiteInterruptChargeDamageScale", "BlockWindowSeconds",
+    "DodgeWindowSeconds", "DodgeFailDamageScale", "FirstStrikeDisableChargeTurns",
+    "RunAwayHPThreshold", "PlayerDefaultHP", "Movement_BackwardSpeedScale",
+]
+combat_params = [
+    ("Default", {
+        "WhiteAttackDamageMin": 15.0, "WhiteAttackDamageMax": 25.0,
+        "BlueAttackDamageMin_0Charge": 20.0, "BlueAttackDamageMax_0Charge": 30.0,
+        "ChargeDamageMultiplier_1": 1.5, "ChargeDamageMultiplier_2": 2.25,
+        "MaxChargeStacks": 2, "WhiteInterruptChargeDamageScale": 0.3,
+        "BlockWindowSeconds": 0.25, "DodgeWindowSeconds": 0.35,
+        "DodgeFailDamageScale": 1.2, "FirstStrikeDisableChargeTurns": 1,
+        "RunAwayHPThreshold": 0.3, "PlayerDefaultHP": 100.0,
+        "Movement_BackwardSpeedScale": 0.6,
+    }),
+]
+
+# ---------------------------------------------------------------------------
+# 02 — DT_CharacterConfig
+# ---------------------------------------------------------------------------
+CHARACTER_HEADERS = [
+    "DisplayName", "PortraitTexture", "CharacterClass", "MaxHP", "MaxSmokeReserve",
+    "BaseDamageScale", "BlueAttackBonus", "WhiteAttackBonus", "WalkSpeed", "SprintSpeed",
+    "LandingLockTime", "DefaultWeaponID", "DefaultMaskID", "bIsPlayable",
+    "bHasSmokeGland", "UnlockCondition_Round", "UnlockCondition_Desc",
+]
+# CharacterClass/EnemyClass 保留现有蓝图引用（BP_Dale / BP_Satan），其余按 DataTable_Spec §4.3/§5.4
+BP_DALE_CLASS = "/Script/Engine.BlueprintGeneratedClass'/Game/Blueprint/Character/Roles/Dale/BP_Dale.BP_Dale_C'"
+characters = [
+    ("drifter", {
+        "DisplayName": "漂泊者（主角）", "CharacterClass": BP_DALE_CLASS,
+        "MaxHP": 120.0, "MaxSmokeReserve": 10.0,
+        "BaseDamageScale": 1.05, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 3.0,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "bIsPlayable": True, "bHasSmokeGland": False, "UnlockCondition_Round": 0,
+    }),
+    ("ace", {
+        "DisplayName": "艾斯", "MaxHP": 100.0, "MaxSmokeReserve": 10.0,
+        "BaseDamageScale": 0.95, "BlueAttackBonus": 5.0, "WhiteAttackBonus": 0.0,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "bIsPlayable": True, "bHasSmokeGland": True, "UnlockCondition_Round": 1,
+    }),
+    ("inept_char", {
+        "DisplayName": "[待定] 无能力者", "MaxHP": 90.0, "MaxSmokeReserve": 10.0,
+        "BaseDamageScale": 1.0, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "bIsPlayable": True, "bHasSmokeGland": False, "UnlockCondition_Round": 0,
+    }),
+    ("doctor", {
+        "DisplayName": "博士", "MaxHP": 80.0, "MaxSmokeReserve": 10.0,
+        "BaseDamageScale": 0.8, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "bIsPlayable": False, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
+    }),
+    ("time_mage", {
+        "DisplayName": "时间魔法师", "MaxHP": 100.0, "MaxSmokeReserve": 10.0,
+        "BaseDamageScale": 1.3, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 0.0,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "bIsPlayable": False, "bHasSmokeGland": True, "UnlockCondition_Round": 0,
+    }),
+]
+
+# ---------------------------------------------------------------------------
+# 03 — DT_EnemyConfig
+# ---------------------------------------------------------------------------
+ENEMY_HEADERS = [
+    "DisplayName", "Tier", "EnemyClass", "MaxHP", "BaseDamageScale", "AIPreference",
+    "AIDifficulty", "WalkSpeed", "SprintSpeed", "LandingLockTime", "DropSmokeType",
+    "DropSmokeCount", "DropCurrencyMin", "DropCurrencyMax", "SpawnAreas",
+    "AlertRange", "ChaseRange",
+]
+BP_SATAN_CLASS = "/Script/Engine.BlueprintGeneratedClass'/Game/Blueprint/Character/Enemies/Satan/BP_Satan.BP_Satan_C'"
+enemies = [
+    ("inept", {
+        "DisplayName": "无能力者", "Tier": "Tutorial", "MaxHP": 50.0,
+        "BaseDamageScale": 1.0, "AIPreference": "PreferWhite", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "hunter_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "hole,town_outskirts", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("apprentice", {
+        "DisplayName": "低级魔法师", "Tier": "Normal", "MaxHP": 80.0,
+        "BaseDamageScale": 1.0, "AIPreference": "Balanced", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "apprentice_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "town,market", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("adept", {
+        "DisplayName": "高级魔法师", "Tier": "Elite", "MaxHP": 150.0,
+        "BaseDamageScale": 1.0, "AIPreference": "Adaptive", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "adept_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "market,mansion", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("commander", {
+        "DisplayName": "魔法师统领", "Tier": "Boss", "MaxHP": 500.0,
+        "BaseDamageScale": 1.0, "AIPreference": "Adaptive", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "commander_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "mansion", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("border_guard", {
+        "DisplayName": "边境守卫", "Tier": "Elite", "MaxHP": 200.0,
+        "BaseDamageScale": 1.0, "AIPreference": "PreferCharge", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "border_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "border", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("demon", {
+        "DisplayName": "恶魔", "Tier": "Elite", "MaxHP": 350.0,
+        "BaseDamageScale": 1.0, "AIPreference": "Random", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "demon_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "hell", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("satan", {
+        "DisplayName": "撒旦", "Tier": "FinalBoss", "EnemyClass": BP_SATAN_CLASS,
+        "MaxHP": 80.0, "BaseDamageScale": 1.0, "AIPreference": "Adaptive", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "satan_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "hell", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+    ("friendly_creature", {
+        "DisplayName": "友善生物", "Tier": "Tutorial", "MaxHP": 20.0,
+        "BaseDamageScale": 1.0, "AIPreference": "Balanced", "AIDifficulty": 0.5,
+        "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DropSmokeType": "healing_smoke", "DropSmokeCount": 1,
+        "SpawnAreas": "all_areas_hidden", "AlertRange": 1500.0, "ChaseRange": 900.0,
+    }),
+]
+
+# ---------------------------------------------------------------------------
 # 04 — DT_WeaponConfig
 # ---------------------------------------------------------------------------
 WEAPON_HEADERS = [
@@ -397,6 +534,9 @@ economy = [
 
 def main():
     jobs = [
+        ("DT_CombatParams", "CombatParamsRow", COMBATPARAMS_HEADERS, combat_params),
+        ("DT_CharacterConfig", "CharacterConfigRow", CHARACTER_HEADERS, characters),
+        ("DT_EnemyConfig", "EnemyConfigRow", ENEMY_HEADERS, enemies),
         ("DT_WeaponConfig", "WeaponConfigRow", WEAPON_HEADERS, weapons),
         ("DT_MaskConfig", "MaskConfigRow", MASK_HEADERS, masks),
         ("DT_SmokeConfig", "SmokeConfigRow", SMOKE_HEADERS, smokes),

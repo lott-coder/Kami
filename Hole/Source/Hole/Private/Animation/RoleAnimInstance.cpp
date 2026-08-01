@@ -63,36 +63,44 @@ void URoleAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 	// ---- GroundDistance (落地预测) ----
 	// 使用 Sphere Sweep（球体扫描）而非单点 LineTrace
-	// 球体半径 = 胶囊体半径，解决胶囊体悬在平台边缘时中心点 Trace 打空的问题
-	const UWorld* World = OwnerRole->GetWorld();
-	if (World)
+	// 球体半径 = 胶囊体半径，解决胶囊体悬在平台边缘时中心点 Trace 打空的问题。
+	// 仅在空中才扫描（落地后距离恒为 0），避免每帧物理查询。
+	if (bIsInAir)
 	{
-		const UCapsuleComponent* Capsule = OwnerRole->GetCapsuleComponent();
-		const float CapsuleHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 88.0f;
-		const float CapsuleRadius      = Capsule ? Capsule->GetScaledCapsuleRadius()      : 34.0f;
+		const UWorld* World = OwnerRole->GetWorld();
+		if (World)
+		{
+			const UCapsuleComponent* Capsule = OwnerRole->GetCapsuleComponent();
+			const float CapsuleHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 88.0f;
+			const float CapsuleRadius      = Capsule ? Capsule->GetScaledCapsuleRadius()      : 34.0f;
 
-		// 扫描起点：脚底
-		const FVector SweepStart = OwnerRole->GetActorLocation()
-			- FVector::UpVector * CapsuleHalfHeight;
-		const FVector SweepEnd   = SweepStart - FVector::UpVector * 2000.0f;
+			// 扫描起点：脚底
+			const FVector SweepStart = OwnerRole->GetActorLocation()
+				- FVector::UpVector * CapsuleHalfHeight;
+			const FVector SweepEnd   = SweepStart - FVector::UpVector * 2000.0f;
 
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(OwnerRole);
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActor(OwnerRole);
 
-		const FCollisionShape SphereShape = FCollisionShape::MakeSphere(CapsuleRadius);
+			const FCollisionShape SphereShape = FCollisionShape::MakeSphere(CapsuleRadius);
 
-		FHitResult HitResult;
-		const bool bHit = World->SweepSingleByChannel(
-			HitResult,
-			SweepStart,
-			SweepEnd,
-			FQuat::Identity,
-			ECC_Visibility,
-			SphereShape,
-			QueryParams
-		);
+			FHitResult HitResult;
+			const bool bHit = World->SweepSingleByChannel(
+				HitResult,
+				SweepStart,
+				SweepEnd,
+				FQuat::Identity,
+				ECC_Visibility,
+				SphereShape,
+				QueryParams
+			);
 
-		GroundDistance = bHit ? HitResult.Distance : 2000.0f;
+			GroundDistance = bHit ? HitResult.Distance : 2000.0f;
+		}
+		else
+		{
+			GroundDistance = 0.0f;
+		}
 	}
 	else
 	{

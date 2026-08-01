@@ -9,7 +9,7 @@ ASatan::ASatan()
 	EnemyID = FName(TEXT("satan"));
 
 	// 身份
-	Tier = EEnemyTier::FinalBoss;
+	EnemyConfig.Tier = EEnemyTier::FinalBoss;
 	ElementalColor = EElementalColor::None;
 }
 

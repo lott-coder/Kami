@@ -115,9 +115,6 @@ private:
 	/** 过场动画锁定标记（门控 Move/Look/Sprint/Jump，不影响 EnhancedInput） */
 	bool bCinematicLocked = false;
 
-	/** 当前是否正在跑动 */
-	bool bIsSprinting;
-
 	/** 落地后短暂禁止移动输入，防止落地动画滑步 */
 	bool bLandingLocked = false;
 

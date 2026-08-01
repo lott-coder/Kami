@@ -101,11 +101,7 @@ void UBossIntroComponent::SkipIntro()
 	StopIntroSequence();
 
 	// 再切回玩家镜头（必须在 Stop/Destroy 之后，否则会被覆盖）
-	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
-	if (PC && DetectedPlayerActor.IsValid())
-	{
-		PC->SetViewTarget(DetectedPlayerActor.Get());
-	}
+	CinematicCameraOut(CameraBlendSkipTime);
 
 	UnbindSkipInput();
 	UnlockPlayerInput();
@@ -124,11 +120,7 @@ void UBossIntroComponent::CompleteIntro()
 	StopIntroSequence();
 
 	// 再切回玩家镜头（必须在 Stop/Destroy 之后，否则会被覆盖）
-	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
-	if (PC && DetectedPlayerActor.IsValid())
-	{
-		PC->SetViewTarget(DetectedPlayerActor.Get());
-	}
+	CinematicCameraOut(CameraBlendBackTime);
 
 	UnbindSkipInput();
 	UnlockPlayerInput();
@@ -196,6 +188,11 @@ void UBossIntroComponent::SetState(EBossIntroState NewState)
 		break;
 
 	case EBossIntroState::Idle:
+		// 回到 Idle 后重新启用触发（ResetIntro / 初始化失败后允许再次触发）
+		if (TriggerSphere)
+		{
+			TriggerSphere->SetGenerateOverlapEvents(true);
+		}
 		break;
 	}
 }
@@ -205,6 +202,8 @@ void UBossIntroComponent::PlayIntroSequence()
 	if (!IntroSequenceAsset || !GetWorld())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("BossIntroComponent::PlayIntroSequence - IntroSequenceAsset is null"));
+		StopIntroSequence();
+		SetState(EBossIntroState::Idle);
 		return;
 	}
 
@@ -226,6 +225,8 @@ void UBossIntroComponent::PlayIntroSequence()
 	if (!SequencePlayer)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("BossIntroComponent::PlayIntroSequence - Failed to create SequencePlayer"));
+		StopIntroSequence();
+		SetState(EBossIntroState::Idle);
 		return;
 	}
 
@@ -268,7 +269,7 @@ void UBossIntroComponent::CinematicCameraIn()
 
 	PreviousViewTarget = PC->GetViewTarget();
 
-	PC->SetViewTargetWithBlend(SequenceActor, 0.5f,
+	PC->SetViewTargetWithBlend(SequenceActor, CameraBlendInTime,
 		EViewTargetBlendFunction::VTBlend_Cubic);
 }
 

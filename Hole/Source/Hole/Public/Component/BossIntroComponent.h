@@ -92,6 +92,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BossIntro|Config")
 	float CameraBlendSkipTime = 0.1f;
 
+	/** 入场时镜头混合到 Sequence 视角的时间（秒），默认 0.5 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "BossIntro|Config")
+	float CameraBlendInTime = 0.5f;
+
 	// ---- 状态机 ----
 
 	/** 开始播放出场动画（Idle → Playing），通常由 Overlap 自动触发 */

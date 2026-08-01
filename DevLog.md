@@ -38,6 +38,22 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-01 | 程序 ⚡
+
+**事项：** 代码审计后修复底层基础问题 — 敌人属性初始化断链、三层架构落地（新增 UCombatFormulaSubsystem）、动画性能、BossIntro 生命周期。
+
+**处理过程：**
+1. 修复敌人属性无自动初始化路径：`ABaseCharacter` 新增 `bAttributesInitialized` 标记，`BeginPlay` 兜底逻辑改为"未初始化则初始化"；`AEnemy::InitializeAttributes` 完成后置位。
+2. 按三层架构新建 `UCombatFormulaSubsystem`（GameInstanceSubsystem）：持有并缓存 DataTable 引用，负责跨表合并（DT_CharacterConfig / DT_EnemyConfig + DT_CombatParams）与 modifier 最终值公式；`UAttributeComponent` 回归纯存储（不再直接 `LoadObject` 表），硬编码回退值改为 USTRUCT 默认值。
+3. `FEnemyConfigRow` 新增 `WalkSpeed` / `SprintSpeed` / `LandingLockTime` 列；`AEnemy` 逐字段复制改为整体持有 `FEnemyConfigRow EnemyConfig`（消除双源真相）。
+4. 动画每帧 Sphere Sweep 改为仅在空中时扫描，避免地面状态每帧物理查询。
+5. BossIntro：接好 `CinematicCameraOut` / `CameraBlend*` 参数（新增 `CameraBlendInTime`）；`PlayIntroSequence` 失败时回滚到 Idle 并解锁输入；回到 Idle 时重新启用触发球（修复 ResetIntro 后无法重播的问题）。
+6. 其他：`AddMappingContext` 判空；删除 `bIsSprinting` 死状态与 `ADale::BeginPlay` 空重写；`GetFinal` 移除 `const_cast`（缓存改 mutable）。
+
+**结果/解决方案：** HoleEditor Win64 Development 编译通过（约 81s）。
+
+**经验教训：** 三层架构中"跨表/公式"必须进 Subsystem，组件只存状态；DataTable USTRUCT 默认值应作为唯一回退源，避免散落硬编码。
+
 ### 2026-08-01 | 项目管理
 
 **事项：** AGENTS.md（AI 面向的项目 Memory）改为英文；`.codex/` 目录纳入 git 跟踪；确认网络沙箱机制。

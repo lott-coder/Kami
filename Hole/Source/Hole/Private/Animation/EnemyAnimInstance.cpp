@@ -61,34 +61,42 @@ void UEnemyAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	VerticalVelocity = Velocity.Z;
 
 	// ---- GroundDistance ----
-	const UWorld* World = OwnerEnemy->GetWorld();
-	if (World)
+	// 仅在空中才扫描（落地后距离恒为 0），避免每帧物理查询
+	if (bIsInAir)
 	{
-		const UCapsuleComponent* Capsule = OwnerEnemy->GetCapsuleComponent();
-		const float CapsuleHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 88.0f;
-		const float CapsuleRadius      = Capsule ? Capsule->GetScaledCapsuleRadius()      : 34.0f;
+		const UWorld* World = OwnerEnemy->GetWorld();
+		if (World)
+		{
+			const UCapsuleComponent* Capsule = OwnerEnemy->GetCapsuleComponent();
+			const float CapsuleHalfHeight = Capsule ? Capsule->GetScaledCapsuleHalfHeight() : 88.0f;
+			const float CapsuleRadius      = Capsule ? Capsule->GetScaledCapsuleRadius()      : 34.0f;
 
-		const FVector SweepStart = OwnerEnemy->GetActorLocation()
-			- FVector::UpVector * CapsuleHalfHeight;
-		const FVector SweepEnd   = SweepStart - FVector::UpVector * 2000.0f;
+			const FVector SweepStart = OwnerEnemy->GetActorLocation()
+				- FVector::UpVector * CapsuleHalfHeight;
+			const FVector SweepEnd   = SweepStart - FVector::UpVector * 2000.0f;
 
-		FCollisionQueryParams QueryParams;
-		QueryParams.AddIgnoredActor(OwnerEnemy);
+			FCollisionQueryParams QueryParams;
+			QueryParams.AddIgnoredActor(OwnerEnemy);
 
-		const FCollisionShape SphereShape = FCollisionShape::MakeSphere(CapsuleRadius);
+			const FCollisionShape SphereShape = FCollisionShape::MakeSphere(CapsuleRadius);
 
-		FHitResult HitResult;
-		const bool bHit = World->SweepSingleByChannel(
-			HitResult,
-			SweepStart,
-			SweepEnd,
-			FQuat::Identity,
-			ECC_Visibility,
-			SphereShape,
-			QueryParams
-		);
+			FHitResult HitResult;
+			const bool bHit = World->SweepSingleByChannel(
+				HitResult,
+				SweepStart,
+				SweepEnd,
+				FQuat::Identity,
+				ECC_Visibility,
+				SphereShape,
+				QueryParams
+			);
 
-		GroundDistance = bHit ? HitResult.Distance : 2000.0f;
+			GroundDistance = bHit ? HitResult.Distance : 2000.0f;
+		}
+		else
+		{
+			GroundDistance = 0.0f;
+		}
 	}
 	else
 	{

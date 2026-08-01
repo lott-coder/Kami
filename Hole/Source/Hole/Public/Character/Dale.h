@@ -20,10 +20,6 @@ class HOLE_API ADale : public ARole
 public:
 	ADale();
 
-protected:
-	virtual void BeginPlay() override;
-
-public:
 	/** 初始化主角属性（设置主角默认值） */
 	virtual void InitializeAttributes() override;
 };

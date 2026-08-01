@@ -2,7 +2,8 @@
 
 #include "Character/Enemy.h"
 #include "Component/AttributeComponent.h"
-#include "Engine/DataTable.h"
+#include "Subsystem/CombatFormulaSubsystem.h"
+#include "Engine/GameInstance.h"
 
 AEnemy::AEnemy()
 {
@@ -10,9 +11,6 @@ AEnemy::AEnemy()
 	CharacterID = NAME_None;
 	EnemyID = NAME_None;
 	ElementalColor = EElementalColor::None;
-
-	Tier = EEnemyTier::Normal;
-	AIPreference = EEnemyAIPreference::Balanced;
 }
 
 void AEnemy::InitializeAttributes()
@@ -22,30 +20,28 @@ void AEnemy::InitializeAttributes()
 		return;
 	}
 
-	// -- 1. 加载敌人配置表，复制非战斗字段到本地成员 --
-	static const FString EnemyDTPath = TEXT("/Game/DataTable/DT_EnemyConfig");
-	UDataTable* EnemyDT = LoadObject<UDataTable>(nullptr, *EnemyDTPath);
-	if (EnemyDT)
+	// -- 1. 从子系统读取敌人配置行，整体持有（避免逐字段复制造成双源真相） --
+	if (UGameInstance* GameInstance = GetGameInstance())
 	{
-		const FEnemyConfigRow* EnemyRow = EnemyDT->FindRow<FEnemyConfigRow>(EnemyID, TEXT("Enemy::Init"));
-		if (EnemyRow)
+		if (UCombatFormulaSubsystem* Subsystem = GameInstance->GetSubsystem<UCombatFormulaSubsystem>())
 		{
-			Tier            = EnemyRow->Tier;
-			AIPreference    = EnemyRow->AIPreference;
-			DropSmokeType   = EnemyRow->DropSmokeType;
-			DropSmokeCount  = EnemyRow->DropSmokeCount;
-			DropCurrencyMin = EnemyRow->DropCurrencyMin;
-			DropCurrencyMax = EnemyRow->DropCurrencyMax;
-			AlertRange      = EnemyRow->AlertRange;
-			ChaseRange      = EnemyRow->ChaseRange;
+			if (const FEnemyConfigRow* EnemyRow = Subsystem->GetEnemyRow(EnemyID))
+			{
+				EnemyConfig = *EnemyRow;
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("AEnemy::InitializeAttributes - 找不到敌人行: %s"), *EnemyID.ToString());
+			}
 		}
 	}
 
-	// -- 2. 加载战斗属性到 AttributeComponent --
+	// -- 2. 战斗属性（跨表合并）由子系统生成，组件只负责存储 --
 	AttributeComponent->InitializeFromEnemyConfig(EnemyID);
 
 	// -- 3. 重置当前生命值 --
 	CurrentHealth = GetMaxHealth();
+	bAttributesInitialized = true;
 }
 
 float AEnemy::GetAIDifficulty() const

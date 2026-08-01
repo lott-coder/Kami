@@ -39,43 +39,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Identity")
 	FName EnemyID;
 
-	// ---- 敌人属性 ----
+	// ---- 敌人配置 ----
 
-	/** 敌人等级 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Base")
-	EEnemyTier Tier = EEnemyTier::Normal;
-
-	/** AI 行为偏好 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AI")
-	EEnemyAIPreference AIPreference = EEnemyAIPreference::Balanced;
-
-	// ---- 掉落 ----
-
-	/** 击败后掉落的烟类型 ID（引用 DT_SmokeConfig） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Drop")
-	FName DropSmokeType;
-
-	/** 掉落烟数量 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Drop")
-	int32 DropSmokeCount = 1;
-
-	/** 掉落货币最小值 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Drop")
-	int32 DropCurrencyMin = 0;
-
-	/** 掉落货币最大值 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Drop")
-	int32 DropCurrencyMax = 0;
-
-	// ---- 感知 ----
-
-	/** [待定] 警觉范围（cm） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Perception")
-	float AlertRange = 1500.0f;
-
-	/** [待定] 追击范围（cm） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Perception")
-	float ChaseRange = 900.0f;
+	/** 敌人配置行（初始化时从 DT_EnemyConfig 加载，运行时状态的唯一副本） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Config")
+	FEnemyConfigRow EnemyConfig;
 
 	// ---- 便捷访问 ----
 

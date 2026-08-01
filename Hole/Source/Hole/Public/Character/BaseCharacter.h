@@ -38,6 +38,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/** 属性是否已从 DataTable 初始化（BeginPlay 兜底判断用） */
+	bool bAttributesInitialized = false;
+
 public:
 	// ---- 身份 ----
 

@@ -6,6 +6,8 @@
 #include "Components/ActorComponent.h"
 #include "AttributeComponent.generated.h"
 
+class UCombatFormulaSubsystem;
+
 // ============================================================================
 // 属性名常量（防拼写错误）
 // ============================================================================
@@ -38,11 +40,12 @@ namespace AttributeNames
 	FORCEINLINE FName CounterHealPercent()	{ return FName(TEXT("CounterHealPercent")); }
 
 	// -- 移动（[待定] DT_CombatParams 后迁移） --
-		// -- AI --
-		FORCEINLINE FName AIDifficulty()		{ return FName(TEXT("AIDifficulty")); }
 	FORCEINLINE FName WalkSpeed()			{ return FName(TEXT("WalkSpeed")); }
 	FORCEINLINE FName SprintSpeed()			{ return FName(TEXT("SprintSpeed")); }
 	FORCEINLINE FName LandingLockTime()		{ return FName(TEXT("LandingLockTime")); }
+
+	// -- AI --
+	FORCEINLINE FName AIDifficulty()		{ return FName(TEXT("AIDifficulty")); }
 }
 
 // ============================================================================
@@ -197,20 +200,19 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Attribute")
 	TMap<FName, float> BaseAttributes;
 
-	/** 基值 + 所有 modifier 叠加后的缓存 */
-	UPROPERTY(VisibleAnywhere, Category = "Attribute")
-	TMap<FName, float> CachedFinalAttributes;
+	/** 基值 + 所有 modifier 叠加后的缓存（mutable：惰性重建，保持 GetFinal 的 const 语义） */
+	mutable TMap<FName, float> CachedFinalAttributes;
 
 	/** 当前活跃的修正器栈 */
 	UPROPERTY(VisibleAnywhere, Category = "Attribute")
 	TArray<FAttributeModifier> ActiveModifiers;
 
 	/** 缓存是否失效（添加/移除 modifier 后置 true，GetFinal 时重算） */
-	bool bCacheDirty = true;
+	mutable bool bCacheDirty = true;
 
 	/** 重算所有 CachedFinalAttributes */
-	void RebuildCache();
+	void RebuildCache() const;
 
-	/** 重算单个属性的最终值 */
-	float ComputeFinal(FName AttributeName) const;
+	/** 获取战斗公式子系统（无 GameInstance 时返回 nullptr） */
+	UCombatFormulaSubsystem* GetCombatSubsystem() const;
 };

@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Character/Dale.h"
-#include "Component/AttributeComponent.h"
 
 ADale::ADale()
 {
@@ -12,11 +11,6 @@ ADale::ADale()
 	ElementalColor = EElementalColor::None;
 
 	// 属性不再在此硬编码——由 InitializeAttributes() 从 DT_CharacterConfig 加载
-}
-
-void ADale::BeginPlay()
-{
-	Super::BeginPlay();
 }
 
 void ADale::InitializeAttributes()

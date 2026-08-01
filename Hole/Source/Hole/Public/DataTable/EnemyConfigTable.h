@@ -86,6 +86,20 @@ struct HOLE_API FEnemyConfigRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|AI")
 	float AIDifficulty = 0.5f;
 
+	// ---- 移动 ----
+
+	/** 默认走路速度（cm/s） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Movement")
+	float WalkSpeed = 300.0f;
+
+	/** 默认跑动速度（cm/s） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Movement")
+	float SprintSpeed = 600.0f;
+
+	/** 落地锁定时间（秒），跳跃/坠落后禁止移动的时长，防止落地动画滑步 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Enemy|Movement")
+	float LandingLockTime = 0.3f;
+
 	// ---- 掉落 ----
 
 	/** 击败后掉落的烟类型 ID（引用 DT_SmokeConfig） */

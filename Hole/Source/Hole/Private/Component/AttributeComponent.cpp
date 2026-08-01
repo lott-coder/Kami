@@ -1,10 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Component/AttributeComponent.h"
-#include "DataTable/CharacterConfigTable.h"
-#include "DataTable/CombatParamsTable.h"
-#include "DataTable/EnemyConfigTable.h"
-#include "Engine/DataTable.h"
+#include "Subsystem/CombatFormulaSubsystem.h"
+#include "Engine/GameInstance.h"
 
 UAttributeComponent::UAttributeComponent()
 {
@@ -24,75 +22,25 @@ void UAttributeComponent::InitializeFromCharacterConfig(FName CharacterID)
 	ActiveModifiers.Empty();
 	bCacheDirty = true;
 
-	// -- 1. 加载角色配置表 --
-	static const FString CharDTPath = TEXT("/Game/DataTable/DT_CharacterConfig");
-	UDataTable* CharDT = LoadObject<UDataTable>(nullptr, *CharDTPath);
-	if (!CharDT)
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	if (!Subsystem)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitFromCharacter - 无法加载 DT_CharacterConfig"));
+		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitializeFromCharacterConfig - 无法获取 UCombatFormulaSubsystem"));
 		return;
 	}
 
-	const FCharacterConfigRow* CharRow = CharDT->FindRow<FCharacterConfigRow>(CharacterID, TEXT("AttrComp::Init"));
-	if (!CharRow)
+	// 跨表合并（DT_CharacterConfig + DT_CombatParams + 默认值）由子系统完成
+	TMap<FName, float> Attributes = Subsystem->BuildCharacterAttributes(CharacterID);
+	if (Attributes.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitFromCharacter - 找不到角色行: %s"), *CharacterID.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitializeFromCharacterConfig - 未生成属性: %s"), *CharacterID.ToString());
 		return;
 	}
 
-	// -- 2. 加载全局战斗参数表 --
-	static const FString CombatDTPath = TEXT("/Game/DataTable/DT_CombatParams");
-	UDataTable* CombatDT = LoadObject<UDataTable>(nullptr, *CombatDTPath);
-
-	const FCombatParamsRow* CombatRow = nullptr;
-	if (CombatDT)
-	{
-		CombatRow = CombatDT->FindRow<FCombatParamsRow>(FName(TEXT("Default")), TEXT("AttrComp::Init"));
-	}
-
-	// -- 3. 从角色行填充属性 --
-
-	// 生存
-	SetBase(AttributeNames::MaxHP(),           CharRow->MaxHP);
-	SetBase(AttributeNames::MaxSmokeReserve(), CharRow->MaxSmokeReserve);
-
-	// 伤害
-	SetBase(AttributeNames::BaseDamageScale(),  CharRow->BaseDamageScale);
-	SetBase(AttributeNames::BlueAttackBonus(),  CharRow->BlueAttackBonus);
-	SetBase(AttributeNames::WhiteAttackBonus(), CharRow->WhiteAttackBonus);
-
-	// 移动 — 从角色配置读取（不同角色可设不同速度）
-	SetBase(AttributeNames::WalkSpeed(),   CharRow->WalkSpeed);
-	SetBase(AttributeNames::SprintSpeed(), CharRow->SprintSpeed);
-	SetBase(AttributeNames::LandingLockTime(), CharRow->LandingLockTime);
-
-	// -- 4. 从全局战斗参数行填充属性（有表用表，无表用默认值） --
-
-	// 蓄力（MaxChargeStacks 为 int32，需显式转换）
-	SetBase(AttributeNames::ChargeSpeedBonus(), 0.0f);
-	SetBase(AttributeNames::MaxChargeStacks(),
-		CombatRow ? static_cast<float>(CombatRow->MaxChargeStacks) : 2.0f);
-	SetBase(AttributeNames::WhiteInterruptChargeDamageScale(),
-		CombatRow ? CombatRow->WhiteInterruptChargeDamageScale : 0.3f);
-
-	// 防御/操作
-	SetBase(AttributeNames::BlockWindow(),
-		CombatRow ? CombatRow->BlockWindowSeconds : 0.25f);
-	SetBase(AttributeNames::DodgeWindow(),
-		CombatRow ? CombatRow->DodgeWindowSeconds : 0.35f);
-	SetBase(AttributeNames::DodgeFailDamageScale(),
-		CombatRow ? CombatRow->DodgeFailDamageScale : 1.2f);
-	SetBase(AttributeNames::RedPenetrationScale(), 0.0f);
-
-	// 特殊
-	SetBase(AttributeNames::DamageTakenScale(),   1.0f);
-	SetBase(AttributeNames::CounterDmgBonus(),    0.0f);
-	SetBase(AttributeNames::CounterHealPercent(), 0.0f);
-
-	// -- 5. 完成 --
+	BaseAttributes = MoveTemp(Attributes);
 	RebuildCache();
 
-	UE_LOG(LogTemp, Log, TEXT("UAttributeComponent::InitFromCharacter - %s 完成 | MaxHP=%.0f Walk=%.0f Sprint=%.0f BlockWin=%.3f"),
+	UE_LOG(LogTemp, Log, TEXT("UAttributeComponent::InitializeFromCharacterConfig - %s 完成 | MaxHP=%.0f Walk=%.0f Sprint=%.0f BlockWin=%.3f"),
 		*CharacterID.ToString(),
 		GetFinal(AttributeNames::MaxHP()),
 		GetFinal(AttributeNames::WalkSpeed()),
@@ -106,79 +54,29 @@ void UAttributeComponent::InitializeFromEnemyConfig(FName EnemyID)
 	ActiveModifiers.Empty();
 	bCacheDirty = true;
 
-	// -- 1. 加载敌人配置表 --
-	static const FString EnemyDTPath = TEXT("/Game/DataTable/DT_EnemyConfig");
-	UDataTable* EnemyDT = LoadObject<UDataTable>(nullptr, *EnemyDTPath);
-	if (!EnemyDT)
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	if (!Subsystem)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitFromEnemy - 无法加载 DT_EnemyConfig"));
+		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitializeFromEnemyConfig - 无法获取 UCombatFormulaSubsystem"));
 		return;
 	}
 
-	const FEnemyConfigRow* EnemyRow = EnemyDT->FindRow<FEnemyConfigRow>(EnemyID, TEXT("AttrComp::InitEnemy"));
-	if (!EnemyRow)
+	// 跨表合并（DT_EnemyConfig + DT_CombatParams + 默认值）由子系统完成
+	TMap<FName, float> Attributes = Subsystem->BuildEnemyAttributes(EnemyID);
+	if (Attributes.IsEmpty())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitFromEnemy - 找不到敌人行: %s"), *EnemyID.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("UAttributeComponent::InitializeFromEnemyConfig - 未生成属性: %s"), *EnemyID.ToString());
 		return;
 	}
 
-	// -- 2. 加载全局战斗参数表 --
-	static const FString CombatDTPath = TEXT("/Game/DataTable/DT_CombatParams");
-	UDataTable* CombatDT = LoadObject<UDataTable>(nullptr, *CombatDTPath);
-
-	const FCombatParamsRow* CombatRow = nullptr;
-	if (CombatDT)
-	{
-		CombatRow = CombatDT->FindRow<FCombatParamsRow>(FName(TEXT("Default")), TEXT("AttrComp::InitEnemy"));
-	}
-
-	// -- 3. 从敌人行填充属性 --
-
-	// 生存
-	SetBase(AttributeNames::MaxHP(),           EnemyRow->MaxHP);
-	SetBase(AttributeNames::MaxSmokeReserve(), 0.0f);
-
-	// 伤害
-	SetBase(AttributeNames::BaseDamageScale(),  EnemyRow->BaseDamageScale);
-	SetBase(AttributeNames::BlueAttackBonus(),  0.0f);
-	SetBase(AttributeNames::WhiteAttackBonus(), 0.0f);
-
-	// AI
-	SetBase(AttributeNames::AIDifficulty(), EnemyRow->AIDifficulty);
-
-	// 移动 — 敌人使用默认值
-	SetBase(AttributeNames::WalkSpeed(),       300.0f);
-	SetBase(AttributeNames::SprintSpeed(),     600.0f);
-	SetBase(AttributeNames::LandingLockTime(), 0.3f);
-
-	// -- 4. 从全局战斗参数行填充属性 --
-
-	SetBase(AttributeNames::ChargeSpeedBonus(), 0.0f);
-	SetBase(AttributeNames::MaxChargeStacks(),
-		CombatRow ? static_cast<float>(CombatRow->MaxChargeStacks) : 2.0f);
-	SetBase(AttributeNames::WhiteInterruptChargeDamageScale(),
-		CombatRow ? CombatRow->WhiteInterruptChargeDamageScale : 0.3f);
-
-	SetBase(AttributeNames::BlockWindow(),
-		CombatRow ? CombatRow->BlockWindowSeconds : 0.25f);
-	SetBase(AttributeNames::DodgeWindow(),
-		CombatRow ? CombatRow->DodgeWindowSeconds : 0.35f);
-	SetBase(AttributeNames::DodgeFailDamageScale(),
-		CombatRow ? CombatRow->DodgeFailDamageScale : 1.2f);
-	SetBase(AttributeNames::RedPenetrationScale(), 0.0f);
-
-	SetBase(AttributeNames::DamageTakenScale(),   1.0f);
-	SetBase(AttributeNames::CounterDmgBonus(),    0.0f);
-	SetBase(AttributeNames::CounterHealPercent(), 0.0f);
-
-	// -- 5. 完成 --
+	BaseAttributes = MoveTemp(Attributes);
 	RebuildCache();
 
-	UE_LOG(LogTemp, Log, TEXT("UAttributeComponent::InitFromEnemy - %s 完成 | MaxHP=%.0f DmgScale=%.2f AIDiff=%.2f BlockWin=%.3f"),
+	UE_LOG(LogTemp, Log, TEXT("UAttributeComponent::InitializeFromEnemyConfig - %s 完成 | MaxHP=%.0f DmgScale=%.2f AIDiff=%.2f BlockWin=%.3f"),
 		*EnemyID.ToString(),
 		GetFinal(AttributeNames::MaxHP()),
 		GetFinal(AttributeNames::BaseDamageScale()),
-		EnemyRow->AIDifficulty,
+		GetFinal(AttributeNames::AIDifficulty()),
 		GetFinal(AttributeNames::BlockWindow()));
 }
 
@@ -188,7 +86,7 @@ float UAttributeComponent::GetFinal(FName AttributeName) const
 {
 	if (bCacheDirty)
 	{
-		const_cast<UAttributeComponent*>(this)->RebuildCache();
+		RebuildCache();
 	}
 
 	if (const float* Found = CachedFinalAttributes.Find(AttributeName))
@@ -278,45 +176,35 @@ void UAttributeComponent::TickTurn()
 
 // ---- 内部 ----
 
-void UAttributeComponent::RebuildCache()
+void UAttributeComponent::RebuildCache() const
 {
 	CachedFinalAttributes.Reset();
 
+	const UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
 	for (const auto& Pair : BaseAttributes)
 	{
-		CachedFinalAttributes.Add(Pair.Key, ComputeFinal(Pair.Key));
+		if (Subsystem)
+		{
+			CachedFinalAttributes.Add(Pair.Key, Subsystem->CalculateFinalValue(Pair.Value, ActiveModifiers, Pair.Key));
+		}
+		else
+		{
+			// 无 GameInstance（如编辑器预览）：退化为基值
+			CachedFinalAttributes.Add(Pair.Key, Pair.Value);
+		}
 	}
 
 	bCacheDirty = false;
 }
 
-float UAttributeComponent::ComputeFinal(FName AttributeName) const
+UCombatFormulaSubsystem* UAttributeComponent::GetCombatSubsystem() const
 {
-	const float* Base = BaseAttributes.Find(AttributeName);
-	if (!Base)
+	const UWorld* World = GetWorld();
+	if (!World)
 	{
-		return 0.0f;
+		return nullptr;
 	}
 
-	float AddAccum = 0.0f;
-	float MulAccum = 1.0f;
-
-	for (const FAttributeModifier& Mod : ActiveModifiers)
-	{
-		if (Mod.AttributeName != AttributeName)
-		{
-			continue;
-		}
-
-		if (Mod.Op == EModifierOp::Add)
-		{
-			AddAccum += Mod.Value;
-		}
-		else
-		{
-			MulAccum *= Mod.Value;
-		}
-	}
-
-	return (*Base + AddAccum) * MulAccum;
+	UGameInstance* GameInstance = World->GetGameInstance();
+	return GameInstance ? GameInstance->GetSubsystem<UCombatFormulaSubsystem>() : nullptr;
 }

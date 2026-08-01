@@ -19,9 +19,6 @@ ARole::ARole()
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 540.0f, 0.0f);
 
-	// 默认跑动状态
-	bIsSprinting = false;
-
 	// ---- 弹簧臂 ----
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(RootComponent);
@@ -94,7 +91,10 @@ void ARole::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
 			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
 		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			if (DefaultMappingContext)
+			{
+				Subsystem->AddMappingContext(DefaultMappingContext, 0);
+			}
 		}
 	}
 
@@ -170,13 +170,11 @@ void ARole::OnSprintStarted(const FInputActionValue& Value)
 	{
 		return;
 	}
-	bIsSprinting = true;
 	GetCharacterMovement()->MaxWalkSpeed = GetSprintSpeed();
 }
 
 void ARole::OnSprintCompleted(const FInputActionValue& Value)
 {
-	bIsSprinting = false;
 	GetCharacterMovement()->MaxWalkSpeed = GetWalkSpeed();
 }
 

@@ -23,7 +23,7 @@ void ABaseCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	// 若子类尚未调用 InitializeAttributes，在此处兜底
-	if (CurrentHealth <= 0.0f || CharacterID != NAME_None)
+	if (!bAttributesInitialized)
 	{
 		InitializeAttributes();
 	}
@@ -35,9 +35,9 @@ void ABaseCharacter::InitializeAttributes()
 	if (AttributeComponent && CharacterID != NAME_None)
 	{
 		AttributeComponent->InitializeFromCharacterConfig(CharacterID);
+		CurrentHealth = GetMaxHealth();
+		bAttributesInitialized = true;
 	}
-
-	CurrentHealth = GetMaxHealth();
 }
 
 void ABaseCharacter::ReceiveDamage(float DamageAmount, AActor* DamageCauser)

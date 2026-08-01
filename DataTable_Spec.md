@@ -61,19 +61,22 @@
 enum class EElementalColor : uint8 { None, Red, Blue, White };
 ```
 
-预计需要新增的枚举（在 DataTable 头文件中定义）：
+已实现枚举（2026-08-01 确认，均在各 DataTable 头文件中定义）：
 
 ```cpp
-enum class ESmokeType        : uint8 { ... };  // 烟类型
-enum class EEnemyType        : uint8 { ... };  // 敌人分类
-enum class EWeaponType       : uint8 { ... };  // 武器类型
-enum class EMaskRarity       : uint8 { ... };  // 面具稀有度
-enum class ESkillCategory    : uint8 { ... };  // 技能类别
-enum class EAreaID           : uint8 { ... };  // 区域 ID
-enum class ESkillTreeBranch  : uint8 { ... };  // 技能树分支
-enum class ECurrencyType     : uint8 { ... };  // 货币类型
-enum class EConsumableType   : uint8 { ... };  // 消耗品类型
+enum class EElementalColor     : uint8 { ... };  // BaseCharacter.h — 三色属性
+enum class EEnemyTier          : uint8 { ... };  // EnemyConfigTable.h — 敌人等级
+enum class EEnemyAIPreference  : uint8 { ... };  // EnemyConfigTable.h — AI 偏好
+enum class EWeaponCategory     : uint8 { ... };  // WeaponConfigTable.h — 武器类别
+enum class EMaskRarity         : uint8 { ... };  // MaskConfigTable.h — 面具稀有度
+enum class ESmokeSource        : uint8 { ... };  // SmokeConfigTable.h — 烟来源
+enum class ESkillCategory      : uint8 { ... };  // SkillConfigTable.h — 技能类别
+enum class ESkillTarget        : uint8 { ... };  // SkillConfigTable.h — 技能目标
+enum class ESkillTreeBranch    : uint8 { ... };  // SkillTreeConfigTable.h — 技能树分支
+enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 消耗品类型
 ```
+
+> **不采用的枚举：** 区域以 RowName 标识（不引入 `EAreaID`）；经济参数类别用 `FString Category`（不引入 `ECurrencyType`）。
 
 ---
 
@@ -81,17 +84,19 @@ enum class EConsumableType   : uint8 { ... };  // 消耗品类型
 
 | #   | 资产名 | C++ 结构体 | Class 列 | 行数 | 描述 |
 |----|--------|-----------|----------|------|------|
-| 01 | `DT_CombatParams` | `FCombatParamsRow` | — | ~15 | 战斗全局数值平衡参数 |
-| 02 | `DT_CharacterConfig` | `FCharacterConfigRow` | `CharacterClass` | ~5 | 可玩角色基础属性 |
-| 03 | `DT_EnemyConfig` | `FEnemyConfigRow` | `EnemyClass` | ~8 | 敌人类型与 AI 行为 |
-| 04 | `DT_WeaponConfig` | `FWeaponConfigRow` | `WeaponClass` | ~5 | 武器类型与战斗修正 |
-| 05 | `DT_MaskConfig` | `FMaskConfigRow` | — | ~5 | 面具类型与稀有度效果 |
-| 06 | `DT_SmokeConfig` | `FSmokeConfigRow` | — | ~9 | 烟分类与力量印记 |
-| 07 | `DT_SkillConfig` | `FSkillConfigRow` | `SkillClass` | ~25 | 技能定义与消耗 |
-| 08 | `DT_SkillTreeConfig` | `FSkillTreeConfigRow` | — | ~12 | 局外技能树节点 |
-| 09 | `DT_AreaConfig` | `FAreaConfigRow` | — | ~6 | 世界区域属性 |
-| 10 | `DT_ConsumableConfig` | `FConsumableConfigRow` | `ConsumableClass` | ~10 | 消耗品定义 |
-| 11 | `DT_EconomyConfig` | `FEconomyConfigRow` | — | ~5 | 货币兑换率与价格基数 |
+| 01 | `DT_CombatParams` | `FCombatParamsRow` | — | 1（单例） | 战斗全局数值平衡参数 |
+| 02 | `DT_CharacterConfig` | `FCharacterConfigRow` | `CharacterClass` | 5 | 可玩角色基础属性 |
+| 03 | `DT_EnemyConfig` | `FEnemyConfigRow` | `EnemyClass` | 8 | 敌人类型与 AI 行为 |
+| 04 | `DT_WeaponConfig` | `FWeaponConfigRow` | `WeaponClass` | 4（目标8-12） | 武器类型与战斗修正 |
+| 05 | `DT_MaskConfig` | `FMaskConfigRow` | — | 5（目标15-20） | 面具类型与稀有度效果 |
+| 06 | `DT_SmokeConfig` | `FSmokeConfigRow` | — | 9 | 烟分类与力量印记 |
+| 07 | `DT_SkillConfig` | `FSkillConfigRow` | `SkillClass` | 10（目标20-30） | 技能定义与消耗 |
+| 08 | `DT_SkillTreeConfig` | `FSkillTreeConfigRow` | — | 15 | 局外技能树节点 |
+| 09 | `DT_AreaConfig` | `FAreaConfigRow` | — | 6 | 世界区域属性 |
+| 10 | `DT_ConsumableConfig` | `FConsumableConfigRow` | `ConsumableClass` | 10 | 消耗品定义 |
+| 11 | `DT_EconomyConfig` | `FEconomyConfigRow` | — | 8 | 货币兑换率与价格基数 |
+
+> **实况说明（2026-08-01）：** 上表"行数"为当前资产实况；目标行数见各章节"基本信息"。
 
 ---
 
@@ -129,6 +134,7 @@ enum class EConsumableType   : uint8 { ... };  // 消耗品类型
 
 > **注意：** WalkSpeed/SprintSpeed 已迁移至 DT_CharacterConfig（每个角色可独立设置移动速度）。
 > **注意：** 此表用**单例模式**——一张表只有一行（RowName = `Default`），策划一次修改影响全局。
+> **注意：** `PlayerDefaultHP` 仅是全局回退值；具体角色的 MaxHP 以 DT_CharacterConfig 行值为准（如主角 drifter = 120，见 §4.3）。
 > 如果是不同难度分别配置，后续可扩展为多行（RowName = `Normal` / `Hard` / `Nightmare`）。
 
 ---
@@ -168,6 +174,8 @@ enum class EConsumableType   : uint8 { ... };  // 消耗品类型
 | `PortraitTexture` | `TSoftObjectPtr<UTexture2D>` | — | 角色头像 |
 
 ### 4.3 行数据
+
+> **数据口径（2026-08-01）：** 已按本节落库；`CharacterClass` 列保留现有蓝图引用（drifter → BP_Dale），其余角色待 BP 制作后补填。
 
 | RowName | DisplayName | MaxHP | DmgScale | BlueBonus | WhiteBonus | WalkSpd | SprintSpd | bPlayable | bSmokeGland | UnlockRound | GDD 来源 |
 |---------|-------------|-------|:--------:|:---------:|:----------:|:-------:|:---------:|-----------|-------------|-------------|----------|
@@ -496,6 +504,9 @@ enum class EEnemyTier : uint8
 | `BaseDamageScale` | `float` | 1.0 | 伤害输出倍率（相对战斗参数基值） |
 | `AIPreference` | `EEnemyAIPreference` | Balanced | AI 行为偏好 |
 | `AIDifficulty` | `float` | 0.5 | AI 智能度（0=随机，1=最优决策），影响"预判玩家行为"的概率 |
+| `WalkSpeed` | `float` | 300.0 | 默认走路速度（cm/s），2026-08-01 新增列（原为代码硬编码） |
+| `SprintSpeed` | `float` | 600.0 | 默认跑动速度（cm/s），2026-08-01 新增列 |
+| `LandingLockTime` | `float` | 0.3 | 落地锁定时间（秒），2026-08-01 新增列 |
 | `DropSmokeType` | `FName` | — | 击败后掉落的烟类型 ID（引用 DT_SmokeConfig） |
 | `DropSmokeCount` | `int32` | 1 | 掉落烟数量 |
 | `DropCurrencyMin` | `int32` | 0 | 掉落货币最小值 |
@@ -608,16 +619,18 @@ enum class EMaskRarity : uint8
 | `DisplayName` | `FText` | — | 面具显示名 |
 | `Rarity` | `EMaskRarity` | Common | 稀有度 |
 | `Description` | `FText` | — | 面具描述（碎片叙事文本） |
-| `SmokeGainScale` | `float` | 0.0 | 烟获取量加成（倍率） |
-| `ColorDamageScale_Red` | `float` | 0.0 | 红色攻击伤害加成 |
-| `ColorDamageScale_Blue` | `float` | 0.0 | 蓝色攻击伤害加成 |
-| `ColorDamageScale_White` | `float` | 0.0 | 白色攻击伤害加成 |
+| `SmokeGainScale` | `float` | 1.0 | 烟获取量倍率（1.0=无加成，1.1=+10%） |
+| `ColorDamageScale_Red` | `float` | 1.0 | 红色攻击伤害倍率（1.0=无加成，1.15=+15%） |
+| `ColorDamageScale_Blue` | `float` | 1.0 | 蓝色攻击伤害倍率（1.0=无加成） |
+| `ColorDamageScale_White` | `float` | 1.0 | 白色攻击伤害倍率（1.0=无加成） |
 | `HPRegenOnKill` | `float` | 0.0 | 击败敌人后回复 HP 百分比（如 0.05 = 5%） |
 | `SkillCostScale` | `float` | 1.0 | 技能消耗倍率（传说面具=0.5） |
 | `DropChance` | `float` | 0.0 | 掉落概率（0~1），`[待定]` 击败哪种敌人可掉落 |
 | `Price` | `int32` | 0 | 商店售价 |
 | `IconTexture` | `TSoftObjectPtr<UTexture2D>` | — | 面具图标 |
 | `MeshAsset` | `TSoftObjectPtr<USkeletalMesh>` | — | 面具模型 |
+
+> **修正说明（2026-08-01）：** 上述倍率列默认值统一为 1.0（此前误写 0.0，会导致装备面具后属性归零）；C++ 结构体与资产已同步。
 
 ### 7.4 行数据
 
@@ -1060,3 +1073,4 @@ DT_CombatParams (单例，无外键)
 > | 版本 | 日期 | 修订内容 |
 > |------|------|----------|
 > | v0.1 | 2026-07-29 | 初始版本，覆盖 GDD §5-§8, §14 全部数值配置 |
+> | v0.2 | 2026-08-01 | 数据落库与一致性修订：敌人移动列、面具倍率默认值（0.0→1.0）、表行数实况、枚举清单更新；11 张表全部生成并校验 |

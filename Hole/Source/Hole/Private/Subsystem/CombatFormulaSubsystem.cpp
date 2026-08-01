@@ -179,3 +179,37 @@ float UCombatFormulaSubsystem::CalculateFinalValue(float BaseValue, const TArray
 
 	return (BaseValue + AddAccum) * MulAccum;
 }
+
+float UCombatFormulaSubsystem::GetAttrFinal(const UAttributeComponent* Attr, FName AttributeName, float Fallback) const
+{
+	return Attr ? Attr->GetFinal(AttributeName) : Fallback;
+}
+
+float UCombatFormulaSubsystem::CalculateWhiteDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus) const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow& P = GetCombatParams() ? *GetCombatParams() : Defaults;
+
+	const float Base = FMath::FRandRange(P.WhiteAttackDamageMin, P.WhiteAttackDamageMax);
+	const float CharScale = GetAttrFinal(Attr, AttributeNames::BaseDamageScale(), 1.0f);
+	const float MaskScale = GetAttrFinal(Attr, AttributeNames::WhiteDamageScale(), 1.0f);
+	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::WhiteAttackBonus(), 0.0f) + WeaponDamageMod + SkillTreeFlatBonus;
+
+	return Base * CharScale * WeaponDamageScale * MaskScale + FlatBonus;
+}
+
+float UCombatFormulaSubsystem::CalculateBlueDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus, int32 ChargeStacks) const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow& P = GetCombatParams() ? *GetCombatParams() : Defaults;
+
+	const float Base = FMath::FRandRange(P.BlueAttackDamageMin_0Charge, P.BlueAttackDamageMax_0Charge);
+	const float CharScale = GetAttrFinal(Attr, AttributeNames::BaseDamageScale(), 1.0f);
+	const float MaskScale = GetAttrFinal(Attr, AttributeNames::BlueDamageScale(), 1.0f);
+	const float FlatBonus = GetAttrFinal(Attr, AttributeNames::BlueAttackBonus(), 0.0f) + WeaponDamageMod + SkillTreeFlatBonus;
+
+	const int32 Stacks = FMath::Clamp(ChargeStacks, 0, P.MaxChargeStacks);
+	const float ChargeMult = Stacks <= 0 ? 1.0f : (Stacks == 1 ? P.ChargeDamageMultiplier_1 : P.ChargeDamageMultiplier_2);
+
+	return Base * CharScale * WeaponDamageScale * MaskScale * ChargeMult + FlatBonus;
+}

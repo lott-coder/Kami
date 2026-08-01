@@ -7,6 +7,7 @@
 #include "CombatFormulaSubsystem.generated.h"
 
 class UDataTable;
+class UAttributeComponent;
 struct FCharacterConfigRow;
 struct FEnemyConfigRow;
 struct FCombatParamsRow;
@@ -56,9 +57,30 @@ public:
 	/** 最终值 = (Base + ΣAdd) × ΠMultiply */
 	float CalculateFinalValue(float BaseValue, const TArray<FAttributeModifier>& Modifiers, FName AttributeName) const;
 
+	// ---- 战斗公式（GDD §5.2.7 / DataTable_Spec §4.4.1） ----
+
+	/**
+	 * 白色攻击伤害 = (Rand(白攻Min~Max) × 角色BaseDamageScale × 武器白攻Scale × 白攻面具倍率)
+	 *                + 角色白攻加成 + 武器白攻Mod + 技能树加值
+	 * @param Attr 属性组件（可空，空时按 1.0/0.0 回退）
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CombatFormula")
+	float CalculateWhiteDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus) const;
+
+	/**
+	 * 蓝色攻击伤害 = (Rand(蓝攻Min~Max) × 角色BaseDamageScale × 武器蓝攻Scale × 蓝攻面具倍率 × 蓄力倍率)
+	 *                + 角色蓝攻加成 + 武器蓝攻Mod + 技能树加值
+	 * @param ChargeStacks 蓄力层数（0~MaxChargeStacks，超出按最大值截断）
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CombatFormula")
+	float CalculateBlueDamage(const UAttributeComponent* Attr, float WeaponDamageScale, float WeaponDamageMod, float SkillTreeFlatBonus, int32 ChargeStacks) const;
+
 private:
 	/** 懒加载并缓存 DataTable */
 	UDataTable* GetTable(TObjectPtr<UDataTable>& Cache, const TCHAR* Path) const;
+
+	/** 从属性组件读取最终值（无组件时返回回退值） */
+	float GetAttrFinal(const UAttributeComponent* Attr, FName AttributeName, float Fallback) const;
 
 	mutable TObjectPtr<UDataTable> CharacterTable;
 	mutable TObjectPtr<UDataTable> EnemyTable;

@@ -38,6 +38,30 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-01 | 策划
+
+**事项：** GDD v0.3→v0.4 与 DataTable_Spec v0.1→v0.2 一致性修订，确认文档完整性。
+
+**处理过程：**
+1. GDD 对齐：初始HP口径（100=全局回退，主角 drifter=120）、艾斯解锁 第2次轮回→第1次轮回（对齐 §6.4 与 UnlockRound=1）、边境/地狱 第3次+→第4次起（对齐 §7.1 与 UnlockRound=4）、格挡/闪避窗口 0.25/0.35 标记 [PLAYTEST]、治愈之烟兑换 80、§19.2 指向 DataTable_Spec。
+2. Spec 对齐：敌人表新增 WalkSpeed/SprintSpeed/LandingLockTime 列、面具倍率默认值 0.0→1.0 并注明倍率语义、枚举清单更新（10 个已实现，EAreaID/ECurrencyType 不采用）、表索引行数实况、修订记录 v0.2。
+3. 剩余 `[待定]` 项保留不强行确定（货币名称、satan/time_mage HP、inept_char 解锁、武器/面具/技能数量、耐力/无敌帧），已在文档中列明。
+
+**结果/解决方案：** 两份文档版本同步为 v0.4 / v0.2，GDD 与数据表的口径一致。
+
+### 2026-08-01 | 程序 ⚡
+
+**事项：** 战斗地基 — UCombatFormulaSubsystem 接入蓝/白攻伤害公式。
+
+**处理过程：**
+1. `CalculateWhiteDamage` = (Rand(15~25) × 角色BaseDamageScale × 武器白攻Scale × 白攻面具倍率) + 角色白攻加成 + 武器Mod + 技能树加值。
+2. `CalculateBlueDamage` = (Rand(20~30) × 角色BaseDamageScale × 武器蓝攻Scale × 蓝攻面具倍率 × 蓄力倍率 1.0/1.5/2.25) + 角色蓝攻加成 + 武器Mod + 技能树加值；蓄力层数按 MaxChargeStacks 截断。
+3. 属性值从 `UAttributeComponent` 读取（可空回退 1.0/0.0），表缺失时用 USTRUCT 默认值。
+
+**结果/解决方案：** 编译通过；公式与 GDD §5.2.7 / DataTable_Spec §4.4.1 完全一致，供后续战斗系统调用。
+
+**经验教训：** 公式统一收口在 Subsystem；USTRUCT 默认值是唯一回退源。
+
 ### 2026-08-01 | 策划 ⚡
 
 **事项：** 通读 GDD v0.3 与 DataTable_Spec v0.1，确认数据逻辑/运行链路，按规范补全 3 张基础表。

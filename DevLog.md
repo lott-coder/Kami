@@ -38,6 +38,19 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-01 | 项目管理
+
+**事项：** AGENTS.md（AI 面向的项目 Memory）改为英文；`.codex/` 目录纳入 git 跟踪；确认网络沙箱机制。
+
+**处理过程：**
+1. 按用户要求将 AGENTS.md 全部内容改写为英文，规则与约定保持不变，并新增"语言约定"（AGENTS.md 为 AI 面向记忆，使用英文；GDD/DevLog 等用户面向文档保持中文）。
+2. `git add .codex/config.toml`（仅 GitHub MCP 配置，无密钥）并提交。
+3. 排查 `CODEX_SANDBOX_NETWORK_DISABLED=1`：由 Codex 桌面端按会话注入沙箱策略（对应 CLI 的 `sandbox --sandbox-state-disable-network`），不是系统环境变量；需要联网的命令可通过权限审批在沙箱外运行。
+
+**结果/解决方案：** AGENTS.md 已转英文并提交；.codex 已纳入版本控制。
+
+**经验教训：** AGENTS.md/DevLog 为 UTF-8 无 BOM，PowerShell 默认读取会乱码，读写需显式指定 UTF-8。
+
 ### 2026-07-30 | 程序 ⚡
 
 **事项：** 创建 Enemy 体系 — AEnemy 抽象中间类 + ASatan 最终Boss + FEnemyConfigRow DataTable 结构体，完善敌人分支的 C++ 类层级。

@@ -1,96 +1,97 @@
-# Kami 项目记忆（AGENTS.md）
+# Kami Project Memory (AGENTS.md)
 
-> 本文件是 Codex 在本仓库中的持久项目记忆，由原 Claude Code 项目记忆迁移而来。
-> 更新规则：涉及项目约定、架构原则或开发流程的变更，先更新本文件，再同步到 DevLog。
+> This file is Codex's persistent project memory for this repository, migrated from the original Claude Code project memory.
+> Update rule: for changes to project conventions, architecture principles, or development process, update this file first, then sync to DevLog.
 
-## 1. 项目概览
+## 1. Project Overview
 
-- **引擎：** Unreal Engine 5.6，项目位于 `d:\UE5\UE_project\Kami`，UE 工程在 `Hole/` 子目录
-- **游戏：** Hole（洞穴）— Roguelike 半回合制 RPG，红蓝白三色克制 + 实时格挡闪避 + 时间轮回
-- **关键文档：**
-  - `GDD_Outline.md` — 游戏策划案（v0.3，19 章节），设计和实现的参考基准
-  - `DataTable_Spec.md` — 数据配置表规范（v0.1，11 张表），C++ USTRUCT 的定义依据
-  - `DevLog.md` — 开发日志（时间线 + 关键决策 + 常见问题速查）
-- **版本控制：** Git（分支 master），远程通过 GitHub MCP 管理；`Binaries/`、`Intermediate/`、`DerivedDataCache/`、`Saved/` 等生成目录不入库
+- **Engine:** Unreal Engine 5.6, project root `d:\UE5\UE_project\Kami`, UE project in the `Hole/` subdirectory
+- **Game:** Hole — a roguelike semi-turn-based RPG with red/blue/white three-color counters + real-time parry/dodge + time loop
+- **Key documents:**
+  - `GDD_Outline.md` — game design document (v0.3, 19 chapters); the reference baseline for design and implementation
+  - `DataTable_Spec.md` — data table specification (v0.1, 11 tables); the basis for C++ USTRUCT definitions
+  - `DevLog.md` — development log (timeline + key decisions + FAQ)
+- **Version control:** Git (branch master), remote managed via GitHub MCP; generated directories (`Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, etc.) are not tracked
 
-## 2. 开发流程规范
+## 2. Development Process Conventions
 
-### 文档约定
-- `GDD_Outline.md`：设计变更时更新对应章节并同步版本号；`[待定]` = 待决策项、`[PLAYTEST]` = 需原型验证的参数，标记后不要强行确定
-- `DataTable_Spec.md`：GDD 数值变更或新增系统时同步更新；策划数值落地时先查此文档再写 C++ USTRUCT
-- `DevLog.md` 三类记录：时间线日志（日期 + 类别 + 问题 + 处理 + 经验）、关键决策表（⚡ 记录"当时为什么这么做"）、常见问题速查
-  - 类别标签：`策划` `程序` `美术` `音频` `UE引擎` `项目管理` `Bug修复`
-  - 同一对话/同一功能领域的改动合并到同一条日志，不逐条新建
+### Document conventions
+- `GDD_Outline.md`: update the relevant chapter on design changes and bump the version number; `[待定]` = pending decision, `[PLAYTEST]` = parameter requiring prototype verification; do not force a value once marked
+- `DataTable_Spec.md`: sync whenever GDD values change or a new system is added; consult this document before writing C++ USTRUCTs
+- `DevLog.md` has three record types: timeline log (date + category + problem + handling + lesson), key decisions table (⚡ records "why we did it this way at the time"), and FAQ
+  - Category tags: `策划 (Design)` `程序 (Code)` `美术 (Art)` `音频 (Audio)` `UE引擎 (UE Engine)` `项目管理 (Project Mgmt)` `Bug修复 (Bug Fix)`
+  - Merge changes from the same conversation/feature area into one entry instead of creating separate entries per item
+- **Language:** this file is AI-facing project memory and is intentionally written in English; user-facing documents (`GDD_Outline.md`, `DataTable_Spec.md`, `DevLog.md`) remain in Chinese
 
-### 操作约定
-- **失败重试上限 3 次：** 任何任务（编译、代码修改、Bug 修复等）失败后最多重试 3 次，仍失败则立即中止并把完整报错发给用户决策；用户明确要求"一直重试直到成功"时除外
-- **新建文件前先确认路径：** 创建任何新文件前，必须先向用户确认放置路径；修改现有文件不在此限
-- **每次对话结束时：** 将重要信息整理回写本文件
+### Operational conventions
+- **Retry limit 3:** any task (compile, code change, bug fix, etc.) may be retried at most 3 times; if it still fails, stop immediately and send the complete error to the user for a decision (unless the user explicitly asks to "keep retrying until success")
+- **Confirm the path before creating new files:** always confirm the target path with the user before creating any new file; editing existing files is exempt
+- **At the end of each conversation:** consolidate important information back into this file
 
-## 3. 数据架构原则（所有实体统一遵守）
+## 3. Data Architecture Principles (all entities follow)
 
-适用于角色、敌人、武器、面具、技能、消耗品、区域等**所有数据和配置表**。
+Applies to characters, enemies, weapons, masks, skills, consumables, areas, and **all other data and config tables**.
 
-### 三层分离（所有 DataTable 通用）
-1. **USTRUCT (FTableRowBase)** — 纯数据 + 编辑器默认值；不可跨表查数据、不可写计算逻辑、不可 `PostLoad()`
-2. **UGameInstanceSubsystem** — 跨表公式计算 / 多表数据合并（如 `UCombatFormulaSubsystem`、`UEconomySubsystem`，按领域拆分）
-3. **运行时属性组件** — 存储从 DT 加载后的运行时状态（`UAttributeComponent` 玩家/敌人共用，`UInventoryComponent` 物品/装备）
+### Three-layer separation (common to all DataTables)
+1. **USTRUCT (FTableRowBase)** — pure data + editor defaults; no cross-table lookups, no calculation logic, no `PostLoad()`
+2. **UGameInstanceSubsystem** — cross-table formula calculation / multi-table data merging (e.g. `UCombatFormulaSubsystem`, `UEconomySubsystem`; split by domain)
+3. **Runtime attribute component** — stores runtime state loaded from DT (`UAttributeComponent` shared by player/enemy, `UInventoryComponent` for items/equipment)
 
-判断标准：USTRUCT 里只能出现"这一行在 Excel 里这个格子的值是什么"；任何需要"看其他表"或"做运算"的逻辑都属于 Subsystem。
+Judgment standard: a USTRUCT may only contain "what is the value of this cell in the Excel row"; anything that needs to "look at another table" or "compute" belongs in a Subsystem.
 
-### 运行时属性：TMap + 修正器栈
-所有可被 buff/debuff/装备/被动影响的属性统一使用 `UAttributeComponent`：
+### Runtime attributes: TMap + modifier stack
+All attributes affected by buff/debuff/equipment/passives use `UAttributeComponent`:
 
 ```cpp
-TMap<FName, float> BaseAttributes;          // DT 加载的基值
-TMap<FName, float> CachedFinalAttributes;   // 基值 + 所有 modifier 叠加后的最终值
-TArray<FAttributeModifier> ActiveModifiers; // buff/debuff/装备/被动 统一栈
+TMap<FName, float> BaseAttributes;          // base values loaded from DT
+TMap<FName, float> CachedFinalAttributes;   // base + all modifiers combined
+TArray<FAttributeModifier> ActiveModifiers; // unified stack for buff/debuff/equipment/passives
 
 struct FAttributeModifier
 {
-    FName AttributeName;  // "MaxHP"、"WhiteAtkBonus"、"AIDifficulty" 等
-    float Value;          // 修正值或修正倍率
+    FName AttributeName;  // "MaxHP", "WhiteAtkBonus", "AIDifficulty", etc.
+    float Value;          // modifier value or multiplier
     EModifierOp Op;       // Add / Multiply
-    int32 RemainingTurns; // 0 = 永久（装备/面具/技能树被动/永久道具）
+    int32 RemainingTurns; // 0 = permanent (equipment/mask/skill-tree passive/permanent item)
 };
 ```
 
-**不进入 TMap 的例外：** 高频变化的运行时状态（`CurrentHP` 等）、实体标识字段（`CharacterID`、`bIsPlayable`、`DisplayName`）、资产引用（`PortraitTexture`、`MeshAsset`）。
+**Exceptions not stored in TMap:** high-frequency runtime state (`CurrentHP`, etc.), entity identity fields (`CharacterID`, `bIsPlayable`, `DisplayName`), asset references (`PortraitTexture`, `MeshAsset`).
 
-玩家和敌人共用 `UAttributeComponent`，仅初始化时读取不同 DataTable：
+Players and enemies share `UAttributeComponent`; only initialization reads different DataTables:
 - `ABaseCharacter::InitializeAttributes()` → DT_CharacterConfig + DT_WeaponConfig + DT_MaskConfig
 - `AEnemy::InitializeAttributes()` → DT_EnemyConfig
 
-### 各实体数据流
+### Entity data flows
 ```
 DT_CharacterConfig / DT_WeaponConfig / DT_MaskConfig / DT_SkillTreeConfig
-    → UCombatFormulaSubsystem → UAttributeComponent（玩家）
-DT_EnemyConfig → UCombatFormulaSubsystem → UAttributeComponent（敌人）
-DT_SmokeConfig → 掉落/转化系统（纯物品产出）
-DT_SkillConfig → 技能系统（效果通过 AddModifier 体现，技能本身不改属性）
+    → UCombatFormulaSubsystem → UAttributeComponent (player)
+DT_EnemyConfig → UCombatFormulaSubsystem → UAttributeComponent (enemy)
+DT_SmokeConfig → drop/conversion system (pure item output)
+DT_SkillConfig → skill system (effects applied via AddModifier; skills never modify attributes directly)
 DT_EconomyConfig → UEconomySubsystem
-DT_AreaConfig → 关卡管理（纯静态配置）
-DT_ConsumableConfig → 背包系统 → 使用时 AddModifier
+DT_AreaConfig → level management (pure static config)
+DT_ConsumableConfig → inventory system → AddModifier on use
 ```
 
-### 迭代规则
-- 新增属性：DT 的 USTRUCT 加列 → AttributeNames 命名空间加常量 → 初始化时加载到 BaseAttributes（不改 Subsystem 接口、不改实体头文件）
-- 新增 buff/debuff：一行 `AddModifier(AttributeName, Op, Value, Turns)`，不改任何头文件
-- 新增实体类型（宠物/召唤物等）：创建 DT + FTableRowBase → 初始化时挂载 UAttributeComponent
+### Iteration rules
+- New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)
+- New buff/debuff: one `AddModifier(AttributeName, Op, Value, Turns)` call; no header changes
+- New entity type (pet/summon, etc.): create a DT + FTableRowBase → mount `UAttributeComponent` during initialization
 
-## 4. 开发原则：模块化 + 性能优化优先
+## 4. Development Principles: Modularity + Performance First
 
-所有新代码必须主动满足：
-1. **模块化优先：** 代码侧用组件模式、接口分离、单一职责；编辑器侧蓝图挂组件而非继承、DataTable 驱动而非硬编码。新功能优先考虑 `UActorComponent` 或 `UDataAsset`，避免基类膨胀
-2. **性能优化优先：** 如 `ActorHasTag`（FName 索引比较 O(1)）替代 `Cast<>`（UHT 类型层级遍历 O(n)）；TMap 而非 `TArray::FindByKey`；缓存频繁访问的数据；避免 Tick 中重复计算；对象池复用
+All new code must proactively satisfy:
+1. **Modularity first:** components, interface separation, and single responsibility on the code side; on the editor side, blueprints mount components instead of inheriting, and DataTables drive data instead of hardcoding. Prefer `UActorComponent` or `UDataAsset` for new features; avoid base-class bloat
+2. **Performance first:** use `ActorHasTag` (FName index comparison, O(1)) instead of `Cast<>` (UHT type hierarchy traversal, O(n)); use TMap instead of `TArray::FindByKey`; cache frequently accessed data; avoid repeated computation in Tick; reuse objects via pooling
 
-写任何新代码前先问：① 能否用组件/DataAsset 而非改基类？② 是否有更快的替代方案？
+Before writing any new code ask: ① Can this be a component/DataAsset instead of changing a base class? ② Is there a faster alternative?
 
-## 5. 编译环境
+## 5. Build Environment
 
-- UE 5.6 安装路径：`D:\Software\UnrealEngine\UE_5.6`
-- 编译命令：
+- UE 5.6 install path: `D:\Software\UnrealEngine\UE_5.6`
+- Build command:
   ```
   D:\Software\UnrealEngine\UE_5.6\Engine\Build\BatchFiles\Build.bat HoleEditor Win64 Development "d:\UE5\UE_project\Kami\Hole\Hole.uproject"
   ```
-- **修改任何 C++ 文件后立即编译验证**，尽早发现错误
+- **Compile immediately after modifying any C++ file** to catch errors early

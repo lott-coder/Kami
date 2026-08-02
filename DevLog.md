@@ -38,6 +38,26 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-02 | 程序 ⚡
+
+**事项：** 战斗系统 v1（Dale vs Satan）开发落地：战斗会话/HUD/AI C++、12 号表 `DT_BattleStage`、输入与蓝图接线、落点与入场动画修复。
+
+**处理过程：**
+1. 计划书：产出并确认 `Plans/combat-system.md`（大纲 → 完整计划书）；定案决策——普通中立开局、失败回到 Boss 触发点重开、战斗固定镜头沿用玩家 SpringArm（策划可调）、C++ 基类 + BP 皮肤、敌人 AI v1 全随机 `[PLAYTEST]`。
+2. 行动输入改为纯 HUD 鼠标点击（红/蓝/白/蓄力/技能），移除 1-5 键位；格挡 E / 闪避 Shift 保留。
+3. 站位/镜头参数收进 DataTable：新增 12 号表 `DT_BattleStage`（`FCombatStageRow`：`PlayerBattleOffset` / Boss 本地空间开关 / 双方朝向偏航 / `CameraPitch` / `CameraYawOffset` / `CameraArmLength` / `CameraFOV` / `SpringSocketOffset` / `SpringTargetOffset` / 镜头滞后开关与速度）；`UCombatFormulaSubsystem::GetBattleStageRow()` 读取，USTRUCT 默认值回退；DataAsset 方案（`UBattleStageConfig`）已废弃。`create/verify/export_datatables.py` 同步并已用命令let 重建校验；DataTable_Spec v0.6。
+4. C++ 新增：`BattleTypes.h`、`UBattleComponent`（战斗状态机、16 项克制结算矩阵、同色碰撞实时格挡/闪避、额外回合、闪避Buff、胜利/失败与失败重开）、`UEnemyCombatAIComponent`、`UCombatHUDWidget`；`UBossIntroComponent` 增加 `OnIntroFinished` 委托联动开战；`ARole::Look` 增加战斗锁定门控；每次改动即时编译通过。
+5. 编辑器接线（用户手动）：`IA_CombatBlock` / `IA_CombatDodge` / `IMC_Combat`、`WBP_CombatHUD`（`Content/UI/HUD`）、BP_Dale 挂 `BattleComponent`、BP_Satan 加 Tag `Boss` + `UEnemyCombatAIComponent`。
+6. 修复：玩家进入战斗从天上落下 → 落点地面射线检测（Z=地面+胶囊半高）+ 清除移动残留速度；新增玩家入场 Montage 占位 `PlayerEntryMontage`（空值跳过，有值则播完再进第 1 回合）。
+7. 资产迁移：`WBP_CombatHUD` 从 `Content/HUD` 迁至 `Content/UI/HUD`（UE 重命名接口 + 删除旧路径）；迁移过程导致 BP_Dale 的 BattleComponent 4 个引用被清空，需编辑器内重新指定。
+
+**结果/解决方案：** 全部 C++ 编译通过，提交 `9d7b6bf..d9e273e`（13 个提交）。待办：WBP_CombatHUD 补 15 个 BindWidget 控件、BP_Dale 重设 4 个引用、`PlayerEntryMontage` 资源、PIE 全流程验证、文档同步收尾。
+
+**经验教训：**
+- UE 命令let 自动保存蓝图时，若被引用资产编译报错，可能把 BP 上的引用清空——资产迁移后必须在编辑器中核对引用。
+- 大体型 Boss 根节点 Z 不等于地面高度，传送玩家到“Boss 位置+偏移”必须做落地检测，否则会从空中坠落。
+- 全局单例参数（战斗舞台）放 DataTable 与 `DT_CombatParams` 口径一致，且能走 CSV/脚本重建，比 DataAsset 更符合本项目数据驱动约定。
+
 ### 2026-08-01 | 程序 ⚡
 
 **事项：** 按用户方案定案落地：战斗规则/数值字段/武器槽/文档同步（GDD v0.6 / DataTable_Spec v0.4）。
@@ -532,6 +552,9 @@
 
 | 日期 | 决策 | 理由 | 影响 |
 |------|------|------|------|
+| 2026-08-02 | ⚡ 战斗行动选择只用 HUD 鼠标点击（不用 1-5 键位） | 行动按钮即 UI 核心交互，避免键位与实时格挡/闪避混淆 | 战斗输入系统、Task 10 资产清单 |
+| 2026-08-02 | ⚡ 战斗舞台配置入 `DT_BattleStage`（DataTable，非 DataAsset） | 与 `DT_CombatParams` 单例口径一致，策划调参 + CSV/脚本可重建；战斗/非战斗两套状态由保存恢复保证 | 12 号表、`FCombatStageRow`、DataTable_Spec v0.6 |
+| 2026-08-02 | ⚡ 战斗失败回到 Boss 触发点直接重播入场动画 | 验证循环最短，先保证战斗闭环可重测 | 失败流程、`ResetIntro` + `UpdateOverlaps` 重开逻辑 |
 | 2026-07-07 | ⚡ 主角视觉三角 v2.0：不对称长外套 + 疤痕面容 + 暗红围巾 | 无护甲/无武器/无头饰的纯废土衣装流浪者；外套不对称剪影为 #1 识别点；光头为面具装备槽留空；整洁外观便于潜入魔法师世界 | 所有主角3D建模、动画、UI角色展示的视觉基准 |
 | 2026-07-07 | ⚡ 主角视觉三角 v1.1：不对称肩甲 + 半面具 + 暗红围巾（已废弃） | 原方案：武装猎手形象 | 被 v2.0 替代 |
 | 2026-07-06 | ⚡ C++ 角色基类 `ABaseCharacter`（继承 `ACharacter`）| 统一生命值、颜色属性、伤害/死亡接口，后续角色全部继承 | 角色系统技术基准，影响所有角色类的继承结构 |

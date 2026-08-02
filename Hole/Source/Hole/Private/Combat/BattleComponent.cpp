@@ -8,6 +8,7 @@
 #include "Character/BaseCharacter.h"
 #include "Component/AttributeComponent.h"
 #include "Component/BossIntroComponent.h"
+#include "Components/SphereComponent.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "DataTable/CombatParamsTable.h"
 #include "Engine/GameInstance.h"
@@ -787,72 +788,323 @@ void UBattleComponent::OnDodgePressed()
 
 void UBattleComponent::SetupCombatInput()
 {
-	// TODO-TASK8
+	if (bCombatInputBound || !PlayerRole.IsValid())
+	{
+		return;
+	}
+
+	UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerRole->InputComponent);
+	if (!EIC)
+	{
+		return;
+	}
+
+	if (RedDefenseAction) EIC->BindAction(RedDefenseAction, ETriggerEvent::Started, this, &UBattleComponent::OnRedDefensePressed);
+	if (BlueAttackAction) EIC->BindAction(BlueAttackAction, ETriggerEvent::Started, this, &UBattleComponent::OnBlueAttackPressed);
+	if (WhiteAttackAction) EIC->BindAction(WhiteAttackAction, ETriggerEvent::Started, this, &UBattleComponent::OnWhiteAttackPressed);
+	if (ChargeAction) EIC->BindAction(ChargeAction, ETriggerEvent::Started, this, &UBattleComponent::OnChargePressed);
+	if (SkillAction) EIC->BindAction(SkillAction, ETriggerEvent::Started, this, &UBattleComponent::OnSkillPressed);
+	if (BlockAction) EIC->BindAction(BlockAction, ETriggerEvent::Started, this, &UBattleComponent::OnBlockPressed);
+	if (DodgeAction) EIC->BindAction(DodgeAction, ETriggerEvent::Started, this, &UBattleComponent::OnDodgePressed);
+
+	bCombatInputBound = true;
 }
 
 void UBattleComponent::UnbindCombatInput()
 {
-	// TODO-TASK8
+	if (!bCombatInputBound || !PlayerRole.IsValid())
+	{
+		return;
+	}
+
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerRole->InputComponent))
+	{
+		EIC->ClearBindingsForObject(this);
+	}
+	bCombatInputBound = false;
 }
 
 void UBattleComponent::AddCombatMapping()
 {
-	// TODO-TASK8
+	if (bCombatMappingAdded || !CombatMappingContext)
+	{
+		return;
+	}
+
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (!PC || !PC->GetLocalPlayer())
+	{
+		return;
+	}
+
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+		ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+	{
+		// 优先级 10 > 探索 IMC 的 0，战斗期间 Shift 等键被战斗映射覆盖
+		Subsystem->AddMappingContext(CombatMappingContext, 10);
+		bCombatMappingAdded = true;
+	}
 }
 
 void UBattleComponent::RemoveCombatMapping()
 {
-	// TODO-TASK8
+	if (!bCombatMappingAdded || !CombatMappingContext)
+	{
+		return;
+	}
+
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	if (PC && PC->GetLocalPlayer())
+	{
+		if (UEnhancedInputLocalPlayerSubsystem* Subsystem =
+			ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()))
+		{
+			Subsystem->RemoveMappingContext(CombatMappingContext);
+		}
+	}
+	bCombatMappingAdded = false;
 }
 
 void UBattleComponent::PositionBattleActors()
 {
-	// TODO-TASK8
+	ARole* Role = PlayerRole.Get();
+	AEnemy* Boss = BossEnemy.Get();
+	if (!Role || !Boss)
+	{
+		return;
+	}
+
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+
+	// 保存探索状态（战斗结束后恢复）
+	PlayerStartLocation = Role->GetActorLocation();
+	PlayerStartActorRotation = Role->GetActorRotation();
+	BossStartLocation = Boss->GetActorLocation();
+	BossStartRotation = Boss->GetActorRotation();
+	if (PC)
+	{
+		PlayerStartControlRotation = PC->GetControlRotation();
+	}
+	if (Role->SpringArm)
+	{
+		OriginalArmLength = Role->SpringArm->TargetArmLength;
+		bOriginalCameraLag = Role->SpringArm->bEnableCameraRotationLag;
+		OriginalLagSpeed = Role->SpringArm->CameraRotationLagSpeed;
+	}
+
+	// Boss 面向玩家
+	FVector DirToPlayer = PlayerStartLocation - BossStartLocation;
+	DirToPlayer.Z = 0.0f;
+	if (!DirToPlayer.IsNearlyZero())
+	{
+		DirToPlayer.Normalize();
+	}
+	Boss->SetActorRotation(FRotator(0.0f, DirToPlayer.Rotation().Yaw, 0.0f));
+
+	// 玩家站到 Boss 正前方固定距离（固定位移）
+	const FVector PlayerSpot = BossStartLocation - DirToPlayer * BattleDistance;
+	Role->SetActorLocation(
+		FVector(PlayerSpot.X, PlayerSpot.Y, BossStartLocation.Z),
+		false,
+		nullptr,
+		ETeleportType::TeleportPhysics);
+
+	// 玩家面向 Boss（固定角度）
+	const FRotator PlayerFaceRot = (BossStartLocation - Role->GetActorLocation()).Rotation();
+	Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw, 0.0f));
+
+	// 固定玩家摄像机：锁定控制旋转 + 固定 SpringArm 长度/关闭滞后
+	if (PC)
+	{
+		PC->SetControlRotation(FRotator(BattleCameraPitch, PlayerFaceRot.Yaw, 0.0f));
+	}
+	if (Role->SpringArm)
+	{
+		Role->SpringArm->TargetArmLength = BattleCameraArmLength;
+		Role->SpringArm->bEnableCameraRotationLag = false;
+	}
 }
 
 void UBattleComponent::RestoreExplorationState()
 {
-	// TODO-TASK8
+	ARole* Role = PlayerRole.Get();
+	AEnemy* Boss = BossEnemy.Get();
+
+	if (Role)
+	{
+		Role->SetActorLocation(PlayerStartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		Role->SetActorRotation(PlayerStartActorRotation);
+		if (Role->SpringArm)
+		{
+			Role->SpringArm->TargetArmLength = OriginalArmLength;
+			Role->SpringArm->bEnableCameraRotationLag = bOriginalCameraLag;
+			Role->SpringArm->CameraRotationLagSpeed = OriginalLagSpeed;
+		}
+	}
+	if (Boss)
+	{
+		Boss->SetActorLocation(BossStartLocation, false, nullptr, ETeleportType::TeleportPhysics);
+		Boss->SetActorRotation(BossStartRotation);
+	}
+	if (GetWorld())
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			PC->SetControlRotation(PlayerStartControlRotation);
+		}
+	}
 }
 
 void UBattleComponent::LockPlayer()
 {
-	// TODO-TASK8
+	if (PlayerRole.IsValid())
+	{
+		PlayerRole->SetCinematicLocked(true);
+	}
 }
 
 void UBattleComponent::UnlockPlayer()
 {
-	// TODO-TASK8
+	if (PlayerRole.IsValid())
+	{
+		PlayerRole->SetCinematicLocked(false);
+	}
 }
 
 void UBattleComponent::ShowHUD()
 {
-	// TODO-TASK8
+	if (CombatHUD.IsValid() || !CombatHUDClass)
+	{
+		return;
+	}
+
+	CombatHUD = CreateWidget<UCombatHUDWidget>(GetWorld(), CombatHUDClass);
+	if (!CombatHUD.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ShowHUD - 创建 WBP_CombatHUD 失败"));
+		return;
+	}
+
+	CombatHUD->AddToViewport(10);
+	CombatHUD->BindToBattle(this);
+
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		PC->bShowMouseCursor = true;
+		FInputModeGameAndUI InputMode;
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+		bMouseCursorShown = true;
+	}
 }
 
 void UBattleComponent::HideHUD()
 {
-	// TODO-TASK8
+	if (CombatHUD.IsValid())
+	{
+		CombatHUD->RemoveFromParent();
+		CombatHUD.Reset();
+	}
+
+	if (bMouseCursorShown)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			PC->bShowMouseCursor = false;
+			PC->SetInputMode(FInputModeGameOnly());
+		}
+		bMouseCursorShown = false;
+	}
 }
 
 void UBattleComponent::FinishBattle(bool bPlayerWon)
 {
-	// TODO-TASK8
+	if (Phase == EBattlePhase::Ended)
+	{
+		return;
+	}
+
+	SetPhase(EBattlePhase::Ended);
+	ClearClashTimers();
+	UnbindCombatInput();
+	RemoveCombatMapping();
+	if (CombatHUD.IsValid())
+	{
+		CombatHUD->HideClashPrompt();
+		CombatHUD->ShowResult(bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败")));
+	}
+	OnBattleStateChanged.Broadcast();
+
+	const float Delay = bPlayerWon ? 2.0f : DefeatRestartDelay;
+	if (bPlayerWon)
+	{
+		GetWorld()->GetTimerManager().SetTimer(EndDelayTimer, this, &UBattleComponent::HandleVictoryCleanup, Delay, false);
+	}
+	else
+	{
+		GetWorld()->GetTimerManager().SetTimer(EndDelayTimer, this, &UBattleComponent::HandleDefeatRestart, Delay, false);
+	}
 }
 
 void UBattleComponent::HandleVictoryCleanup()
 {
-	// TODO-TASK8
+	bBossDefeated = true;
+	HideHUD();
+	RestoreExplorationState();
+	UnlockPlayer();
+	SetPhase(EBattlePhase::Idle);
+	OnBattleStateChanged.Broadcast();
 }
 
 void UBattleComponent::HandleDefeatRestart()
 {
-	// TODO-TASK8
+	HideHUD();
+	RestoreExplorationState();
+	UnlockPlayer();
+	ResetForRetry();
+
+	// 回到 Boss 触发点：玩家已恢复为战斗前位置（触发球内），重置触发后强制刷新重叠 → 直接重播 Boss 动画
+	if (BossEnemy.IsValid())
+	{
+		if (UBossIntroComponent* Intro = BossEnemy->FindComponentByClass<UBossIntroComponent>())
+		{
+			Intro->ResetIntro();
+			Intro->TriggerSphere->UpdateOverlaps();
+		}
+	}
+
+	SetPhase(EBattlePhase::Idle);
+	OnBattleStateChanged.Broadcast();
 }
 
 void UBattleComponent::ResetForRetry()
 {
-	// TODO-TASK8
+	if (PlayerRole.IsValid())
+	{
+		PlayerRole->CurrentHealth = PlayerRole->GetMaxHealth();
+		if (UAttributeComponent* PA = GetPlayerAttr())
+		{
+			PA->RemoveAllTemporaryModifiers();
+		}
+	}
+	if (BossEnemy.IsValid())
+	{
+		BossEnemy->CurrentHealth = BossEnemy->GetMaxHealth();
+		if (UAttributeComponent* EA = GetEnemyAttr())
+		{
+			EA->RemoveAllTemporaryModifiers();
+		}
+	}
+
+	PlayerChargeStacks = 0;
+	EnemyChargeStacks = 0;
+	RoundNumber = 0;
+	bPlayerChoseAction = false;
+	bPlayerExtraTurnPending = false;
+	bEnemyExtraTurnPending = false;
+	bClashResolved = false;
+	bClashWindowOpen = false;
+	PendingClashResult = EClashResult::None;
 }
 
 float UBattleComponent::GetPlayerWhiteDamage() const

@@ -16,7 +16,10 @@ public class Hole : ModuleRules
 			"InputCore",
 			"EnhancedInput",
 			"LevelSequence",
-				"MovieScene"
+			"MovieScene",
+			"UMG",
+			"Slate",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

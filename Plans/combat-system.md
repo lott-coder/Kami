@@ -10,6 +10,11 @@
 
 ---
 
+## 变更记录（2026-08-02，用户确认）
+
+1. **行动选择只走 HUD 鼠标点击**：移除五个行动按键（红防=1、蓝攻=2、白攻=3、蓄力=4、技能=5）的输入绑定（提交 7892efc）。`IMC_Combat` 只保留 `IA_CombatBlock`(E) 与 `IA_CombatDodge`(Left Shift)；`UBattleComponent` 不再持有 5 个行动 UInputAction 字段。Task 10 相应只创建 2 个 InputAction。
+2. **站位与镜头参数收进共享 DataAsset（已实现，提交 5337dae）**：新增 `UBattleStageConfig`（UDataAsset，默认资产 `/Game/Data/DA_BattleStage`），包含 `PlayerBattleOffset`、`bBossFacePlayer`、`bPlayerFaceBoss`、`CameraPitch`、`CameraYawOffset`、`CameraArmLength`。玩家组件只持有该资产引用（不直接承载数值），未配置时回退资产类默认值；战斗/非战斗两套状态由保存/恢复逻辑保证。Task 10 增加创建 `DA_BattleStage` 并指定到 BP_Dale 的步骤。
+
 ## Global Constraints
 
 - UE 5.6 安装路径：`D:\Software\UnrealEngine\UE_5.6`
@@ -2586,21 +2591,17 @@ git commit -m "feat(combat): gate camera look while cinematic/battle locked"
 **Interfaces:**
 - 输入动作键位：红防=1、蓝攻=2、白攻=3、蓄力=4、技能=5、格挡=E、闪避=Left Shift。
 
-- [ ] **Step 1: 创建 7 个 InputAction**
+- [ ] **Step 1: 创建 2 个 InputAction**
 
 1. 打开 Content Browser，进入 `Content/Input`。
-2. 右键 → Input → Input Action，命名 `IA_CombatRedDefense`；详情面板 Value Type = Digital (bool)。
-3. 重复创建：`IA_CombatBlueAttack`、`IA_CombatWhiteAttack`、`IA_CombatCharge`、`IA_CombatSkill`、`IA_CombatBlock`、`IA_CombatDodge`（全部 Digital bool）。
+2. 右键 → Input → Input Action，命名 `IA_CombatBlock`；详情面板 Value Type = Digital (bool)。
+3. 重复创建：`IA_CombatDodge`（Digital bool）。
+（行动选择红/蓝/白/蓄力/技能只通过 HUD 按钮点击，不创建输入资产。）
 
 - [ ] **Step 2: 创建 IMC_Combat 并配置映射**
 
 1. `Content/Input` 内右键 → Input → Input Mapping Context，命名 `IMC_Combat`。
 2. 打开 IMC_Combat → Mappings 点击 `+`，依次添加：
-   - `IA_CombatRedDefense` → 键盘 1
-   - `IA_CombatBlueAttack` → 键盘 2
-   - `IA_CombatWhiteAttack` → 键盘 3
-   - `IA_CombatCharge` → 键盘 4
-   - `IA_CombatSkill` → 键盘 5
    - `IA_CombatBlock` → 键盘 E
    - `IA_CombatDodge` → 键盘 Left Shift
 3. 保存。
@@ -2638,6 +2639,13 @@ Root [Canvas Panel]
 4. 点击 Compile：预期无 BindWidget 缺失错误（C++ 已编译的前提下）。
 5. 保存。
 
+- [ ] **Step 3.5: 创建 DA_BattleStage（策划共享配置资产）**
+
+1. `Content` 下新建文件夹 `Data`。
+2. 在 `Content/Data` 右键 → Miscellaneous → Data Asset；Parent Class 搜索 `BattleStageConfig` 选择 `UBattleStageConfig`；命名 `DA_BattleStage`。
+3. 打开资产，保持默认值（PlayerBattleOffset=(0,-550,0)、bBossFacePlayer=true、bPlayerFaceBoss=true、CameraPitch=-12、CameraYawOffset=0、CameraArmLength=400），策划后续在此调参。
+4. 保存。
+
 - [ ] **Step 4: BP_Dale 挂载 UBattleComponent**
 
 1. 打开 `BP_Dale`（Content/Blueprint/Character/Roles/Dale）。
@@ -2645,7 +2653,8 @@ Root [Canvas Panel]
 3. 选中新组件，详情面板确认（构造函数已自动填充，只需核对）：
    - `CombatHUDClass` = WBP_CombatHUD
    - `CombatMappingContext` = IMC_Combat
-   - 7 个 Action 已指向对应 IA_Combat* 资产
+   - `BlockAction` = IA_CombatBlock、`DodgeAction` = IA_CombatDodge
+   - `BattleStageConfig` = DA_BattleStage
 4. 保存。
 
 - [ ] **Step 5: BP_Satan 加 Tag 与 AI 组件**

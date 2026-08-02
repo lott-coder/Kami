@@ -15,7 +15,7 @@
 1. **行动选择只走 HUD 鼠标点击**：移除五个行动按键（红防=1、蓝攻=2、白攻=3、蓄力=4、技能=5）的输入绑定（提交 7892efc）。`IMC_Combat` 只保留 `IA_CombatBlock`(E) 与 `IA_CombatDodge`(Left Shift)；`UBattleComponent` 不再持有 5 个行动 UInputAction 字段。Task 10 相应只创建 2 个 InputAction。
 2. **站位与镜头参数收进 DataTable（2026-08-02 终版）**：新增 12 号表 `DT_BattleStage`（`FCombatStageRow`，`/Game/DataTable/DT_BattleStage`，单行 `Default`），字段 `PlayerBattleOffset` / `bBossFacePlayer` / `bPlayerFaceBoss` / `CameraPitch` / `CameraYawOffset` / `CameraArmLength`。`UBattleComponent` 经 `UCombatFormulaSubsystem::GetBattleStageRow()` 读取，USTRUCT 默认值为回退源；资产已由 `Scripts/create_datatables.py` 生成。DataAsset 方案已废弃（提交 5337dae 被本方案替换）。
 3. **DT_BattleStage 扩展 Spring/位移选项（2026-08-02）**：新增 `bPlayerOffsetInBossLocalSpace`（Boss 本地/世界空间）、`BossFacingYawOffset`、`PlayerFacingYawOffset`、`CameraFOV`、`SpringSocketOffset`、`SpringTargetOffset`、`bSpringEnableCameraLag`、`SpringCameraLagSpeed`；战斗结束恢复 SocketOffset/TargetOffset/FOV。
-4. **HUD 资产路径按实际创建位置对齐**：`WBP_CombatHUD` 实际位于 `Content/HUD`（非 `Content/UI`），`UBattleComponent` 默认加载路径已改为 `/Game/HUD/WBP_CombatHUD`。
+4. **HUD 资产路径按实际创建位置对齐**：`WBP_CombatHUD` 实际位于 `Content/HUD`，随后按用户要求迁移至 `Content/UI/HUD`（`/Game/UI/HUD/WBP_CombatHUD`），`UBattleComponent` 默认加载路径已同步。旧路径资产已删除；迁移过程中 BP_Dale 上 BattleComponent 的 4 个引用（CombatHUDClass / CombatMappingContext / BlockAction / DodgeAction）被清空，需在编辑器中重新指定。
 
 ## Global Constraints
 
@@ -30,7 +30,7 @@
 - 新行为入口优先组件/DataAsset，不改基类；本次只允许对 `ARole::Look` 加一个锁定门控（最小改动）。
 - 战斗数值参数一律读 `DT_CombatParams`（已有）；v1 敌人 AI 权重先代码内置并标注 `[PLAYTEST]`，后续按策划需求改表。
 - 用户文档（GDD/DevLog/DataTable_Spec）保持中文；AGENTS.md 保持英文；提交信息用 conventional commits（`feat:` / `fix:` / `docs:`）。
-- 资产路径：输入资产放 `Content/Input`，HUD 放 `Content/HUD`；C++ 放 `Hole/Source/Hole/Public|Private` 对应子目录。
+- 资产路径：输入资产放 `Content/Input`，HUD 放 `Content/UI/HUD`；C++ 放 `Hole/Source/Hole/Public|Private` 对应子目录。
 
 ---
 
@@ -46,7 +46,7 @@
 | `Hole/Source/Hole/Public/Component/BossIntroComponent.h` + `Private/Component/BossIntroComponent.cpp` | 增加 `OnIntroFinished` 动态委托 | 修改 |
 | `Hole/Source/Hole/Public/Character/Role.h` + `Private/Character/Role.cpp` | `Look` 受 `bCinematicLocked` 门控 | 修改 |
 | `Hole/Content/Input/IA_Combat*.uasset`（7 个）+ `IMC_Combat.uasset` | 战斗输入资产 | 新建（编辑器） |
-| `Hole/Content/HUD/WBP_CombatHUD.uasset` | HUD 皮肤（父类 `UCombatHUDWidget`） | 新建（编辑器） |
+| `Hole/Content/UI/HUD/WBP_CombatHUD.uasset` | HUD 皮肤（父类 `UCombatHUDWidget`） | 新建（编辑器） |
 | `BP_Dale.uasset` | 挂载 `UBattleComponent` | 修改（编辑器） |
 | `BP_Satan.uasset` | 增加 Tag `Boss`、挂载 `UEnemyCombatAIComponent` | 修改（编辑器） |
 
@@ -2611,7 +2611,7 @@ git commit -m "feat(combat): gate camera look while cinematic/battle locked"
 - [ ] **Step 3: 创建 WBP_CombatHUD**
 
 1. `Content` 下新建文件夹 `UI`。
-2. 在 `Content/HUD` 右键 → User Interface → Widget Blueprint；Parent Class 搜索 `CombatHUDWidget` 选择 `UCombatHUDWidget`；命名 `WBP_CombatHUD`（已创建，需补全控件树）。
+2. 在 `Content/UI/HUD` 右键 → User Interface → Widget Blueprint；Parent Class 搜索 `CombatHUDWidget` 选择 `UCombatHUDWidget`；命名 `WBP_CombatHUD`（已创建并迁移，需补全控件树）。
 3. 打开编辑器，按以下控件树搭建（**控件名必须与 C++ BindWidget 完全一致**，否则编译报错）：
 
 ```
@@ -2676,7 +2676,7 @@ Root [Canvas Panel]
 - [ ] **Step 7: 提交**
 
 ```bash
-git add Hole/Content/Input Hole/Content/HUD Hole/Content/Blueprint/Character/Roles/Dale/BP_Dale.uasset Hole/Content/Blueprint/Character/Enemies/Satan/BP_Satan.uasset
+git add Hole/Content/Input Hole/Content/UI/HUD Hole/Content/Blueprint/Character/Roles/Dale/BP_Dale.uasset Hole/Content/Blueprint/Character/Enemies/Satan/BP_Satan.uasset
 git commit -m "feat(combat): add combat input, HUD widget, and blueprint wiring"
 ```
 

@@ -31,7 +31,7 @@ UBattleComponent::UBattleComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 
-	static ConstructorHelpers::FClassFinder<UCombatHUDWidget> HUDClass(TEXT("/Game/HUD/WBP_CombatHUD"));
+	static ConstructorHelpers::FClassFinder<UCombatHUDWidget> HUDClass(TEXT("/Game/UI/HUD/WBP_CombatHUD"));
 	if (HUDClass.Succeeded())
 	{
 		CombatHUDClass = HUDClass.Class;

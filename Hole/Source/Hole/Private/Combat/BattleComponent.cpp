@@ -41,21 +41,6 @@ UBattleComponent::UBattleComponent()
 		CombatMappingContext = CombatIMC.Object;
 	}
 
-	static ConstructorHelpers::FObjectFinder<UInputAction> RedDefense(TEXT("/Game/Input/IA_CombatRedDefense"));
-	if (RedDefense.Succeeded()) RedDefenseAction = RedDefense.Object;
-
-	static ConstructorHelpers::FObjectFinder<UInputAction> BlueAttack(TEXT("/Game/Input/IA_CombatBlueAttack"));
-	if (BlueAttack.Succeeded()) BlueAttackAction = BlueAttack.Object;
-
-	static ConstructorHelpers::FObjectFinder<UInputAction> WhiteAttack(TEXT("/Game/Input/IA_CombatWhiteAttack"));
-	if (WhiteAttack.Succeeded()) WhiteAttackAction = WhiteAttack.Object;
-
-	static ConstructorHelpers::FObjectFinder<UInputAction> Charge(TEXT("/Game/Input/IA_CombatCharge"));
-	if (Charge.Succeeded()) ChargeAction = Charge.Object;
-
-	static ConstructorHelpers::FObjectFinder<UInputAction> Skill(TEXT("/Game/Input/IA_CombatSkill"));
-	if (Skill.Succeeded()) SkillAction = Skill.Object;
-
 	static ConstructorHelpers::FObjectFinder<UInputAction> Block(TEXT("/Game/Input/IA_CombatBlock"));
 	if (Block.Succeeded()) BlockAction = Block.Object;
 
@@ -732,31 +717,6 @@ void UBattleComponent::ClearClashTimers()
 	bClashWindowOpen = false;
 }
 
-void UBattleComponent::OnRedDefensePressed()
-{
-	PlayerChooseAction(EBattleAction::RedDefense);
-}
-
-void UBattleComponent::OnBlueAttackPressed()
-{
-	PlayerChooseAction(EBattleAction::BlueAttack);
-}
-
-void UBattleComponent::OnWhiteAttackPressed()
-{
-	PlayerChooseAction(EBattleAction::WhiteAttack);
-}
-
-void UBattleComponent::OnChargePressed()
-{
-	PlayerChooseAction(EBattleAction::Charge);
-}
-
-void UBattleComponent::OnSkillPressed()
-{
-	PlayerChooseAction(EBattleAction::Skill);
-}
-
 void UBattleComponent::OnBlockPressed()
 {
 	if (Phase != EBattlePhase::Clash || bClashResolved)
@@ -799,11 +759,6 @@ void UBattleComponent::SetupCombatInput()
 		return;
 	}
 
-	if (RedDefenseAction) EIC->BindAction(RedDefenseAction, ETriggerEvent::Started, this, &UBattleComponent::OnRedDefensePressed);
-	if (BlueAttackAction) EIC->BindAction(BlueAttackAction, ETriggerEvent::Started, this, &UBattleComponent::OnBlueAttackPressed);
-	if (WhiteAttackAction) EIC->BindAction(WhiteAttackAction, ETriggerEvent::Started, this, &UBattleComponent::OnWhiteAttackPressed);
-	if (ChargeAction) EIC->BindAction(ChargeAction, ETriggerEvent::Started, this, &UBattleComponent::OnChargePressed);
-	if (SkillAction) EIC->BindAction(SkillAction, ETriggerEvent::Started, this, &UBattleComponent::OnSkillPressed);
 	if (BlockAction) EIC->BindAction(BlockAction, ETriggerEvent::Started, this, &UBattleComponent::OnBlockPressed);
 	if (DodgeAction) EIC->BindAction(DodgeAction, ETriggerEvent::Started, this, &UBattleComponent::OnDodgePressed);
 

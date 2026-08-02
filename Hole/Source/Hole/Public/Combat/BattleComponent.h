@@ -53,21 +53,6 @@ public:
 	TObjectPtr<UInputMappingContext> CombatMappingContext;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	TObjectPtr<UInputAction> RedDefenseAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	TObjectPtr<UInputAction> BlueAttackAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	TObjectPtr<UInputAction> WhiteAttackAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	TObjectPtr<UInputAction> ChargeAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	TObjectPtr<UInputAction> SkillAction;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	TObjectPtr<UInputAction> BlockAction;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
@@ -181,21 +166,6 @@ private:
 	void ClearClashTimers();
 
 	// ==================== 输入 ====================
-
-	UFUNCTION()
-	void OnRedDefensePressed();
-
-	UFUNCTION()
-	void OnBlueAttackPressed();
-
-	UFUNCTION()
-	void OnWhiteAttackPressed();
-
-	UFUNCTION()
-	void OnChargePressed();
-
-	UFUNCTION()
-	void OnSkillPressed();
 
 	UFUNCTION()
 	void OnBlockPressed();

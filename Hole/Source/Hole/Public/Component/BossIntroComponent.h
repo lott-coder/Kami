@@ -6,6 +6,8 @@
 #include "Components/ActorComponent.h"
 #include "BossIntroComponent.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossIntroFinished);
+
 class USphereComponent;
 class ULevelSequence;
 class ULevelSequencePlayer;
@@ -121,6 +123,12 @@ public:
 	/** 获取检测到的玩家 Actor（弱引用，Playing/Combat 期间有效） */
 	UFUNCTION(BlueprintPure, Category = "BossIntro")
 	AActor* GetDetectedPlayer() const { return DetectedPlayerActor.Get(); }
+
+	// ---- 事件 ----
+
+	/** 入场动画正常结束或被跳过后广播（此时状态已为 Combat），战斗系统监听此事件启动战斗 */
+	UPROPERTY(BlueprintAssignable, Category = "BossIntro|Events")
+	FOnBossIntroFinished OnIntroFinished;
 
 protected:
 	// ---- 出场动画实现（C++ 子类可覆写以自定义行为） ----

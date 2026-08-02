@@ -107,6 +107,7 @@ void UBossIntroComponent::SkipIntro()
 	UnlockPlayerInput();
 
 	SetState(EBossIntroState::Combat);
+	OnIntroFinished.Broadcast();
 }
 
 void UBossIntroComponent::CompleteIntro()
@@ -126,6 +127,7 @@ void UBossIntroComponent::CompleteIntro()
 	UnlockPlayerInput();
 
 	SetState(EBossIntroState::Combat);
+	OnIntroFinished.Broadcast();
 }
 
 void UBossIntroComponent::ResetIntro()

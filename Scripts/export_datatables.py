@@ -18,6 +18,7 @@ TABLES = [
     "DT_AreaConfig",
     "DT_ConsumableConfig",
     "DT_EconomyConfig",
+    "DT_BattleStage",
 ]
 
 

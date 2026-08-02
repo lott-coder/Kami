@@ -13,7 +13,7 @@
 ## 变更记录（2026-08-02，用户确认）
 
 1. **行动选择只走 HUD 鼠标点击**：移除五个行动按键（红防=1、蓝攻=2、白攻=3、蓄力=4、技能=5）的输入绑定（提交 7892efc）。`IMC_Combat` 只保留 `IA_CombatBlock`(E) 与 `IA_CombatDodge`(Left Shift)；`UBattleComponent` 不再持有 5 个行动 UInputAction 字段。Task 10 相应只创建 2 个 InputAction。
-2. **站位与镜头参数收进共享 DataAsset（已实现，提交 5337dae）**：新增 `UBattleStageConfig`（UDataAsset，默认资产 `/Game/Data/DA_BattleStage`），包含 `PlayerBattleOffset`、`bBossFacePlayer`、`bPlayerFaceBoss`、`CameraPitch`、`CameraYawOffset`、`CameraArmLength`。玩家组件只持有该资产引用（不直接承载数值），未配置时回退资产类默认值；战斗/非战斗两套状态由保存/恢复逻辑保证。Task 10 增加创建 `DA_BattleStage` 并指定到 BP_Dale 的步骤。
+2. **站位与镜头参数收进 DataTable（2026-08-02 终版）**：新增 12 号表 `DT_BattleStage`（`FCombatStageRow`，`/Game/DataTable/DT_BattleStage`，单行 `Default`），字段 `PlayerBattleOffset` / `bBossFacePlayer` / `bPlayerFaceBoss` / `CameraPitch` / `CameraYawOffset` / `CameraArmLength`。`UBattleComponent` 经 `UCombatFormulaSubsystem::GetBattleStageRow()` 读取，USTRUCT 默认值为回退源；资产已由 `Scripts/create_datatables.py` 生成。DataAsset 方案已废弃（提交 5337dae 被本方案替换）。
 
 ## Global Constraints
 
@@ -2639,12 +2639,11 @@ Root [Canvas Panel]
 4. 点击 Compile：预期无 BindWidget 缺失错误（C++ 已编译的前提下）。
 5. 保存。
 
-- [ ] **Step 3.5: 创建 DA_BattleStage（策划共享配置资产）**
+- [ ] **Step 3.5: 核对 DT_BattleStage（已由 create_datatables.py 生成）**
 
-1. `Content` 下新建文件夹 `Data`。
-2. 在 `Content/Data` 右键 → Miscellaneous → Data Asset；Parent Class 搜索 `BattleStageConfig` 选择 `UBattleStageConfig`；命名 `DA_BattleStage`。
-3. 打开资产，保持默认值（PlayerBattleOffset=(0,-550,0)、bBossFacePlayer=true、bPlayerFaceBoss=true、CameraPitch=-12、CameraYawOffset=0、CameraArmLength=400），策划后续在此调参。
-4. 保存。
+1. 打开 `Content/DataTable/DT_BattleStage`，确认结构体为 `CombatStageRow`、存在 `Default` 行。
+2. 保持默认值（PlayerBattleOffset=(0,-550,0)、bBossFacePlayer=true、bPlayerFaceBoss=true、CameraPitch=-12、CameraYawOffset=0、CameraArmLength=400），策划后续直接在此表调参。
+3. 保存。
 
 - [ ] **Step 4: BP_Dale 挂载 UBattleComponent**
 
@@ -2654,7 +2653,6 @@ Root [Canvas Panel]
    - `CombatHUDClass` = WBP_CombatHUD
    - `CombatMappingContext` = IMC_Combat
    - `BlockAction` = IA_CombatBlock、`DodgeAction` = IA_CombatDodge
-   - `BattleStageConfig` = DA_BattleStage
 4. 保存。
 
 - [ ] **Step 5: BP_Satan 加 Tag 与 AI 组件**

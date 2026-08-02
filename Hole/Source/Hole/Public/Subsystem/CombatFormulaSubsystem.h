@@ -11,6 +11,7 @@ class UAttributeComponent;
 struct FCharacterConfigRow;
 struct FEnemyConfigRow;
 struct FCombatParamsRow;
+struct FCombatStageRow;
 struct FMaskConfigRow;
 struct FWeaponConfigRow;
 struct FAttributeModifier;
@@ -41,6 +42,9 @@ public:
 
 	/** DT_CombatParams 单行 "Default"（表缺失返回 nullptr） */
 	const FCombatParamsRow* GetCombatParams() const;
+
+	/** DT_BattleStage 单行 "Default"（表缺失返回 nullptr） */
+	const FCombatStageRow* GetBattleStageRow() const;
 
 	/** DT_MaskConfig 行（找不到返回 nullptr） */
 	const FMaskConfigRow* GetMaskRow(FName MaskID) const;
@@ -95,6 +99,7 @@ private:
 	mutable TObjectPtr<UDataTable> CharacterTable;
 	mutable TObjectPtr<UDataTable> EnemyTable;
 	mutable TObjectPtr<UDataTable> CombatParamsTable;
+	mutable TObjectPtr<UDataTable> BattleStageTable;
 	mutable TObjectPtr<UDataTable> MaskTable;
 	mutable TObjectPtr<UDataTable> WeaponTable;
 };

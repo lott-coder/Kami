@@ -4,6 +4,7 @@
 #include "Component/AttributeComponent.h"
 #include "DataTable/CharacterConfigTable.h"
 #include "DataTable/CombatParamsTable.h"
+#include "DataTable/CombatStageTable.h"
 #include "DataTable/EnemyConfigTable.h"
 #include "DataTable/MaskConfigTable.h"
 #include "DataTable/WeaponConfigTable.h"
@@ -34,6 +35,12 @@ const FCombatParamsRow* UCombatFormulaSubsystem::GetCombatParams() const
 {
 	UDataTable* Table = GetTable(CombatParamsTable, TEXT("/Game/DataTable/DT_CombatParams"));
 	return Table ? Table->FindRow<FCombatParamsRow>(FName(TEXT("Default")), TEXT("CombatFormula::Params")) : nullptr;
+}
+
+const FCombatStageRow* UCombatFormulaSubsystem::GetBattleStageRow() const
+{
+	UDataTable* Table = GetTable(BattleStageTable, TEXT("/Game/DataTable/DT_BattleStage"));
+	return Table ? Table->FindRow<FCombatStageRow>(FName(TEXT("Default")), TEXT("CombatFormula::Stage")) : nullptr;
 }
 
 const FMaskConfigRow* UCombatFormulaSubsystem::GetMaskRow(FName MaskID) const

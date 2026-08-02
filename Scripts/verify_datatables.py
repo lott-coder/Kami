@@ -11,6 +11,7 @@ TABLES = [
     "DT_WeaponConfig", "DT_MaskConfig", "DT_SmokeConfig",
     "DT_SkillConfig", "DT_SkillTreeConfig", "DT_AreaConfig",
     "DT_ConsumableConfig", "DT_EconomyConfig",
+    "DT_BattleStage",
 ]
 
 
@@ -50,6 +51,11 @@ def main():
     if enemy is not None:
         for line in enemy.export_to_csv_string().splitlines()[:9]:
             print("ENEMY_CSV: " + line)
+
+    stage = unreal.load_asset("/Game/DataTable/DT_BattleStage")
+    if stage is not None:
+        for line in stage.export_to_csv_string().splitlines()[:3]:
+            print("STAGE_CSV: " + line)
 
 
 main()

@@ -553,6 +553,22 @@ economy = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 12 - DT_BattleStage
+# ---------------------------------------------------------------------------
+BATTLESTAGE_HEADERS = [
+    "PlayerBattleOffset", "bBossFacePlayer", "bPlayerFaceBoss",
+    "CameraPitch", "CameraYawOffset", "CameraArmLength",
+]
+battle_stage = [
+    ("Default", {
+        "PlayerBattleOffset": "(X=0.000000,Y=-550.000000,Z=0.000000)",
+        "bBossFacePlayer": True, "bPlayerFaceBoss": True,
+        "CameraPitch": -12.0, "CameraYawOffset": 0.0, "CameraArmLength": 400.0,
+    }),
+]
+
+
 def main():
     jobs = [
         ("DT_CombatParams", "CombatParamsRow", COMBATPARAMS_HEADERS, combat_params),
@@ -566,6 +582,7 @@ def main():
         ("DT_AreaConfig", "AreaConfigRow", AREA_HEADERS, areas),
         ("DT_ConsumableConfig", "ConsumableConfigRow", CONSUMABLE_HEADERS, consumables),
         ("DT_EconomyConfig", "EconomyConfigRow", ECONOMY_HEADERS, economy),
+        ("DT_BattleStage", "CombatStageRow", BATTLESTAGE_HEADERS, battle_stage),
     ]
     for asset_name, struct_short, headers, rows in jobs:
         try:

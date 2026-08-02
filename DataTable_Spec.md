@@ -1,7 +1,7 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.4
-> **日期：** 2026-08-01
+> **版本：** v0.5
+> **日期：** 2026-08-02
 > **关联策划案：** GDD_Outline.md v0.3
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
@@ -22,7 +22,8 @@
 11. [09 — 区域配置 (DT_AreaConfig)](#11-09--区域配置)
 12. [10 — 消耗品配置 (DT_ConsumableConfig)](#12-10--消耗品配置)
 13. [11 — 货币/经济配置 (DT_EconomyConfig)](#13-11--货币经济配置)
-14. [12 — 数据关联总览](#14-12--数据关联总览)
+14. [12 — 战斗舞台配置 (DT_BattleStage)](#14-12--战斗舞台配置)
+15. [13 — 数据关联总览](#15-13--数据关联总览)
 
 ---
 
@@ -95,6 +96,7 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | 09 | `DT_AreaConfig` | `FAreaConfigRow` | — | 6 | 世界区域属性 |
 | 10 | `DT_ConsumableConfig` | `FConsumableConfigRow` | `ConsumableClass` | 10 | 消耗品定义 |
 | 11 | `DT_EconomyConfig` | `FEconomyConfigRow` | — | 8 | 货币兑换率与价格基数 |
+| 12 | `DT_BattleStage` | `FCombatStageRow` | — | 1（单例） | 战斗舞台站位与固定摄像机参数 |
 
 > **实况说明（2026-08-01）：** 上表"行数"为当前资产实况；目标行数见各章节"基本信息"。
 
@@ -1031,9 +1033,40 @@ enum class EConsumableType : uint8
 
 ---
 
-## 14. 12 — 数据关联总览
+## 14. 12 — 战斗舞台配置 (DT_BattleStage)
 
-### 14.1 外键引用关系
+### 14.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_BattleStage` |
+| 结构体 | `FCombatStageRow` |
+| 行 ID 前缀 | 无（单例行 `Default`） |
+| 行数 | 1 |
+| 来源 | 2026-08-02 战斗系统 v1 落地；策划调参用，战斗/非战斗两套状态由 `UBattleComponent` 保存恢复 |
+
+### 14.2 列定义
+
+| 列名 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `PlayerBattleOffset` | `FVector` | (0,-550,0) | 玩家相对 Boss 位置的偏移（世界空间，含 Z 高度差） |
+| `bBossFacePlayer` | `bool` | true | 开战时 Boss 是否转向玩家 |
+| `bPlayerFaceBoss` | `bool` | true | 开战时玩家是否面向 Boss |
+| `CameraPitch` | `float` | -12.0 | 战斗固定镜头俯仰角（负值=略俯视） |
+| `CameraYawOffset` | `float` | 0.0 | 镜头偏航偏移（相对 玩家→Boss 方向，微调构图） |
+| `CameraArmLength` | `float` | 400.0 | 战斗时 SpringArm 长度 |
+
+### 14.3 行数据
+
+| RowName | PlayerBattleOffset | bBossFacePlayer | bPlayerFaceBoss | CameraPitch | CameraYawOffset | CameraArmLength |
+|---------|--------------------|-----------------|-----------------|-------------|-----------------|-----------------|
+| `Default` | (0,-550,0) | true | true | -12.0 | 0.0 | 400.0 |
+
+---
+
+## 15. 13 — 数据关联总览
+
+### 15.1 外键引用关系
 
 ```
 DT_CombatParams (单例，无外键)
@@ -1063,7 +1096,7 @@ DT_CombatParams (单例，无外键)
      └── DT_EconomyConfig (单例，无外键)
 ```
 
-### 14.2 GDD 章节 → 配置表映射
+### 15.2 GDD 章节 → 配置表映射
 
 | GDD 章节 | 主要内容 | 对应配置表 |
 |----------|----------|-----------|
@@ -1086,7 +1119,7 @@ DT_CombatParams (单例，无外键)
 | §8.3 关键角色 | 6个角色 | DT_CharacterConfig |
 | §14 经济系统 | 货币、产出/消耗 | DT_EconomyConfig |
 
-### 14.3 `[待定]` 项清单
+### 15.3 `[待定]` 项清单
 
 | 编号 | 位置 | 内容 | 影响范围 |
 |------|------|------|----------|
@@ -1118,3 +1151,4 @@ DT_CombatParams (单例，无外键)
 > | v0.2 | 2026-08-01 | 数据落库与一致性修订：敌人移动列、面具倍率默认值（0.0→1.0）、表行数实况、枚举清单更新；11 张表全部生成并校验 |
 > | v0.3 | 2026-08-01 | 解锁轮回口径修正：艾斯 UnlockRound 0、边境/地狱 UnlockRound 3（第0次轮回 = 首次游戏） |
 > | v0.4 | 2026-08-01 | 战斗方案定案落库：新增暴击/闪避Buff/先制/金色攻击参数、艾斯每日烟回复、区域 bFirstLoopOnly、武器槽属性与公式改造、EffectType 字典；货币定名金币 |
+> | v0.5 | 2026-08-02 | 新增 12 号表 DT_BattleStage（战斗舞台站位/朝向/固定镜头参数），随战斗系统 v1 落地 |

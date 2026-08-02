@@ -1,7 +1,6 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/BattleComponent.h"
-#include "Combat/BattleStageConfig.h"
 #include "Combat/EnemyCombatAIComponent.h"
 #include "UI/CombatHUDWidget.h"
 #include "Character/Role.h"
@@ -12,6 +11,7 @@
 #include "Components/SphereComponent.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "DataTable/CombatParamsTable.h"
+#include "DataTable/CombatStageTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
@@ -47,12 +47,6 @@ UBattleComponent::UBattleComponent()
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> Dodge(TEXT("/Game/Input/IA_CombatDodge"));
 	if (Dodge.Succeeded()) DodgeAction = Dodge.Object;
-
-	static ConstructorHelpers::FObjectFinder<UBattleStageConfig> StageConfig(TEXT("/Game/Data/DA_BattleStage"));
-	if (StageConfig.Succeeded())
-	{
-		BattleStageConfig = StageConfig.Object;
-	}
 }
 
 void UBattleComponent::BeginPlay()
@@ -836,7 +830,10 @@ void UBattleComponent::PositionBattleActors()
 		return;
 	}
 
-	const UBattleStageConfig* Stage = BattleStageConfig ? BattleStageConfig.Get() : GetDefault<UBattleStageConfig>();
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	const FCombatStageRow Defaults;
+	const FCombatStageRow* StageRow = Subsystem ? Subsystem->GetBattleStageRow() : nullptr;
+	const FCombatStageRow& Stage = StageRow ? *StageRow : Defaults;
 
 	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 
@@ -857,10 +854,10 @@ void UBattleComponent::PositionBattleActors()
 	}
 
 	// 玩家固定站位（相对 Boss 的策划偏移）
-	Role->SetActorLocation(BossStartLocation + Stage->PlayerBattleOffset, false, nullptr, ETeleportType::TeleportPhysics);
+	Role->SetActorLocation(BossStartLocation + Stage.PlayerBattleOffset, false, nullptr, ETeleportType::TeleportPhysics);
 
 	// Boss 面向玩家
-	if (Stage->bBossFacePlayer)
+	if (Stage.bBossFacePlayer)
 	{
 		FVector DirToPlayer = Role->GetActorLocation() - BossStartLocation;
 		DirToPlayer.Z = 0.0f;
@@ -879,7 +876,7 @@ void UBattleComponent::PositionBattleActors()
 		DirToBoss.Normalize();
 	}
 	const FRotator PlayerFaceRot = DirToBoss.Rotation();
-	if (Stage->bPlayerFaceBoss)
+	if (Stage.bPlayerFaceBoss)
 	{
 		Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw, 0.0f));
 	}
@@ -887,11 +884,11 @@ void UBattleComponent::PositionBattleActors()
 	// 固定玩家摄像机：锁定控制旋转 + 固定 SpringArm 长度/关闭滞后（数值来自 Stage 资产）
 	if (PC)
 	{
-		PC->SetControlRotation(FRotator(Stage->CameraPitch, PlayerFaceRot.Yaw + Stage->CameraYawOffset, 0.0f));
+		PC->SetControlRotation(FRotator(Stage.CameraPitch, PlayerFaceRot.Yaw + Stage.CameraYawOffset, 0.0f));
 	}
 	if (Role->SpringArm)
 	{
-		Role->SpringArm->TargetArmLength = Stage->CameraArmLength;
+		Role->SpringArm->TargetArmLength = Stage.CameraArmLength;
 		Role->SpringArm->bEnableCameraRotationLag = false;
 	}
 }

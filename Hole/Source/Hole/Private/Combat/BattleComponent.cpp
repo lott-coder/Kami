@@ -16,9 +16,12 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Animation/AnimMontage.h"
 #include "Camera/CameraComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -79,6 +82,7 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EndDelayTimer);
+		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
@@ -124,6 +128,10 @@ void UBattleComponent::EndBattle()
 	}
 
 	ClearClashTimers();
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
+	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
 	if (CombatHUD.IsValid())
@@ -247,6 +255,18 @@ void UBattleComponent::EnterBattle()
 	ShowHUD();
 	SetPhase(EBattlePhase::Entering);
 	OnBattleStateChanged.Broadcast();
+
+	// 玩家入场 Montage 占位：有动画则播放并等它播完再进入第 1 回合；没有则直接开始
+	if (PlayerEntryMontage && PlayerRole.IsValid())
+	{
+		const float PlayLength = PlayerEntryMontage->GetPlayLength();
+		PlayerRole->PlayAnimMontage(PlayerEntryMontage);
+		if (PlayLength > 0.0f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(EntryDelayTimer, this, &UBattleComponent::StartNewRound, PlayLength, false);
+			return;
+		}
+	}
 	StartNewRound();
 }
 
@@ -861,9 +881,34 @@ void UBattleComponent::PositionBattleActors()
 	}
 
 	// 玩家固定站位（相对 Boss 的策划偏移；支持世界空间或 Boss 本地空间）
-	const FVector PlayerSpot = Stage.bPlayerOffsetInBossLocalSpace
+	FVector PlayerSpot = Stage.bPlayerOffsetInBossLocalSpace
 		? BossStartLocation + BossStartRotation.RotateVector(Stage.PlayerBattleOffset)
 		: BossStartLocation + Stage.PlayerBattleOffset;
+
+	// 清除移动残留速度，避免传送后带着旧速度继续移动/下落
+	if (UCharacterMovementComponent* MoveComp = Role->GetCharacterMovement())
+	{
+		MoveComp->StopMovementImmediately();
+	}
+
+	// 落点地面检测：把玩家放到地面上（Boss 根节点 Z 可能远高于地面，直接复制会“从天而降”）
+	{
+		const FVector TraceStart = PlayerSpot + FVector(0.0f, 0.0f, 800.0f);
+		const FVector TraceEnd = PlayerSpot - FVector(0.0f, 0.0f, 1500.0f);
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Role);
+		Params.AddIgnoredActor(Boss);
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params))
+		{
+			PlayerSpot.Z = Hit.ImpactPoint.Z;
+			if (UCapsuleComponent* Capsule = Role->GetCapsuleComponent())
+			{
+				PlayerSpot.Z += Capsule->GetScaledCapsuleHalfHeight();
+			}
+		}
+	}
+
 	Role->SetActorLocation(PlayerSpot, false, nullptr, ETeleportType::TeleportPhysics);
 
 	// Boss 面向玩家
@@ -1020,6 +1065,10 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 
 	SetPhase(EBattlePhase::Ended);
 	ClearClashTimers();
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
+	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
 	if (CombatHUD.IsValid())

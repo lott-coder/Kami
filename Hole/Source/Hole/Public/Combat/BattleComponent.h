@@ -14,6 +14,7 @@ class UCombatHUDWidget;
 class UEnemyCombatAIComponent;
 class UInputAction;
 class UInputMappingContext;
+class UAnimMontage;
 class UAttributeComponent;
 class UCombatFormulaSubsystem;
 class UBossIntroComponent;
@@ -57,6 +58,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	TObjectPtr<UInputAction> DodgeAction;
+
+	/** 玩家入场 Montage（占位；为空则跳过入场动画，进入战斗后直接开始回合） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	TObjectPtr<UAnimMontage> PlayerEntryMontage;
 
 	/** 同色碰撞：敌方攻击前摇时间（秒），期间提示格挡/闪避 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
@@ -238,6 +243,7 @@ private:
 	FTimerHandle ClashOpenTimer;
 	FTimerHandle ClashImpactTimer;
 	FTimerHandle EndDelayTimer;
+	FTimerHandle EntryDelayTimer;
 
 	bool bCombatInputBound = false;
 	bool bCombatMappingAdded = false;

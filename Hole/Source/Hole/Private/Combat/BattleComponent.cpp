@@ -608,27 +608,127 @@ void UBattleComponent::EndTurnAndAdvance()
 
 void UBattleComponent::StartClash(EClashType ClashType)
 {
-	// TODO-TASK7
+	ActiveClashType = ClashType;
+	bClashResolved = false;
+	bClashWindowOpen = false;
+	PendingClashResult = EClashResult::None;
+
+	SetPhase(EBattlePhase::Clash);
+
+	const float BlockWindow = GetBlockWindow();
+	const float DodgeWindow = GetDodgeWindow();
+	const float OpenDelay = FMath::Max(0.0f, ClashTelegraphTime - FMath::Max(BlockWindow, DodgeWindow));
+
+	GetWorld()->GetTimerManager().SetTimer(ClashOpenTimer, this, &UBattleComponent::OpenClashWindow, OpenDelay, false);
+	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashTelegraphTime, false);
+
+	if (CombatHUD.IsValid())
+	{
+		const FText Prompt = (ClashType == EClashType::BlueClash)
+			? FText::FromString(TEXT("蓝色碰撞！格挡(E) / 闪避(Shift)"))
+			: FText::FromString(TEXT("白色碰撞！格挡(E) / 闪避(Shift)"));
+		CombatHUD->ShowClashPrompt(Prompt, ClashTelegraphTime);
+	}
+
+	OnBattleStateChanged.Broadcast();
 }
 
 void UBattleComponent::OpenClashWindow()
 {
-	// TODO-TASK7
+	bClashWindowOpen = true;
 }
 
 void UBattleComponent::OnClashImpact()
 {
-	// TODO-TASK7
+	if (Phase != EBattlePhase::Clash || bClashResolved)
+	{
+		return;
+	}
+
+	EClashResult Result = PendingClashResult;
+	if (Result == EClashResult::None)
+	{
+		// 未按任何键 → 按格挡失败处理（全额伤害）
+		Result = EClashResult::BlockFail;
+	}
+	ResolveClash(Result);
 }
 
 void UBattleComponent::ResolveClash(EClashResult Result)
 {
-	// TODO-TASK7
+	if (bClashResolved)
+	{
+		return;
+	}
+	bClashResolved = true;
+	ClearClashTimers();
+
+	float Incoming = PendingIncomingDamage;
+
+	switch (Result)
+	{
+	case EClashResult::BlockSuccess:
+		Incoming = 0.0f;
+		if (BossEnemy.IsValid())
+		{
+			ApplyDamageTo(BossEnemy.Get(), GetPlayerGoldDamage(), PlayerRole.Get());
+		}
+		break;
+	case EClashResult::DodgeSuccess:
+		Incoming = 0.0f;
+		if (UAttributeComponent* PA = GetPlayerAttr())
+		{
+			UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+			const FCombatParamsRow Defaults;
+			const FCombatParamsRow* Params = Subsystem ? Subsystem->GetCombatParams() : nullptr;
+			const FCombatParamsRow& P = Params ? *Params : Defaults;
+			PA->AddModifier(
+				AttributeNames::NextAttackDamageScale(),
+				EModifierOp::Multiply,
+				P.DodgeBuffDamageScale,
+				P.DodgeBuffTurns,
+				FName(TEXT("DodgeBuff")));
+		}
+		break;
+	case EClashResult::DodgeFail:
+	{
+		UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = Subsystem ? Subsystem->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		Incoming *= P.DodgeFailDamageScale;
+		break;
+	}
+	case EClashResult::BlockFail:
+	default:
+		// 全额伤害
+		break;
+	}
+
+	if (CombatHUD.IsValid())
+	{
+		CombatHUD->HideClashPrompt();
+	}
+
+	if (Incoming > 0.0f)
+	{
+		ApplyDamageTo(PlayerRole.Get(), Incoming, BossEnemy.Get());
+	}
+
+	if (Phase != EBattlePhase::Ended)
+	{
+		EndTurnAndAdvance();
+	}
 }
 
 void UBattleComponent::ClearClashTimers()
 {
-	// TODO-TASK7
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(ClashOpenTimer);
+		GetWorld()->GetTimerManager().ClearTimer(ClashImpactTimer);
+	}
+	bClashWindowOpen = false;
 }
 
 void UBattleComponent::OnRedDefensePressed()
@@ -658,12 +758,31 @@ void UBattleComponent::OnSkillPressed()
 
 void UBattleComponent::OnBlockPressed()
 {
-	// TODO-TASK7
+	if (Phase != EBattlePhase::Clash || bClashResolved)
+	{
+		return;
+	}
+	if (bClashWindowOpen)
+	{
+		ResolveClash(EClashResult::BlockSuccess);
+		return;
+	}
+	// 窗口外按下：先记录失败结果，窗口内再按可覆盖
+	PendingClashResult = EClashResult::BlockFail;
 }
 
 void UBattleComponent::OnDodgePressed()
 {
-	// TODO-TASK7
+	if (Phase != EBattlePhase::Clash || bClashResolved)
+	{
+		return;
+	}
+	if (bClashWindowOpen)
+	{
+		ResolveClash(EClashResult::DodgeSuccess);
+		return;
+	}
+	PendingClashResult = EClashResult::DodgeFail;
 }
 
 void UBattleComponent::SetupCombatInput()
@@ -796,13 +915,21 @@ int32 UBattleComponent::GetMaxChargeStacks(bool bPlayer) const
 
 float UBattleComponent::GetBlockWindow() const
 {
-	// TODO-TASK7
+	UAttributeComponent* Attr = GetPlayerAttr();
+	if (Attr)
+	{
+		return Attr->GetFinal(AttributeNames::BlockWindow());
+	}
 	return 0.25f;
 }
 
 float UBattleComponent::GetDodgeWindow() const
 {
-	// TODO-TASK7
+	UAttributeComponent* Attr = GetPlayerAttr();
+	if (Attr)
+	{
+		return Attr->GetFinal(AttributeNames::DodgeWindow());
+	}
 	return 0.35f;
 }
 

@@ -153,6 +153,12 @@ void ARole::Move(const FInputActionValue& Value)
 
 void ARole::Look(const FInputActionValue& Value)
 {
+	// 战斗/过场锁定期间禁止转动视角，避免破坏固定战斗机位
+	if (bCinematicLocked)
+	{
+		return;
+	}
+
 	const FVector2D LookVector = Value.Get<FVector2D>();
 
 	if (Controller)

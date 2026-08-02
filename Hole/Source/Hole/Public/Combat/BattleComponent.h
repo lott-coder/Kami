@@ -229,6 +229,9 @@ private:
 	float OriginalArmLength = 300.0f;
 	bool bOriginalCameraLag = true;
 	float OriginalLagSpeed = 10.0f;
+	FVector OriginalSocketOffset;
+	FVector OriginalTargetOffset;
+	float OriginalFOV = 90.0f;
 	FVector BossStartLocation;
 	FRotator BossStartRotation;
 

@@ -557,14 +557,23 @@ economy = [
 # 12 - DT_BattleStage
 # ---------------------------------------------------------------------------
 BATTLESTAGE_HEADERS = [
-    "PlayerBattleOffset", "bBossFacePlayer", "bPlayerFaceBoss",
-    "CameraPitch", "CameraYawOffset", "CameraArmLength",
+    "PlayerBattleOffset", "bPlayerOffsetInBossLocalSpace", "bBossFacePlayer",
+    "BossFacingYawOffset", "bPlayerFaceBoss", "PlayerFacingYawOffset",
+    "CameraPitch", "CameraYawOffset", "CameraArmLength", "CameraFOV",
+    "SpringSocketOffset", "SpringTargetOffset", "bSpringEnableCameraLag",
+    "SpringCameraLagSpeed",
 ]
 battle_stage = [
     ("Default", {
         "PlayerBattleOffset": "(X=0.000000,Y=-550.000000,Z=0.000000)",
-        "bBossFacePlayer": True, "bPlayerFaceBoss": True,
-        "CameraPitch": -12.0, "CameraYawOffset": 0.0, "CameraArmLength": 400.0,
+        "bPlayerOffsetInBossLocalSpace": False,
+        "bBossFacePlayer": True, "BossFacingYawOffset": 0.0,
+        "bPlayerFaceBoss": True, "PlayerFacingYawOffset": 0.0,
+        "CameraPitch": -12.0, "CameraYawOffset": 0.0,
+        "CameraArmLength": 400.0, "CameraFOV": 90.0,
+        "SpringSocketOffset": "(X=0.000000,Y=0.000000,Z=0.000000)",
+        "SpringTargetOffset": "(X=0.000000,Y=0.000000,Z=0.000000)",
+        "bSpringEnableCameraLag": False, "SpringCameraLagSpeed": 10.0,
     }),
 ]
 

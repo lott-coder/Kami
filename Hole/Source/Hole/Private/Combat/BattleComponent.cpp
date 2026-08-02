@@ -16,6 +16,7 @@
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "EnhancedInputComponent.h"
@@ -30,7 +31,7 @@ UBattleComponent::UBattleComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 
-	static ConstructorHelpers::FClassFinder<UCombatHUDWidget> HUDClass(TEXT("/Game/UI/WBP_CombatHUD"));
+	static ConstructorHelpers::FClassFinder<UCombatHUDWidget> HUDClass(TEXT("/Game/HUD/WBP_CombatHUD"));
 	if (HUDClass.Succeeded())
 	{
 		CombatHUDClass = HUDClass.Class;
@@ -851,10 +852,19 @@ void UBattleComponent::PositionBattleActors()
 		OriginalArmLength = Role->SpringArm->TargetArmLength;
 		bOriginalCameraLag = Role->SpringArm->bEnableCameraRotationLag;
 		OriginalLagSpeed = Role->SpringArm->CameraRotationLagSpeed;
+		OriginalSocketOffset = Role->SpringArm->SocketOffset;
+		OriginalTargetOffset = Role->SpringArm->TargetOffset;
+	}
+	if (Role->FollowCamera)
+	{
+		OriginalFOV = Role->FollowCamera->FieldOfView;
 	}
 
-	// 玩家固定站位（相对 Boss 的策划偏移）
-	Role->SetActorLocation(BossStartLocation + Stage.PlayerBattleOffset, false, nullptr, ETeleportType::TeleportPhysics);
+	// 玩家固定站位（相对 Boss 的策划偏移；支持世界空间或 Boss 本地空间）
+	const FVector PlayerSpot = Stage.bPlayerOffsetInBossLocalSpace
+		? BossStartLocation + BossStartRotation.RotateVector(Stage.PlayerBattleOffset)
+		: BossStartLocation + Stage.PlayerBattleOffset;
+	Role->SetActorLocation(PlayerSpot, false, nullptr, ETeleportType::TeleportPhysics);
 
 	// Boss 面向玩家
 	if (Stage.bBossFacePlayer)
@@ -865,7 +875,7 @@ void UBattleComponent::PositionBattleActors()
 		{
 			DirToPlayer.Normalize();
 		}
-		Boss->SetActorRotation(FRotator(0.0f, DirToPlayer.Rotation().Yaw, 0.0f));
+		Boss->SetActorRotation(FRotator(0.0f, DirToPlayer.Rotation().Yaw + Stage.BossFacingYawOffset, 0.0f));
 	}
 
 	// 玩家面向 Boss（固定角度）
@@ -878,10 +888,10 @@ void UBattleComponent::PositionBattleActors()
 	const FRotator PlayerFaceRot = DirToBoss.Rotation();
 	if (Stage.bPlayerFaceBoss)
 	{
-		Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw, 0.0f));
+		Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw + Stage.PlayerFacingYawOffset, 0.0f));
 	}
 
-	// 固定玩家摄像机：锁定控制旋转 + 固定 SpringArm 长度/关闭滞后（数值来自 Stage 资产）
+	// 固定玩家摄像机：锁定控制旋转 + 应用 Spring 参数（数值来自 DT_BattleStage）
 	if (PC)
 	{
 		PC->SetControlRotation(FRotator(Stage.CameraPitch, PlayerFaceRot.Yaw + Stage.CameraYawOffset, 0.0f));
@@ -889,7 +899,17 @@ void UBattleComponent::PositionBattleActors()
 	if (Role->SpringArm)
 	{
 		Role->SpringArm->TargetArmLength = Stage.CameraArmLength;
-		Role->SpringArm->bEnableCameraRotationLag = false;
+		Role->SpringArm->SocketOffset = Stage.SpringSocketOffset;
+		Role->SpringArm->TargetOffset = Stage.SpringTargetOffset;
+		Role->SpringArm->bEnableCameraRotationLag = Stage.bSpringEnableCameraLag;
+		if (Stage.bSpringEnableCameraLag)
+		{
+			Role->SpringArm->CameraRotationLagSpeed = Stage.SpringCameraLagSpeed;
+		}
+	}
+	if (Role->FollowCamera)
+	{
+		Role->FollowCamera->SetFieldOfView(Stage.CameraFOV);
 	}
 }
 
@@ -907,6 +927,12 @@ void UBattleComponent::RestoreExplorationState()
 			Role->SpringArm->TargetArmLength = OriginalArmLength;
 			Role->SpringArm->bEnableCameraRotationLag = bOriginalCameraLag;
 			Role->SpringArm->CameraRotationLagSpeed = OriginalLagSpeed;
+			Role->SpringArm->SocketOffset = OriginalSocketOffset;
+			Role->SpringArm->TargetOffset = OriginalTargetOffset;
+		}
+		if (Role->FollowCamera)
+		{
+			Role->FollowCamera->SetFieldOfView(OriginalFOV);
 		}
 	}
 	if (Boss)

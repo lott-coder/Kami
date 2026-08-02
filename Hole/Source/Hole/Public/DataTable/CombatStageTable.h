@@ -26,13 +26,25 @@ struct HOLE_API FCombatStageRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
 	FVector PlayerBattleOffset = FVector(0.0f, -550.0f, 0.0f);
 
+	/** true = 偏移按 Boss 本地空间解释（随 Boss 初始朝向旋转）；false = 世界空间 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
+	bool bPlayerOffsetInBossLocalSpace = false;
+
 	/** 开战时 Boss 是否转向玩家 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
 	bool bBossFacePlayer = true;
 
+	/** Boss 朝向玩家的额外偏航偏移（度），用于微调构图 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
+	float BossFacingYawOffset = 0.0f;
+
 	/** 开战时玩家是否面向 Boss */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
 	bool bPlayerFaceBoss = true;
+
+	/** 玩家面向 Boss 的额外偏航偏移（度），用于微调构图 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Staging")
+	float PlayerFacingYawOffset = 0.0f;
 
 	// ---- 战斗固定摄像机 ----
 
@@ -47,4 +59,24 @@ struct HOLE_API FCombatStageRow : public FTableRowBase
 	/** 战斗时 SpringArm 长度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
 	float CameraArmLength = 400.0f;
+
+	/** 战斗时相机 FOV */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
+	float CameraFOV = 90.0f;
+
+	/** SpringArm SocketOffset（相机相对弹簧臂末端的偏移，微调机位） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
+	FVector SpringSocketOffset = FVector::ZeroVector;
+
+	/** SpringArm TargetOffset（弹簧臂枢轴相对玩家的偏移，微调机位） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
+	FVector SpringTargetOffset = FVector::ZeroVector;
+
+	/** 战斗时是否启用镜头旋转滞后（默认关闭=固定镜头；开启可做电影感缓动） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
+	bool bSpringEnableCameraLag = false;
+
+	/** 镜头旋转滞后速度（bSpringEnableCameraLag=true 时生效） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stage|Camera")
+	float SpringCameraLagSpeed = 10.0f;
 };

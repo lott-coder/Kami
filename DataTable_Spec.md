@@ -1,6 +1,6 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.5
+> **版本：** v0.6
 > **日期：** 2026-08-02
 > **关联策划案：** GDD_Outline.md v0.3
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
@@ -1050,17 +1050,25 @@ enum class EConsumableType : uint8
 | 列名 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `PlayerBattleOffset` | `FVector` | (0,-550,0) | 玩家相对 Boss 位置的偏移（世界空间，含 Z 高度差） |
+| `bPlayerOffsetInBossLocalSpace` | `bool` | false | true=偏移按 Boss 本地空间解释（随 Boss 初始朝向旋转）；false=世界空间 |
 | `bBossFacePlayer` | `bool` | true | 开战时 Boss 是否转向玩家 |
+| `BossFacingYawOffset` | `float` | 0.0 | Boss 朝向玩家的额外偏航偏移（度） |
 | `bPlayerFaceBoss` | `bool` | true | 开战时玩家是否面向 Boss |
+| `PlayerFacingYawOffset` | `float` | 0.0 | 玩家面向 Boss 的额外偏航偏移（度） |
 | `CameraPitch` | `float` | -12.0 | 战斗固定镜头俯仰角（负值=略俯视） |
 | `CameraYawOffset` | `float` | 0.0 | 镜头偏航偏移（相对 玩家→Boss 方向，微调构图） |
 | `CameraArmLength` | `float` | 400.0 | 战斗时 SpringArm 长度 |
+| `CameraFOV` | `float` | 90.0 | 战斗时相机 FOV |
+| `SpringSocketOffset` | `FVector` | (0,0,0) | SpringArm SocketOffset（相机相对弹簧臂末端偏移） |
+| `SpringTargetOffset` | `FVector` | (0,0,0) | SpringArm TargetOffset（弹簧臂枢轴相对玩家偏移） |
+| `bSpringEnableCameraLag` | `bool` | false | 战斗时是否启用镜头旋转滞后（默认关闭=固定镜头） |
+| `SpringCameraLagSpeed` | `float` | 10.0 | 镜头滞后速度（启用滞后时生效） |
 
 ### 14.3 行数据
 
-| RowName | PlayerBattleOffset | bBossFacePlayer | bPlayerFaceBoss | CameraPitch | CameraYawOffset | CameraArmLength |
-|---------|--------------------|-----------------|-----------------|-------------|-----------------|-----------------|
-| `Default` | (0,-550,0) | true | true | -12.0 | 0.0 | 400.0 |
+| RowName | PlayerBattleOffset | bPlayerOffsetInBossLocalSpace | bBossFacePlayer | BossFacingYawOffset | bPlayerFaceBoss | PlayerFacingYawOffset | CameraPitch | CameraYawOffset | CameraArmLength | CameraFOV | SpringSocketOffset | SpringTargetOffset | bSpringEnableCameraLag | SpringCameraLagSpeed |
+|---------|--------------------|------------------------------|-----------------|--------------------|-----------------|----------------------|-------------|-----------------|-----------------|-----------|--------------------|--------------------|------------------------|----------------------|
+| `Default` | (0,-550,0) | false | true | 0.0 | true | 0.0 | -12.0 | 0.0 | 400.0 | 90.0 | (0,0,0) | (0,0,0) | false | 10.0 |
 
 ---
 
@@ -1152,3 +1160,4 @@ DT_CombatParams (单例，无外键)
 > | v0.3 | 2026-08-01 | 解锁轮回口径修正：艾斯 UnlockRound 0、边境/地狱 UnlockRound 3（第0次轮回 = 首次游戏） |
 > | v0.4 | 2026-08-01 | 战斗方案定案落库：新增暴击/闪避Buff/先制/金色攻击参数、艾斯每日烟回复、区域 bFirstLoopOnly、武器槽属性与公式改造、EffectType 字典；货币定名金币 |
 > | v0.5 | 2026-08-02 | 新增 12 号表 DT_BattleStage（战斗舞台站位/朝向/固定镜头参数），随战斗系统 v1 落地 |
+> | v0.6 | 2026-08-02 | DT_BattleStage 扩展 Spring/位移选项：Boss/玩家本地空间偏移与朝向偏航、FOV、SocketOffset、TargetOffset、镜头滞后开关与速度 |

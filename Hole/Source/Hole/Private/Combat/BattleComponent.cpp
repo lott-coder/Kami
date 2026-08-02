@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Combat/BattleComponent.h"
+#include "Combat/BattleStageConfig.h"
 #include "Combat/EnemyCombatAIComponent.h"
 #include "UI/CombatHUDWidget.h"
 #include "Character/Role.h"
@@ -46,6 +47,12 @@ UBattleComponent::UBattleComponent()
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> Dodge(TEXT("/Game/Input/IA_CombatDodge"));
 	if (Dodge.Succeeded()) DodgeAction = Dodge.Object;
+
+	static ConstructorHelpers::FObjectFinder<UBattleStageConfig> StageConfig(TEXT("/Game/Data/DA_BattleStage"));
+	if (StageConfig.Succeeded())
+	{
+		BattleStageConfig = StageConfig.Object;
+	}
 }
 
 void UBattleComponent::BeginPlay()
@@ -829,6 +836,8 @@ void UBattleComponent::PositionBattleActors()
 		return;
 	}
 
+	const UBattleStageConfig* Stage = BattleStageConfig ? BattleStageConfig.Get() : GetDefault<UBattleStageConfig>();
+
 	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
 
 	// 保存探索状态（战斗结束后恢复）
@@ -847,35 +856,42 @@ void UBattleComponent::PositionBattleActors()
 		OriginalLagSpeed = Role->SpringArm->CameraRotationLagSpeed;
 	}
 
-	// Boss 面向玩家
-	FVector DirToPlayer = PlayerStartLocation - BossStartLocation;
-	DirToPlayer.Z = 0.0f;
-	if (!DirToPlayer.IsNearlyZero())
-	{
-		DirToPlayer.Normalize();
-	}
-	Boss->SetActorRotation(FRotator(0.0f, DirToPlayer.Rotation().Yaw, 0.0f));
+	// 玩家固定站位（相对 Boss 的策划偏移）
+	Role->SetActorLocation(BossStartLocation + Stage->PlayerBattleOffset, false, nullptr, ETeleportType::TeleportPhysics);
 
-	// 玩家站到 Boss 正前方固定距离（固定位移）
-	const FVector PlayerSpot = BossStartLocation - DirToPlayer * BattleDistance;
-	Role->SetActorLocation(
-		FVector(PlayerSpot.X, PlayerSpot.Y, BossStartLocation.Z),
-		false,
-		nullptr,
-		ETeleportType::TeleportPhysics);
+	// Boss 面向玩家
+	if (Stage->bBossFacePlayer)
+	{
+		FVector DirToPlayer = Role->GetActorLocation() - BossStartLocation;
+		DirToPlayer.Z = 0.0f;
+		if (!DirToPlayer.IsNearlyZero())
+		{
+			DirToPlayer.Normalize();
+		}
+		Boss->SetActorRotation(FRotator(0.0f, DirToPlayer.Rotation().Yaw, 0.0f));
+	}
 
 	// 玩家面向 Boss（固定角度）
-	const FRotator PlayerFaceRot = (BossStartLocation - Role->GetActorLocation()).Rotation();
-	Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw, 0.0f));
+	FVector DirToBoss = BossStartLocation - Role->GetActorLocation();
+	DirToBoss.Z = 0.0f;
+	if (!DirToBoss.IsNearlyZero())
+	{
+		DirToBoss.Normalize();
+	}
+	const FRotator PlayerFaceRot = DirToBoss.Rotation();
+	if (Stage->bPlayerFaceBoss)
+	{
+		Role->SetActorRotation(FRotator(0.0f, PlayerFaceRot.Yaw, 0.0f));
+	}
 
-	// 固定玩家摄像机：锁定控制旋转 + 固定 SpringArm 长度/关闭滞后
+	// 固定玩家摄像机：锁定控制旋转 + 固定 SpringArm 长度/关闭滞后（数值来自 Stage 资产）
 	if (PC)
 	{
-		PC->SetControlRotation(FRotator(BattleCameraPitch, PlayerFaceRot.Yaw, 0.0f));
+		PC->SetControlRotation(FRotator(Stage->CameraPitch, PlayerFaceRot.Yaw + Stage->CameraYawOffset, 0.0f));
 	}
 	if (Role->SpringArm)
 	{
-		Role->SpringArm->TargetArmLength = BattleCameraArmLength;
+		Role->SpringArm->TargetArmLength = Stage->CameraArmLength;
 		Role->SpringArm->bEnableCameraRotationLag = false;
 	}
 }

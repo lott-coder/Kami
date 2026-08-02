@@ -14,6 +14,7 @@ class UCombatHUDWidget;
 class UEnemyCombatAIComponent;
 class UInputAction;
 class UInputMappingContext;
+class UBattleStageConfig;
 class UAttributeComponent;
 class UCombatFormulaSubsystem;
 class UBossIntroComponent;
@@ -58,17 +59,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	TObjectPtr<UInputAction> DodgeAction;
 
-	/** 玩家战斗站位与 Boss 的距离（cm） */
+	/** 战斗舞台配置（策划调参用共享资产；为空时回退到资产类默认值） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	float BattleDistance = 550.0f;
-
-	/** 战斗固定摄像机俯仰角（负值=略俯视） */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	float BattleCameraPitch = -12.0f;
-
-	/** 战斗时 SpringArm 长度 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	float BattleCameraArmLength = 400.0f;
+	TObjectPtr<UBattleStageConfig> BattleStageConfig;
 
 	/** 同色碰撞：敌方攻击前摇时间（秒），期间提示格挡/闪避 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")

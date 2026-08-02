@@ -320,29 +320,290 @@ void UBattleComponent::StartEnemyExtraTurn()
 
 FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, EBattleAction EnemyAction)
 {
-	// TODO-TASK6
-	return FTurnResolution();
+	FTurnResolution R;
+	const int32 MaxStacks = GetMaxChargeStacks(true);
+
+	switch (PlayerAction)
+	{
+	case EBattleAction::RedDefense:
+	{
+		switch (EnemyAction)
+		{
+		case EBattleAction::RedDefense:
+			// 红 vs 红：本回合跳过
+			break;
+		case EBattleAction::BlueAttack:
+			// 红防克蓝攻 → 金色反击；敌方 2 层蓄力出蓝刀时红防正面承受强化蓝攻
+			if (EnemyChargeStacks >= 2)
+			{
+				R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
+			}
+			else
+			{
+				R.EnemyDamageTaken = GetPlayerGoldDamage();
+			}
+			EnemyChargeStacks = 0;
+			break;
+		case EBattleAction::WhiteAttack:
+			// 红防被白克 → 全额受伤
+			R.PlayerDamageTaken = GetEnemyWhiteDamage();
+			break;
+		case EBattleAction::Charge:
+			// 敌方蓄力：1 层无事；蓄满 2 层视为直接发动强化蓝攻
+		{
+			const int32 NewStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
+			if (NewStacks >= MaxStacks && MaxStacks >= 2)
+			{
+				R.PlayerDamageTaken = GetEnemyBlueDamage(NewStacks);
+				EnemyChargeStacks = 0;
+			}
+			else
+			{
+				EnemyChargeStacks = NewStacks;
+			}
+			break;
+		}
+		default:
+			break;
+		}
+		break;
+	}
+	case EBattleAction::BlueAttack:
+	{
+		switch (EnemyAction)
+		{
+		case EBattleAction::RedDefense:
+			// 蓝攻被红防克制 → 玩家吃金色反击伤害
+			R.PlayerDamageTaken = GetEnemyGoldDamage();
+			PlayerChargeStacks = 0;
+			break;
+		case EBattleAction::BlueAttack:
+			// 同色碰撞
+			R.bClash = true;
+			R.ClashType = EClashType::BlueClash;
+			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
+			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
+			PlayerChargeStacks = 0;
+			EnemyChargeStacks = 0;
+			break;
+		case EBattleAction::WhiteAttack:
+			// 蓝克白 → 玩家优势
+			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
+			PlayerChargeStacks = 0;
+			break;
+		case EBattleAction::Charge:
+			// 蓝攻打断蓄力，全额伤害
+			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
+			R.bEnemyChargeInterrupted = true;
+			PlayerChargeStacks = 0;
+			EnemyChargeStacks = 0;
+			break;
+		default:
+			break;
+		}
+		break;
+	}
+	case EBattleAction::WhiteAttack:
+	{
+		switch (EnemyAction)
+		{
+		case EBattleAction::RedDefense:
+			// 白克红 → 玩家优势
+			R.EnemyDamageTaken = GetPlayerWhiteDamage();
+			break;
+		case EBattleAction::BlueAttack:
+			// 白被蓝克 → 玩家吃全额蓝攻
+			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
+			EnemyChargeStacks = 0;
+			break;
+		case EBattleAction::WhiteAttack:
+			// 同色碰撞
+			R.bClash = true;
+			R.ClashType = EClashType::WhiteClash;
+			R.PlayerDamageTaken = GetEnemyWhiteDamage();
+			R.EnemyDamageTaken = GetPlayerWhiteDamage();
+			break;
+		case EBattleAction::Charge:
+			// 蓄力抵抗白攻：微量伤害 + 额外回合，不打断蓄力
+			R.EnemyDamageTaken = GetPlayerWhiteDamage() * GetChargeResistScale();
+			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
+			R.bEnemyExtraTurn = true;
+			break;
+		default:
+			break;
+		}
+		break;
+	}
+	case EBattleAction::Charge:
+	{
+		switch (EnemyAction)
+		{
+		case EBattleAction::RedDefense:
+			// 玩家蓄力对红防：1 层无事；蓄满 2 层直接发动强化蓝攻
+		{
+			const int32 NewStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
+			if (NewStacks >= MaxStacks && MaxStacks >= 2)
+			{
+				R.EnemyDamageTaken = GetPlayerBlueDamage(NewStacks);
+				PlayerChargeStacks = 0;
+			}
+			else
+			{
+				PlayerChargeStacks = NewStacks;
+			}
+			break;
+		}
+		case EBattleAction::BlueAttack:
+			// 蓄力被蓝攻打断，玩家吃全额蓝攻
+			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
+			R.bPlayerChargeInterrupted = true;
+			PlayerChargeStacks = 0;
+			EnemyChargeStacks = 0;
+			break;
+		case EBattleAction::WhiteAttack:
+			// 蓄力抵抗白攻：微量伤害 + 额外回合
+			R.PlayerDamageTaken = GetEnemyWhiteDamage() * GetChargeResistScale();
+			PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
+			R.bPlayerExtraTurn = true;
+			break;
+		case EBattleAction::Charge:
+			// 双方蓄力：都 +1 层，无事发生
+			PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
+			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
+			break;
+		default:
+			break;
+		}
+		break;
+	}
+	default:
+		break;
+	}
+
+	return R;
 }
 
 FTurnResolution UBattleComponent::ResolveExtraTurn(bool bPlayerTurn, EBattleAction Action)
 {
-	// TODO-TASK6
-	return FTurnResolution();
+	FTurnResolution R;
+
+	if (Action == EBattleAction::BlueAttack)
+	{
+		// 额外回合出蓝刀：必定命中，出刀后解除蓄力
+		if (bPlayerTurn)
+		{
+			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
+			PlayerChargeStacks = 0;
+		}
+		else
+		{
+			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
+			EnemyChargeStacks = 0;
+		}
+	}
+	else if (Action == EBattleAction::Charge)
+	{
+		const int32 MaxStacks = GetMaxChargeStacks(bPlayerTurn);
+		if (bPlayerTurn)
+		{
+			PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
+		}
+		else
+		{
+			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
+		}
+	}
+
+	return R;
 }
 
 void UBattleComponent::ApplyResolution(const FTurnResolution& Resolution)
 {
-	// TODO-TASK6
+	bClashStarted = false;
+	bPlayerExtraTurnPending = Resolution.bPlayerExtraTurn;
+	bEnemyExtraTurnPending = Resolution.bEnemyExtraTurn;
+
+	if (Resolution.bClash)
+	{
+		PendingIncomingDamage = Resolution.PlayerDamageTaken;
+		PendingOutgoingDamage = Resolution.EnemyDamageTaken;
+
+		// 同色碰撞：玩家这刀先命中敌人，敌人这刀由实时防御决定
+		if (Resolution.EnemyDamageTaken > 0.0f)
+		{
+			ApplyDamageTo(BossEnemy.Get(), Resolution.EnemyDamageTaken, PlayerRole.Get());
+		}
+		if (Phase != EBattlePhase::Ended)
+		{
+			StartClash(Resolution.ClashType);
+			bClashStarted = true;
+		}
+		return;
+	}
+
+	if (Resolution.PlayerDamageTaken > 0.0f)
+	{
+		ApplyDamageTo(PlayerRole.Get(), Resolution.PlayerDamageTaken, BossEnemy.Get());
+	}
+	if (Resolution.EnemyDamageTaken > 0.0f)
+	{
+		ApplyDamageTo(BossEnemy.Get(), Resolution.EnemyDamageTaken, PlayerRole.Get());
+	}
 }
 
 void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActor* Causer)
 {
-	// TODO-TASK6
+	if (!Target || Amount <= 0.0f || Target->IsDead())
+	{
+		return;
+	}
+
+	Target->ReceiveDamage(Amount, Causer);
+	OnBattleStateChanged.Broadcast();
+
+	if (Target->IsDead())
+	{
+		FinishBattle(Target == BossEnemy.Get());
+	}
 }
 
 void UBattleComponent::EndTurnAndAdvance()
 {
-	// TODO-TASK6
+	if (Phase == EBattlePhase::Ended)
+	{
+		return;
+	}
+
+	// 回合结束：buff 倒计时（含闪避Buff）
+	if (UAttributeComponent* PA = GetPlayerAttr())
+	{
+		PA->TickTurn();
+	}
+	if (UAttributeComponent* EA = GetEnemyAttr())
+	{
+		EA->TickTurn();
+	}
+
+	if (bPlayerExtraTurnPending)
+	{
+		StartPlayerExtraTurn();
+		return;
+	}
+	if (bEnemyExtraTurnPending)
+	{
+		bEnemyExtraTurnPending = false;
+		StartEnemyExtraTurn();
+		SetPhase(EBattlePhase::Resolving);
+		const FTurnResolution Resolution = ResolveExtraTurn(false, EnemyChosenAction);
+		ApplyResolution(Resolution);
+		if (!bClashStarted)
+		{
+			EndTurnAndAdvance();
+		}
+		return;
+	}
+
+	StartNewRound();
 }
 
 void UBattleComponent::StartClash(EClashType ClashType)
@@ -477,49 +738,59 @@ void UBattleComponent::ResetForRetry()
 
 float UBattleComponent::GetPlayerWhiteDamage() const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateWhiteDamage(GetPlayerAttr(), 0.0f) : 0.0f;
 }
 
 float UBattleComponent::GetPlayerBlueDamage(int32 Stacks) const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateBlueDamage(GetPlayerAttr(), 0.0f, Stacks) : 0.0f;
 }
 
 float UBattleComponent::GetEnemyWhiteDamage() const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateWhiteDamage(GetEnemyAttr(), 0.0f) : 0.0f;
 }
 
 float UBattleComponent::GetEnemyBlueDamage(int32 Stacks) const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateBlueDamage(GetEnemyAttr(), 0.0f, Stacks) : 0.0f;
 }
 
 float UBattleComponent::GetPlayerGoldDamage() const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateGoldDamage(GetPlayerAttr()) : 0.0f;
 }
 
 float UBattleComponent::GetEnemyGoldDamage() const
 {
-	// TODO-TASK6
-	return 0.0f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	return Subsystem ? Subsystem->CalculateGoldDamage(GetEnemyAttr()) : 0.0f;
 }
 
 float UBattleComponent::GetChargeResistScale() const
 {
-	// TODO-TASK6
-	return 0.3f;
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	if (!Subsystem)
+	{
+		return 0.3f;
+	}
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow* Params = Subsystem->GetCombatParams();
+	return Params ? Params->WhiteInterruptChargeDamageScale : Defaults.WhiteInterruptChargeDamageScale;
 }
 
 int32 UBattleComponent::GetMaxChargeStacks(bool bPlayer) const
 {
-	// TODO-TASK6
+	UAttributeComponent* Attr = bPlayer ? GetPlayerAttr() : GetEnemyAttr();
+	if (Attr)
+	{
+		return FMath::Max(1, FMath::RoundToInt(Attr->GetFinal(AttributeNames::MaxChargeStacks())));
+	}
 	return 2;
 }
 

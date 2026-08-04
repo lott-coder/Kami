@@ -57,6 +57,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "WeaponVisual")
 	void AttachWeaponToSocket(FName SocketName);
 
+	/** 武器是否已拔到手上（挂到 HandSocketName 时为 true；挂回背部自动复位） */
+	UFUNCTION(BlueprintPure, Category = "WeaponVisual")
+	bool IsWeaponDrawn() const { return bWeaponDrawn; }
+
 private:
 	/** Inventory 武器变化回调 */
 	UFUNCTION()
@@ -68,4 +72,7 @@ private:
 
 	/** 显示开关（后续战斗系统控制拔出/收回） */
 	bool bWeaponVisible = true;
+
+	/** 是否已拔到手上（由 AttachWeaponToSocket 维护） */
+	bool bWeaponDrawn = false;
 };

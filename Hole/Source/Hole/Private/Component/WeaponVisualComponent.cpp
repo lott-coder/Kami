@@ -58,6 +58,7 @@ void UWeaponVisualComponent::AttachWeaponToSocket(FName SocketName)
 	}
 
 	const FName FinalSocket = SocketName.IsNone() ? BackSocketName : SocketName;
+	bWeaponDrawn = (FinalSocket == HandSocketName);
 	if (CachedMesh->DoesSocketExist(FinalSocket))
 	{
 		if (!AttachToComponent(CachedMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FinalSocket))

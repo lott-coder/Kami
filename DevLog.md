@@ -50,7 +50,8 @@
 5. 入场拔刀接入：新增 `UAnimNotify_Hold`（按 Montage 类别归档在 `Animation/AnimNotifies/Entrance/`，不按 Montage 命名）；触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)` 把武器从背上转移到 `weapon_hand_r`；组件新增 `HandSocketName` 与通用挂载方法 `AttachWeaponToSocket`，缓存网格引用，`BeginPlay` 背部挂载复用同一方法。
 6. 入场 Montage 起始 Section：`UBattleComponent` 新增 `PlayerEntrySectionName`（默认 `Draw`），`PlayAnimMontage` 从该 section 开始，支持 `Draw_A_Great_Sword_1 → _2` 完整播放；Montage 内两段序列需在同一 section 内或通过 Next Section 串联。
 7. 流程定名：Boss 开场动画归类为**剧情动画**（过场），玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放；`UBattleComponent` 现有 `PlayerEntryMontage` 时序满足，无需改流程。
-8. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
+8. 拔剑状态：`UWeaponVisualComponent` 新增 `bWeaponDrawn` / `IsWeaponDrawn()`，`AttachWeaponToSocket` 挂到 `weapon_hand_r` 时置 true、挂回 `weapon_back` 时置 false，供 ABP 做“拔剑后 Idle”等状态切换。
+9. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
 
 **结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突；AnimNotify 头文件在 UE 5.6 位于 `Animation/AnimNotifies/AnimNotify.h`）；用户按操作流程手动填表、建 socket、微调挂载、把 Montage 中 `Hold` 通知替换为 `AnimNotify_Hold`。
 

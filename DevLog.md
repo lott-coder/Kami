@@ -52,10 +52,14 @@
 7. 流程定名：Boss 开场动画归类为**剧情动画**（过场），玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放；`UBattleComponent` 现有 `PlayerEntryMontage` 时序满足，无需改流程。
 8. 拔剑状态：`UWeaponVisualComponent` 新增 `bWeaponDrawn` / `IsWeaponDrawn()`，`AttachWeaponToSocket` 挂到 `weapon_hand_r` 时置 true、挂回 `weapon_back` 时置 false；`UBaseCharacterAnimInstance` 暴露 `bWeaponDrawn`（初始化缓存组件、每帧同步），ABP 直接读变量，无需 Cast 到 BP_Dale，供“拔剑后 Idle”等状态切换。
 9. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
+10. 编辑器资产落地（用户手动）：导入 Fab 武器包 `SM_Sword_B`（SwordB 网格/材质/纹理）、Mixamo `Draw A Great Sword 1/2` 与 `Great Sword Idle`；生成 `Entrance/` 目录拔刀动画与 `MTG_DrawGreatSword`（Section `Draw`，挂 `AnimNotify_Hold`）；ABP_Dale 补充 `DefaultSlot` 节点并按 `bWeaponDrawn` 切换拔剑 Idle；DataTable 手填 `dale_sword` 行与 `drifter.DefaultWeaponID`。
+11. 敌人动画蓝图模板：确认 UE 5.6 支持 Template Animation Blueprint（勾选 `bTemplate`，无 Target Skeleton，模板内不能直接引用动画资产）；新建 `ABP_Enemy_Template`（Parent Class = `EnemyAnimInstance`，不选骨架），搭建状态机与 `DefaultSlot` 结构；按敌人新建 `ABP_Satan` 时选择 Sevarog 骨架 + 模板，再填充 Idle/Walk/Run 等动画并指定到 BP_Satan 的 Mesh Anim Class。
+12. PIE 验证：入场 Draw Montage 完整播放（`Hold` 通知触发时武器挂到 `weapon_hand_r`），拔剑后 Great_Sword_Idle 按 `bWeaponDrawn` 切换生效。
+13. 项目管理：本次会话的编辑器资产与 DevLog 一并提交，并通过 HTTP 推送到 GitHub 远程仓库 `origin`（https://github.com/lott-coder/Kami.git），`master` 较远程领先 36 个提交。
 
-**结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突；AnimNotify 头文件在 UE 5.6 位于 `Animation/AnimNotifies/AnimNotify.h`）；用户按操作流程手动填表、建 socket、微调挂载、把 Montage 中 `Hold` 通知替换为 `AnimNotify_Hold`。
+**结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突；AnimNotify 头文件在 UE 5.6 位于 `Animation/AnimNotifies/AnimNotify.h`）；用户按操作流程手动填表、建 socket、微调挂载、把 Montage 中 `Hold` 通知替换为 `AnimNotify_Hold`；PIE 验证通过（入场拔刀 Montage + 拔剑 Idle 切换正常）；敌人动画蓝图模板 `ABP_Enemy_Template` 与子 ABP `ABP_Satan` 已创建并挂到 BP_Satan。
 
-**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突；UE 中场景子组件不要在组件构造器里用嵌套默认子对象创建（会 Template Mismatch），应作为 Actor 级默认子对象创建后 `SetupAttachment`；AnimNotify 类按 Montage 类别归档目录（`Animation/AnimNotifies/<类别>/`），不按具体 Montage 命名，便于同类通知复用。
+**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突；UE 中场景子组件不要在组件构造器里用嵌套默认子对象创建（会 Template Mismatch），应作为 Actor 级默认子对象创建后 `SetupAttachment`；AnimNotify 类按 Montage 类别归档目录（`Animation/AnimNotifies/<类别>/`），不按具体 Montage 命名，便于同类通知复用；模板动画蓝图无 Target Skeleton、不能直接引用动画资产，只搭状态机结构，动画由子 ABP 按骨架填充，便于同类敌人复用。
 
 ### 2026-08-02 | 程序 ⚡
 
@@ -574,6 +578,7 @@
 | 2026-08-02 | ⚡ 战斗行动选择只用 HUD 鼠标点击（不用 1-5 键位） | 行动按钮即 UI 核心交互，避免键位与实时格挡/闪避混淆 | 战斗输入系统、Task 10 资产清单 |
 | 2026-08-02 | ⚡ 战斗舞台配置入 `DT_BattleStage`（DataTable，非 DataAsset） | 与 `DT_CombatParams` 单例口径一致，策划调参 + CSV/脚本可重建；战斗/非战斗两套状态由保存恢复保证 | 12 号表、`FCombatStageRow`、DataTable_Spec v0.6 |
 | 2026-08-02 | ⚡ 战斗失败回到 Boss 触发点直接重播入场动画 | 验证循环最短，先保证战斗闭环可重测 | 失败流程、`ResetIntro` + `UpdateOverlaps` 重开逻辑 |
+| 2026-08-04 | ⚡ 敌人动画蓝图采用 Template Animation Blueprint（无骨架模板 + 每敌人子 ABP） | 同一套状态机/结构跨敌人复用；模板不能直接引用动画资产，由子 ABP 按骨架填充 | `ABP_Enemy_Template`、`ABP_Satan`、BP_Satan Mesh Anim Class 配置 |
 | 2026-07-07 | ⚡ 主角视觉三角 v2.0：不对称长外套 + 疤痕面容 + 暗红围巾 | 无护甲/无武器/无头饰的纯废土衣装流浪者；外套不对称剪影为 #1 识别点；光头为面具装备槽留空；整洁外观便于潜入魔法师世界 | 所有主角3D建模、动画、UI角色展示的视觉基准 |
 | 2026-07-07 | ⚡ 主角视觉三角 v1.1：不对称肩甲 + 半面具 + 暗红围巾（已废弃） | 原方案：武装猎手形象 | 被 v2.0 替代 |
 | 2026-07-06 | ⚡ C++ 角色基类 `ABaseCharacter`（继承 `ACharacter`）| 统一生命值、颜色属性、伤害/死亡接口，后续角色全部继承 | 角色系统技术基准，影响所有角色类的继承结构 |
@@ -592,7 +597,10 @@
 
 | 问题 | 解决方案 | 相关日期 |
 |------|----------|----------|
-| -    | -        | -        |
+| 开场后武器已切换但拔刀动画不播放 | ABP 缺少 `DefaultSlot` 节点；补充后正常播放 | 2026-08-04 |
+| Montage 从指定 Section 跳转不生效 | 确认 Montage 已保存落盘；`PlayAnimMontage(Montage, 1.0, "Draw")` 从 `Draw` Section 起始 | 2026-08-04 |
+| 武器停在场景中心不跟随人物 | `Template Mismatch`：网格用嵌套默认子对象创建；改为 Actor 级默认子对象 + `SetupAttachment` | 2026-08-04 |
+| 模板动画蓝图能否直接引用动画资产 | 不能；模板无 Target Skeleton，只搭结构，动画在子 ABP 中填充 | 2026-08-04 |
 
 ---
 
@@ -606,3 +614,5 @@
 | v0.3 | 2026-07-06 | 烟系统重构 | 烟≠货币；新增独立货币；回复机制（博士/艾斯）；烟以来源分类 |
 | v0.5 | 2026-07-07 | 主角形象重设计 v2.0 | 视觉三角（不对称长外套+疤痕面容+暗红围巾）；纯布衣无护甲无武器；光头为面具槽留空；整洁废土风 |
 | v0.4 | 2026-07-07 | 主角形象概念设计 v1.1 | 视觉三角（不对称肩甲+半面具+暗红围巾）；多方向视图；配色方案；表情参考（已被 v2.0 替代） |
+| v0.6 | 2026-08-01 | 战斗规则/数值定案、武器槽与 12 号表 `DT_BattleStage` | DataTable_Spec v0.6 |
+| v0.7 | 2026-08-04 | 主角默认武器 `dale_sword`（SM_Sword_B）+ 随身携带/入场拔剑 + 敌人动画蓝图模板 | DataTable_Spec/GDD/角色设计文档同步；C++ 武器显示组件与拔剑状态 |

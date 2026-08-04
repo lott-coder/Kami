@@ -28,6 +28,11 @@
 - **Confirm the path before creating new files:** always confirm the target path with the user before creating any new file; editing existing files is exempt
 - **At the end of each conversation:** consolidate important information back into this file
 
+### Animation blueprint conventions
+- Player/Dale ABP reads `bWeaponDrawn` directly from `UBaseCharacterAnimInstance` (no Cast to BP_Dale) for state switching (e.g. drawn Great Sword Idle).
+- Enemy ABPs use UE Template Animation Blueprints: `ABP_Enemy_Template` (Parent Class `EnemyAnimInstance`, no Target Skeleton, no direct animation asset references) owns the state machine / DefaultSlot structure; each enemy ABP (e.g. `ABP_Satan`) selects the enemy skeleton + template and fills real animation assets, then is assigned to the enemy BP's Mesh Anim Class.
+- AnimNotify classes are organized by Montage category directories under `Animation/AnimNotifies/<Category>/`, not named per Montage.
+
 ## 3. Data Architecture Principles (all entities follow)
 
 Applies to characters, enemies, weapons, masks, skills, consumables, areas, and **all other data and config tables**.

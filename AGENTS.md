@@ -74,6 +74,12 @@ DT_AreaConfig → level management (pure static config)
 DT_ConsumableConfig → inventory system → AddModifier on use
 ```
 
+### Weapon visual mounting (2026-08-04)
+- `UWeaponVisualComponent` (a `USceneComponent` subclass, default subobject on `ABaseCharacter`) mounts the equipped weapon's `MeshAsset` (from `DT_WeaponConfig`) onto the character's back socket (`BackSocketName`, default `weapon_back`; falls back to mesh root + `BackAttachOffset`).
+- `UInventoryComponent::OnWeaponChanged(FName)` broadcasts on equip/unequip (`NAME_None` = unequip); the visual component subscribes instead of polling.
+- `SetWeaponVisible(bool)` is reserved for future combat draw/sheath; currently the weapon is always visible on the back.
+- `AWeapon` / `WeaponClass` remains the future weapon-actor placeholder and is separate from the visual mounting path (both share the same `FWeaponConfigRow`).
+
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)
 - New buff/debuff: one `AddModifier(AttributeName, Op, Value, Turns)` call; no header changes

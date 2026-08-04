@@ -1,6 +1,6 @@
 # Dale 默认武器（漂泊者短剑）— Design Spec
 
-> **Status:** 已按用户反馈修订（不重建表 / 武器背在背上），等待用户确认
+> **Status:** 已确认（含 C++ 武器显示组件方案），实现中
 > **Date:** 2026-08-04
 > **Project:** Hole（洞穴）
 > **Related:** GDD_Outline.md §6.3.1、DataTable_Spec.md §4/§6
@@ -16,7 +16,7 @@
 **执行分工：**
 - 编辑器侧（DataTable 资产、BP_Dale 挂载）：由用户手动完成，本方案不运行表重建命令let。
 - 仓库侧（脚本、文档）：由本方案同步，确保未来重建不会丢失数据。
-- 不修改 C++。
+- C++：新增 `UWeaponVisualComponent`（角色背上武器显示组件）+ `UInventoryComponent` 武器变更委托。
 
 ## Design Decisions
 
@@ -28,7 +28,7 @@
 | `DisplayName` | 漂泊者短剑 | 与主角身份一致 |
 | `Description` | 在洞穴边缘拾获的旧短剑，刃口磨损却保养得当；战斗时才会拔出。 | 碎片叙事，同时解释“不随身携带可见武器”的美术设定 |
 | `Category` | `Sword`（单手剑） | 动画选择的关键分支字段 |
-| `MeshAsset` | `/Game/Stylized_Dark_Sword/Assets/SwordB/Meshes/SM_Sword_B.SM_Sword_B` | 用户指定 SwordB |
+| `MeshAsset` | `/Game/Fab/Weapon/Stylized_Dark_Sword/Assets/SwordB/Meshes/SM_Sword_B.SM_Sword_B` | 用户指定 SwordB（资源已归入 Fab/Weapon） |
 | `WeaponClass` | 空 | `AWeapon` 实例化尚未落地，留空 |
 | `IconTexture` | 空 | 暂无图标资源 |
 | `BlueAttackDamageScale` | 1.0 | 对齐 GDD 单手剑 |
@@ -65,6 +65,19 @@ Scripts/create_datatables.py（唯一数据源）
 - 战斗拔出 / 收回：后续按动画设计接入，当前只做“背在背上”这一状态。
 - 挂载组件命名建议 `WeaponMesh`（便于后续战斗系统/动画引用做拔出/收回切换）。
 
+### 6. C++ 组件方案（已确认）
+
+新增 `UWeaponVisualComponent`（`USceneComponent` 子类，挂所有角色通用）：
+
+- 内部持有 `UStaticMeshComponent WeaponMesh`（No Collision），作为 `ABaseCharacter` 的默认子对象创建，所有 Role 自动获得，无需在 BP 手动加组件。
+- `BackSocketName` 可配置（默认 `weapon_back`）；socket 不存在时回退挂到网格根节点 + `BackAttachOffset`，并打警告。
+- `BeginPlay` 时绑定 `UInventoryComponent::OnWeaponChanged`，读取 `EquippedWeaponID → GetWeaponRow() → MeshAsset`，软加载后设置网格；无武器则隐藏。
+- 提供 `SetWeaponVisible(bool)`，供后续战斗系统做拔出/收回；当前阶段始终显示背上状态。
+
+`UInventoryComponent` 增加 `OnWeaponChanged(FName WeaponID)` 动态多播委托，在 `EquipWeapon/UnequipWeapon` 后广播（卸下时 `WeaponID = NAME_None`）。
+
+与 `AWeapon`（`Weapon.h`）的关系：`AWeapon` 是武器 Actor 占位（对应 `WeaponClass`），本组件直接使用 `MeshAsset` 做角色可见表现，两者共用同一行数据但职责分离，不冲突。
+
 ## Files
 
 | 文件 | 改动 |
@@ -75,14 +88,18 @@ Scripts/create_datatables.py（唯一数据源）
 | `docs/DesignDocs/Protagonist_Character_Design.md` | v2.0“不携带可见武器”改为“武器背在背上（战斗时拔出）”，补武器外观段落 |
 | `DevLog.md` | 合并一条 2026-08-04 记录（策划/程序） |
 | `/Game/DataTable/DT_WeaponConfig`、`DT_CharacterConfig` | 用户手动编辑（不运行命令let） |
+| `Hole/Source/Hole/Public/Component/WeaponVisualComponent.h` + `Private/Component/WeaponVisualComponent.cpp` | 新增：背上武器显示组件 |
+| `Hole/Source/Hole/Public/Component/InventoryComponent.h` + `Private/Component/InventoryComponent.cpp` | 新增 `OnWeaponChanged` 委托并广播 |
+| `Hole/Source/Hole/Public/Character/BaseCharacter.h` + `Private/Character/BaseCharacter.cpp` | 新增默认子对象 `WeaponVisualComponent` |
 | 本文件 | 设计文档 |
 
 ## 编辑器操作流程（用户执行）
 
 1. **DT_WeaponConfig**：新增行 `dale_sword`，按“Design Decisions”填值，`MeshAsset` 选 `SM_Sword_B`，保存。
 2. **DT_CharacterConfig**：`drifter` 行 `DefaultWeaponID = dale_sword`，保存。
-3. **BP_Dale**：新增 Static Mesh 组件 `WeaponMesh`，网格选 `SM_Sword_B`，挂到背部骨骼 socket（无 socket 则在骨骼编辑器新建，建议 `spine_03` 附近），调整相对位置/旋转/缩放使其贴合背部，禁用碰撞，保存。
-4. **PIE 验证**：角色背上可见武器且跟随骨骼；`InventoryComponent->GetEquippedWeaponID() == dale_sword`；武器修正已注入（格挡窗口 +0.1s 等）。
+3. **骨骼 socket**：在 CoreC 骨骼中新建背部 socket `weapon_back`（`spine_03` 附近，方向朝后/斜背），保存。
+4. **BP_Dale**：编译 C++ 后 `WeaponVisualComponent` 自动存在；在其子对象 `WeaponMesh` 上微调相对 Transform 使其贴背（若 socket 姿态已调好可跳过）。
+5. **PIE 验证**：角色背上可见武器且跟随骨骼；`InventoryComponent->GetEquippedWeaponID() == dale_sword`；武器修正已注入（格挡窗口 +0.1s 等）。
 
 ## Risks / Notes
 

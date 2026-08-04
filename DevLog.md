@@ -38,6 +38,20 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-04 | 策划 ⚡ + 程序
+
+**事项：** 为 Dale（漂泊者）定案并落地默认武器：新增 `dale_sword`（漂泊者短剑，单手剑系，SM_Sword_B）；主角改为可随身携带武器（非战斗背在背上、战斗时拔出，动作后续接入）；C++ 新增背上武器显示组件。
+
+**处理过程：**
+1. 方案确认：不重建表（编辑器数据由用户手动填写）；新增专属行 `dale_sword` 而非复用 `sword`；`drifter.DefaultWeaponID = dale_sword`。
+2. 主角美术设定更新（v2.1）：从“不携带可见武器”改为“短剑背于背上、战斗时拔出”；补背部 socket `weapon_back` 设计。
+3. C++：新增 `UWeaponVisualComponent`（`USceneComponent` 子类，`ABaseCharacter` 默认子对象；按 `EquippedWeaponID → GetWeaponRow → MeshAsset` 加载并挂到背部 socket，socket 缺失回退根节点+偏移，提供 `SetWeaponVisible` 供后续拔出/收回）；`UInventoryComponent` 新增 `OnWeaponChanged` 委托并在装备/卸下后广播。
+4. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
+
+**结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突）；用户按操作流程手动填表、建 socket、微调挂载。
+
+**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突。
+
 ### 2026-08-02 | 程序 ⚡
 
 **事项：** 战斗系统 v1（Dale vs Satan）开发落地：战斗会话/HUD/AI C++、12 号表 `DT_BattleStage`、输入与蓝图接线、落点与入场动画修复。

@@ -1,9 +1,9 @@
 # Protagonist Character Design — "The Drifter"
 
 > **Game:** Hole（洞穴）
-> **Version:** v2.0 — Wasteland Clean Redesign
-> **Date:** 2026-07-07
-> **Status:** Redesign — no armor, no weapons, clean wasteland clothing
+> **Version:** v2.1 — Wasteland Clean Redesign (Back-Carried Shortsword)
+> **Date:** 2026-08-04
+> **Status:** Redesign — no armor, clean wasteland clothing, shortsword stowed on back
 > **Related:** GDD v0.3, §10.4 (Character Art Style)
 
 ---
@@ -70,7 +70,7 @@ The protagonist is not a ragged beggar — he is a survivor who **moves between 
 | **Clean, intact** | Can pass as a commoner or low-ranking servant in mage cities. Tears and holes would draw unwanted attention. |
 | **Wasteland materials** | Coarse linen, heavy cotton, weathered leather — materials mages wouldn't use, marking his outsider origin to the player |
 | **No armor** | Armor signals combat intent. A drifter in cloth is underestimated — which is the point. |
-| **No visible weapons** | Weapons are confiscated at mage city gates. He carries nothing that marks him as a threat. |
+| **Weapon on back** | A shortsword is stowed on the back in non-combat and drawn in combat. The scabbard sits flat against the coat, keeping the silhouette low-profile so he can still pass through mage cities without reading as an active threat. |
 | **Bare head** | Necessary for the mask equipment slot. Masks sit directly on the face with no headband interference. |
 
 ---
@@ -156,9 +156,9 @@ The protagonist is not a ragged beggar — he is a survivor who **moves between 
 
 ---
 
-## 5. Clothing (Layered Breakdown — No Armor, No Weapons)
+## 5. Clothing & Weapon Carry (Layered Breakdown — No Armor)
 
-Clothing uses a layered design approach for clean 3D modeling separation and future equipment-swap support. **All pieces are fabric or soft leather — no hard armor components, no weapon mounts, no tool attachments.**
+Clothing uses a layered design approach for clean 3D modeling separation and future equipment-swap support. **All pieces are fabric or soft leather — no hard armor components, no tool attachments. The only hard object is the back-carried shortsword (§5.8).**
 
 ### 5.1 Base Layer
 
@@ -261,12 +261,25 @@ The coat is the **primary visual element** — replacing the old armor-based sil
 | Knee guards (armor) | No armor |
 | Headband | Bare head for mask slot; no head decorations |
 | Short cape | Replaced by the asymmetrical coat |
-| Dagger and sheath | No weapons |
+| Dagger and sheath | Replaced by the back-carried shortsword (§5.8) |
 | Smoke collection vials | No visible tools |
 | Tool pouch | No visible equipment |
 | Spare gear loops | No visible equipment |
 | Rope coil | No visible equipment |
 | Thigh strap pouch | No visible equipment |
+
+---
+
+### 5.8 Weapon Carry (Back)
+
+| Feature | Description |
+|---------|-------------|
+| **Type** | Shortsword (单手剑系, `dale_sword`) — dark, worn blade matching the wasteland palette |
+| **Carry position** | Stowed horizontally/diagonally on the upper back, blade toward the left hip, grip toward the right shoulder for a natural draw |
+| **Mount** | Dedicated back socket (`weapon_back`, near `spine_03`) on the shared character skeleton; static mesh component attached in `UWeaponVisualComponent` (C++) |
+| **Non-combat** | Visible on the back at all times, moves with the coat and scarf |
+| **Combat** | Drawn into the hand during combat; draw/sheath animation to be designed later |
+| **Design intent** | The sword is a survival tool, not a threat display. It stays out of the character's front silhouette and only becomes a focus during combat. |
 
 ---
 
@@ -301,7 +314,7 @@ Skin base          Mineral dust       Shadow black       Boot leather      Linen
 
 - Overall low saturation, warm grey-brown dominant — evokes the Hole's oppressive atmosphere while looking neat enough to pass among mages
 - The faded-red scarf is the **sole higher-saturation accent** — draws visual focus to the face
-- No metal tones beyond the belt buckle — reinforces "no armor, no weapons"
+- No metal tones beyond the belt buckle and the back-carried sword — reinforces the low-profile wasteland look
 - Waxed canvas has a subtle cool undertone (`#5A4D42`) that distinguishes it from the warmer tunic (`#8A8578`) — creates visual depth without armor's hard contrasts
 - All fabrics are within 2–3 value steps of each other — harmonious, understated, blends into crowds
 
@@ -487,7 +500,7 @@ This is the most frequently seen angle in-game (character positioned to one side
 - The scarf's faded red creates a color transition from bare face → red → coat grey-brown at 45°
 - The wooden toggle closure becomes visible at this angle — subtle wasteland detail
 - The coat's longer right panel trails behind — adds motion to combat stance
-- No armor glints, no weapon silhouettes — the character reads as unarmed, which makes combat animations more surprising
+- The sword silhouette reads clearly on the back; drawing it in combat becomes a key animation beat
 
 ---
 
@@ -530,7 +543,7 @@ The protagonist's appearance evolves subtly through equipment upgrades acquired 
 **Progression philosophy:**
 - The coat is the primary progression-visible item — it changes material quality and subtle detailing, but the cut remains constant
 - The silhouette never fundamentally changes — recognition must be instant at all stages
-- Improvements are in fabric quality, not in adding armor or weapons — the character remains visibly unarmed throughout
+- Improvements are in fabric quality, not in adding armor; the weapon silhouette stays consistent (stowed on back, drawn only in combat)
 - Mask tier is the most visible progression marker on the face
 
 ---
@@ -572,7 +585,7 @@ If a female protagonist is later unlocked, retain all design language with these
 | **Texture resolution** | Body 4K; Face 2K separate (expression detail requires it) |
 | **Cloth physics** | Coat panels, scarf, hair → UE5 Chaos Cloth. Coat is the most important physics-driven element — the asymmetric hem sway is a key character identifier. |
 | **LOD levels** | LOD0 (80K) → LOD1 (25K) → LOD2 (8K) — exploration mode typically uses LOD1 |
-| **Key difference from v1.1** | No rigid armor pieces → all materials are soft-body cloth or leather. Simpler rigging (no pauldron bones, no weapon attachment points). |
+| **Key difference from v1.1** | No rigid armor pieces → all clothing is soft-body cloth or leather. Rigging adds one back weapon socket (`weapon_back`) for the shortsword; no other weapon attachment points. |
 
 ---
 
@@ -587,7 +600,7 @@ If a female protagonist is later unlocked, retain all design language with these
 | **Arms** | Hardened bracer R, wraps L | Symmetrical cloth wraps, both arms |
 | **Waist** | Dual belt + dagger + tools + vials | Single plain belt, no attachments |
 | **Legs** | Knee guards + wraps | Cloth wraps only |
-| **Weapons** | Dagger at waist | None visible |
+| **Weapons** | Dagger at waist | Shortsword stowed on back (drawn in combat) |
 | **Equipment** | Smoke vials, tool pouch, rope | None visible |
 | **Color accent** | Scarf (same) | Scarf (same) |
 | **Overall read** | "I hunt mages" | "I walk between worlds" |
@@ -599,5 +612,6 @@ If a female protagonist is later unlocked, retain all design language with these
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
 | v2.0 | 2026-07-07 | Complete redesign: removed all armor, all weapons, all tools, headband. Added asymmetric long coat as new primary visual element. Switched to clean-clothing wasteland aesthetic for infiltration narrative. Bare head for mask slot. | Claude |
+| v2.1 | 2026-08-04 | Protagonist now carries the default shortsword (`dale_sword`) stowed on the back in non-combat and drawn in combat (draw/sheath animation later). Added back weapon socket + `UWeaponVisualComponent`; updated weapon-related statements throughout. | Codex |
 | v1.1 | 2026-07-07 | Mask moved from default appearance to optional equipment slot (§5.6); full face design added (§3.3); all views and expressions updated | Claude |
 | v1.0 | 2026-07-07 | Initial protagonist design based on GDD v0.3 §10.4 | Claude |

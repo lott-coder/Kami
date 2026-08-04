@@ -1,8 +1,8 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.6
-> **日期：** 2026-08-02
-> **关联策划案：** GDD_Outline.md v0.3
+> **版本：** v0.7
+> **日期：** 2026-08-04
+> **关联策划案：** GDD_Outline.md v0.7
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -188,15 +188,15 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 > **数据口径（2026-08-01）：** 已按本节落库；`CharacterClass` 列保留现有蓝图引用（drifter → BP_Dale），其余角色待 BP 制作后补填。
 > **艾斯烟回复：** `DailySmokeRecoveryMin/Max = 1/2`（每游戏日自动回复烟储备，GDD §5.3.3）。
 
-| RowName | DisplayName | MaxHP | DmgScale | BlueBonus | WhiteBonus | WalkSpd | SprintSpd | bPlayable | bSmokeGland | UnlockRound | GDD 来源 |
-|---------|-------------|-------|:--------:|:---------:|:----------:|:-------:|:---------:|-----------|-------------|-------------|----------|
-| `drifter` | 漂泊者（主角） | 120 | 1.05 | 0.0 | 3.0 | 300 | 600 | ✅ | ❌ | 0 | §8.3 主角 |
-| `ace` | 艾斯 | 100 | 0.95 | 5.0 | 0.0 | 300 | 600 | ✅ | ✅ | 0 | §8.3 艾斯 |
+| RowName | DisplayName | MaxHP | DmgScale | BlueBonus | WhiteBonus | WalkSpd | SprintSpd | bPlayable | bSmokeGland | UnlockRound | DefaultWeaponID | GDD 来源 |
+|---------|-------------|-------|:--------:|:---------:|:----------:|:-------:|:---------:|-----------|-------------|-------------|-----------------|----------|
+| `drifter` | 漂泊者（主角） | 120 | 1.05 | 0.0 | 3.0 | 300 | 600 | ✅ | ❌ | 0 | `dale_sword` | §8.3 主角 |
+| `ace` | 艾斯 | 100 | 0.95 | 5.0 | 0.0 | 300 | 600 | ✅ | ✅ | 0 | — | §8.3 艾斯 |
 
 > **口径说明：** `UnlockRound` 从 0 开始计数（0 = 首次游戏）；艾斯第 0 次轮回即可加入。
-| `inept_char` | `[待定]` 无能力者 | 90 | 1.0 | 0.0 | 0.0 | 300 | 600 | ✅ | ❌ | `[待定]` | §8.3 无能力者角色 |
-| `doctor` | 博士 | 80 | 0.8 | 0.0 | 0.0 | 300 | 600 | ❌ | ✅ | 0 | §8.3 博士 (NPC) |
-| `time_mage` | 时间魔法师 | `[待定]` | 1.3 | `[待定]` | `[待定]` | 300 | 600 | ❌ | ✅ | 0 | §8.3 时间魔法师 (NPC/Boss) |
+| `inept_char` | `[待定]` 无能力者 | 90 | 1.0 | 0.0 | 0.0 | 300 | 600 | ✅ | ❌ | `[待定]` | — | §8.3 无能力者角色 |
+| `doctor` | 博士 | 80 | 0.8 | 0.0 | 0.0 | 300 | 600 | ❌ | ✅ | 0 | — | §8.3 博士 (NPC) |
+| `time_mage` | 时间魔法师 | `[待定]` | 1.3 | `[待定]` | `[待定]` | 300 | 600 | ❌ | ✅ | 0 | — | §8.3 时间魔法师 (NPC/Boss) |
 
 ### 4.4 伤害计算公式与数据流
 
@@ -605,6 +605,7 @@ enum class EWeaponCategory : uint8
 | `great_sword` | GreatSword | 1.3 | 1.0 | 0.0 | 0.0 | 1 | 第1行 |
 | `hammer` | Hammer | 1.0 | 1.0 | 0.0 | 0.5 | 0 | 第2行 |
 | `sword` | Sword | 1.0 | 1.0 | 0.1 | 0.0 | 0 | 第3行 |
+| `dale_sword` | Sword | 1.0 | 1.0 | 0.1 | 0.0 | 0 | 主角默认武器（漂泊者短剑） |
 | `tbd_weapon_1` | TBD1 | 1.0 | 1.0 | 0.0 | 0.0 | 0 | `[待定]` 第4行 |
 
 ---
@@ -1161,3 +1162,4 @@ DT_CombatParams (单例，无外键)
 > | v0.4 | 2026-08-01 | 战斗方案定案落库：新增暴击/闪避Buff/先制/金色攻击参数、艾斯每日烟回复、区域 bFirstLoopOnly、武器槽属性与公式改造、EffectType 字典；货币定名金币 |
 > | v0.5 | 2026-08-02 | 新增 12 号表 DT_BattleStage（战斗舞台站位/朝向/固定镜头参数），随战斗系统 v1 落地 |
 > | v0.6 | 2026-08-02 | DT_BattleStage 扩展 Spring/位移选项：Boss/玩家本地空间偏移与朝向偏航、FOV、SocketOffset、TargetOffset、镜头滞后开关与速度 |
+> | v0.7 | 2026-08-04 | 新增主角默认武器 `dale_sword`（漂泊者短剑，单手剑系，MeshAsset=SM_Sword_B）；`drifter.DefaultWeaponID` 落库；C++ 新增 `UWeaponVisualComponent` 背上挂载与 `UInventoryComponent::OnWeaponChanged` 委托 |

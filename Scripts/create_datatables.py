@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Create the 8 missing DataTable assets per DataTable_Spec.md (v0.1).
+Regenerate all DataTable assets per DataTable_Spec.md (currently 12 tables).
 
 Usage (UE editor commandlet):
   UnrealEditor-Cmd.exe <Hole.uproject> -run=pythonscript -script=create_datatables.py -unattended -nop4 -nosplash -NoSound -nullrhi
@@ -118,6 +118,7 @@ characters = [
         "MaxHP": 120.0, "MaxSmokeReserve": 10.0,
         "BaseDamageScale": 1.05, "BlueAttackBonus": 0.0, "WhiteAttackBonus": 3.0,
         "WalkSpeed": 300.0, "SprintSpeed": 600.0, "LandingLockTime": 0.3,
+        "DefaultWeaponID": "dale_sword",
         "bIsPlayable": True, "bHasSmokeGland": False,
         "DailySmokeRecoveryMin": 0.0, "DailySmokeRecoveryMax": 0.0,
         "UnlockCondition_Round": 0,
@@ -249,6 +250,15 @@ weapons = [
         "DisplayName": "单手剑", "Category": "Sword",
         "BlueAttackDamageScale": 1.0, "WhiteAttackDamageScale": 1.0,
         "BlockWindowBonus": 0.1,
+    }),
+    ("dale_sword", {
+        "DisplayName": "漂泊者短剑",
+        "Description": "在洞穴边缘拾获的旧短剑，刃口磨损却保养得当；战斗时才会拔出。",
+        "Category": "Sword",
+        "MeshAsset": "/Game/Fab/Weapon/Stylized_Dark_Sword/Assets/SwordB/Meshes/SM_Sword_B.SM_Sword_B",
+        "BlueAttackDamageScale": 1.0, "WhiteAttackDamageScale": 1.0,
+        "BlockWindowBonus": 0.1,
+        "Price": 0,
     }),
     ("tbd_weapon_1", {
         "DisplayName": "[待定] 武器4", "Category": "TBD1",

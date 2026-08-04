@@ -7,6 +7,7 @@
 #include "BaseCharacterAnimInstance.generated.h"
 
 class ACharacter;
+class UWeaponVisualComponent;
 
 /**
  * UBaseCharacterAnimInstance — 所有角色动画实例的公共基类
@@ -48,8 +49,16 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	float GroundDistance = 0.0f;
 
+	/** 武器是否已拔到手上（从 UWeaponVisualComponent::IsWeaponDrawn 同步，供 ABP 做持剑 Idle/移动变体） */
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bWeaponDrawn = false;
+
 protected:
 	/** 缓存的拥有者角色引用 */
 	UPROPERTY()
 	TObjectPtr<ACharacter> OwnerCharacter;
+
+	/** 缓存的武器显示组件（初始化时取一次，避免每帧组件查找） */
+	UPROPERTY(Transient)
+	TObjectPtr<UWeaponVisualComponent> CachedWeaponVisual;
 };

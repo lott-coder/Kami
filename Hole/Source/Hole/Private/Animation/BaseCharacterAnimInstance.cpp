@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Animation/BaseCharacterAnimInstance.h"
+#include "Character/BaseCharacter.h"
+#include "Component/WeaponVisualComponent.h"
 #include "GameFramework/Character.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -15,6 +17,10 @@ void UBaseCharacterAnimInstance::NativeInitializeAnimation()
 	if (AActor* Owner = GetOwningActor())
 	{
 		OwnerCharacter = Cast<ACharacter>(Owner);
+		if (const ABaseCharacter* BaseCharacter = Cast<ABaseCharacter>(Owner))
+		{
+			CachedWeaponVisual = BaseCharacter->WeaponVisualComponent;
+		}
 	}
 }
 
@@ -26,6 +32,9 @@ void UBaseCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		return;
 	}
+
+	// ---- Weapon drawn state ----
+	bWeaponDrawn = CachedWeaponVisual ? CachedWeaponVisual->IsWeaponDrawn() : false;
 
 	// ---- Speed ----
 	const FVector Velocity = OwnerCharacter->GetVelocity();

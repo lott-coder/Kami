@@ -85,6 +85,7 @@ Scripts/create_datatables.py（唯一数据源）
 - 触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)`（默认 `weapon_hand_r`），把武器从背上转移到手部。
 - `UWeaponVisualComponent` 新增 `HandSocketName`、`AttachWeaponToSocket(FName)`，缓存网格引用；`BeginPlay` 背部挂载复用同一方法。
 - `UWeaponVisualComponent` 新增 `bWeaponDrawn` / `IsWeaponDrawn()`：挂到 `weapon_hand_r` 时置 true、挂回背上时置 false，供 ABP 做拔剑后 Idle/移动变体切换。
+- `UBaseCharacterAnimInstance` 暴露 `bWeaponDrawn`（初始化缓存 `WeaponVisualComponent`、每帧同步 bool），ABP 直接读该变量，避免 Cast 到具体蓝图类。
 - `UBattleComponent` 新增 `PlayerEntrySectionName`（默认 `Draw`），`PlayAnimMontage` 从该 section 开始，支持 `Draw_A_Great_Sword_1 → _2` 完整播放；Montage 内两段序列需在同一 section 内或通过 Next Section 串联。
 - 流程定名：Boss 开场动画为**剧情动画**；玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放，`UBattleComponent` 现有 `PlayerEntryMontage` 时序不变。
 

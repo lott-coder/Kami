@@ -1,6 +1,6 @@
 # Dale 默认武器（漂泊者短剑）— Design Spec
 
-> **Status:** 方案已确认，等待用户复核本文档
+> **Status:** 已按用户反馈修订（不重建表 / 武器背在背上），等待用户确认
 > **Date:** 2026-08-04
 > **Project:** Hole（洞穴）
 > **Related:** GDD_Outline.md §6.3.1、DataTable_Spec.md §4/§6
@@ -11,7 +11,12 @@
 `DT_CharacterConfig.DefaultWeaponID → ABaseCharacter::InitializeAttributes → UInventoryComponent::EquipWeapon`
 可以自动装备，战斗系统可直接读取武器修正，动画侧可按武器 `Category` 分支。
 
-本次为纯数据 + 文档改动，不修改 C++。
+**主角设定变更：** 漂泊者可以随身携带武器——非战斗时背在背上，战斗时拔出（拔出/收回动作后续按动画设计接入）。当前里程碑只要求默认武器背在背上。
+
+**执行分工：**
+- 编辑器侧（DataTable 资产、BP_Dale 挂载）：由用户手动完成，本方案不运行表重建命令let。
+- 仓库侧（脚本、文档）：由本方案同步，确保未来重建不会丢失数据。
+- 不修改 C++。
 
 ## Design Decisions
 
@@ -41,7 +46,7 @@
 
 ```
 Scripts/create_datatables.py（唯一数据源）
-  → UE 命令let 重建 /Game/DataTable/DT_WeaponConfig、DT_CharacterConfig
+  → 用户手动编辑 /Game/DataTable/DT_WeaponConfig、DT_CharacterConfig（值与 Design Decisions 一致，脚本随后同步）
   → ABaseCharacter::InitializeAttributes() 读取 DefaultWeaponID
   → UInventoryComponent::EquipWeapon(dale_sword)
   → UCombatFormulaSubsystem::GetWeaponRow(dale_sword)
@@ -54,33 +59,41 @@ Scripts/create_datatables.py（唯一数据源）
 `EquippedWeaponID → UCombatFormulaSubsystem::GetWeaponRow → Category`
 做动画分支（单手剑 / 大剑 / 锤子）。本次不新增动画实例变量。
 
+### 5. 武器可见挂载（当前里程碑）
+
+- 非战斗：`SM_Sword_B` 静态网格挂载在 Dale 背上（骨骼 socket），随骨骼动画运动。
+- 战斗拔出 / 收回：后续按动画设计接入，当前只做“背在背上”这一状态。
+- 挂载组件命名建议 `WeaponMesh`（便于后续战斗系统/动画引用做拔出/收回切换）。
+
 ## Files
 
 | 文件 | 改动 |
 |------|------|
-| `Scripts/create_datatables.py` | 新增 `dale_sword` 行；`drifter` 补 `DefaultWeaponID`；文档字符串同步为 12 张表 |
+| `Scripts/create_datatables.py` | 新增 `dale_sword` 行；`drifter` 补 `DefaultWeaponID`；文档字符串同步为 12 张表（用户确认编辑器操作后同步） |
 | `DataTable_Spec.md` | §4.3 / §6.4 补行；版本 v0.6→v0.7；修正“关联策划案 GDD v0.3→v0.7” |
-| `GDD_Outline.md` | §6.3.1 补“主角默认武器：漂泊者短剑（单手剑系）”说明；版本 v0.6→v0.7、日期 2026-08-04 |
+| `GDD_Outline.md` | §6.3.1 补“主角默认武器：漂泊者短剑（单手剑系）”与“随身携带、非战斗背在背上”说明；版本 v0.6→v0.7、日期 2026-08-04 |
+| `docs/DesignDocs/Protagonist_Character_Design.md` | v2.0“不携带可见武器”改为“武器背在背上（战斗时拔出）”，补武器外观段落 |
 | `DevLog.md` | 合并一条 2026-08-04 记录（策划/程序） |
-| `/Game/DataTable/DT_WeaponConfig`、`DT_CharacterConfig` | 命令let 重建（资产随脚本更新） |
+| `/Game/DataTable/DT_WeaponConfig`、`DT_CharacterConfig` | 用户手动编辑（不运行命令let） |
 | 本文件 | 设计文档 |
 
-## Verification
+## 编辑器操作流程（用户执行）
 
-1. **重建前核对**：导出当前 `DT_BattleStage` CSV 与脚本值比对（工作区有未提交改动）；不一致则停下来问用户。
-2. **重建**：运行 `Scripts/create_datatables.py` 命令let，再运行 `verify_datatables.py` / `export_datatables.py`。
-3. **数据校验**：`DT_WeaponConfig` 5 行；`dale_sword.MeshAsset` 路径在导出 CSV 中保留且可解析；`drifter.DefaultWeaponID = dale_sword`。
-4. **PIE（可选）**：生成 BP_Dale，确认 `EquippedWeaponID == dale_sword`，属性组件中存在武器修正（`WhiteAttackDamageScale` 等）。
+1. **DT_WeaponConfig**：新增行 `dale_sword`，按“Design Decisions”填值，`MeshAsset` 选 `SM_Sword_B`，保存。
+2. **DT_CharacterConfig**：`drifter` 行 `DefaultWeaponID = dale_sword`，保存。
+3. **BP_Dale**：新增 Static Mesh 组件 `WeaponMesh`，网格选 `SM_Sword_B`，挂到背部骨骼 socket（无 socket 则在骨骼编辑器新建，建议 `spine_03` 附近），调整相对位置/旋转/缩放使其贴合背部，禁用碰撞，保存。
+4. **PIE 验证**：角色背上可见武器且跟随骨骼；`InventoryComponent->GetEquippedWeaponID() == dale_sword`；武器修正已注入（格挡窗口 +0.1s 等）。
 
 ## Risks / Notes
 
-- 全表重建会删除并重建全部 12 张 DataTable，属项目既有流程；`DT_BattleStage` 若有用户未落盘的微调会丢失，因此必须先核对再重建。
+- 本方案不运行表重建命令let，避免覆盖用户手动编辑与 `DT_BattleStage` 未提交改动。
+- 手动填表后必须同步 `Scripts/create_datatables.py`，否则未来重建会丢行。
 - `Stylized_Dark_Sword` 资源包当前为 git 未跟踪状态；本次不提交资源包本身，但 DataTable 会引用它。若资源包缺失，软引用为空，运行时 `EquipWeapon` 仅打警告、不影响属性。
-- 美术设定“漂泊者不随身携带可见武器”通过描述文本“战斗时才会拔出”解释，不冲突。
+- 主角美术设定已从“不携带可见武器”改为“背在背上、战斗时拔出”，需同步 `Protagonist_Character_Design.md`。
 
 ## Out of Scope
 
-- 武器网格挂到角色手部 socket / 可见挂载组件
+- 战斗时拔出/收回的动作动画与逻辑（后续按动画设计接入）
 - 武器攻击动画资源与动画蓝图分支落地
 - `AWeapon` 实例化、武器槽 UI、图标
 - 其他角色的默认武器

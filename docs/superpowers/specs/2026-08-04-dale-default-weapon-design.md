@@ -73,6 +73,7 @@ Scripts/create_datatables.py（唯一数据源）
 - `BackSocketName` 可配置（默认 `weapon_back`）；socket 不存在时回退挂到网格根节点 + `BackAttachOffset`，并打警告。
 - `BeginPlay` 时绑定 `UInventoryComponent::OnWeaponChanged`，读取 `EquippedWeaponID → GetWeaponRow() → MeshAsset`，软加载后设置网格；无武器则隐藏。
 - 提供 `SetWeaponVisible(bool)`，供后续战斗系统做拔出/收回；当前阶段始终显示背上状态。
+- 实现要点（Bug 修复 2026-08-04）：`WeaponMesh` 必须在 `ABaseCharacter` 构造器中以 Actor 级默认子对象创建并 `SetupAttachment(WeaponVisualComponent)`；不能在组件构造器中用嵌套默认子对象创建，否则实例化时报 `Template Mismatch` 且网格停留在世界原点。
 
 `UInventoryComponent` 增加 `OnWeaponChanged(FName WeaponID)` 动态多播委托，在 `EquipWeapon/UnequipWeapon` 后广播（卸下时 `WeaponID = NAME_None`）。
 

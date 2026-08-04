@@ -46,6 +46,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WeaponVisual")
 	TObjectPtr<UStaticMeshComponent> WeaponMesh;
 
+	/** 由 Actor 构造器传入已创建好的武器网格组件（Actor 级默认子对象，避免嵌套子对象实例化问题） */
+	void SetWeaponMeshComponent(UStaticMeshComponent* InMesh);
+
 private:
 	/** Inventory 武器变化回调 */
 	UFUNCTION()

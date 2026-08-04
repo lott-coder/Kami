@@ -14,12 +14,17 @@
 UWeaponVisualComponent::UWeaponVisualComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+}
 
-	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
-	WeaponMesh->SetupAttachment(this);
-	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	WeaponMesh->SetGenerateOverlapEvents(false);
-	WeaponMesh->SetHiddenInGame(true);
+void UWeaponVisualComponent::SetWeaponMeshComponent(UStaticMeshComponent* InMesh)
+{
+	WeaponMesh = InMesh;
+	if (WeaponMesh)
+	{
+		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WeaponMesh->SetGenerateOverlapEvents(false);
+		WeaponMesh->SetHiddenInGame(true);
+	}
 }
 
 void UWeaponVisualComponent::BeginPlay()

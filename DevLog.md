@@ -46,11 +46,12 @@
 1. 方案确认：不重建表（编辑器数据由用户手动填写）；新增专属行 `dale_sword` 而非复用 `sword`；`drifter.DefaultWeaponID = dale_sword`。
 2. 主角美术设定更新（v2.1）：从“不携带可见武器”改为“短剑背于背上、战斗时拔出”；补背部 socket `weapon_back` 设计。
 3. C++：新增 `UWeaponVisualComponent`（`USceneComponent` 子类，`ABaseCharacter` 默认子对象；按 `EquippedWeaponID → GetWeaponRow → MeshAsset` 加载并挂到背部 socket，socket 缺失回退根节点+偏移，提供 `SetWeaponVisible` 供后续拔出/收回）；`UInventoryComponent` 新增 `OnWeaponChanged` 委托并在装备/卸下后广播。
-4. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
+4. Bug 修复：PIE 复现“武器停在场景中心不跟随人物”——日志定位 `Template Mismatch during attachment`（`WeaponMesh` 作为 `WeaponVisualComponent` 的嵌套默认子对象创建，UE 实例化时未正确挂到实例）与 `weapon_back` socket 不在身体网格实际骨架；修复为 `WeaponMesh` 在 `ABaseCharacter` 构造器中以 Actor 级默认子对象创建并 `SetupAttachment` 到显示组件，编译通过。
+5. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
 
 **结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突）；用户按操作流程手动填表、建 socket、微调挂载。
 
-**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突。
+**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突；UE 中场景子组件不要在组件构造器里用嵌套默认子对象创建（会 Template Mismatch），应作为 Actor 级默认子对象创建后 `SetupAttachment`。
 
 ### 2026-08-02 | 程序 ⚡
 

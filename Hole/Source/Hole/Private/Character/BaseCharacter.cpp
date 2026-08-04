@@ -4,6 +4,7 @@
 #include "Component/AttributeComponent.h"
 #include "Component/InventoryComponent.h"
 #include "Component/WeaponVisualComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "DataTable/CharacterConfigTable.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -24,6 +25,11 @@ ABaseCharacter::ABaseCharacter()
 
 	// 创建背上武器显示组件
 	WeaponVisualComponent = CreateDefaultSubobject<UWeaponVisualComponent>(TEXT("WeaponVisualComponent"));
+
+	// 武器网格作为 Actor 级默认子对象创建并挂到显示组件下（组件嵌套子对象会导致实例化时 Template Mismatch）
+	UStaticMeshComponent* WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(WeaponVisualComponent);
+	WeaponVisualComponent->SetWeaponMeshComponent(WeaponMesh);
 
 	// 运行时状态（不再是硬编码 100 —— 由 InitializeAttributes() 从 DataTable 加载后覆盖）
 	CurrentHealth = 1.0f;

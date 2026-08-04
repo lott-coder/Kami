@@ -44,7 +44,7 @@ public:
 
 	/** 手部挂载 socket 名（入场拔刀通知触发时使用） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponVisual|Config")
-	FName HandSocketName = TEXT("hand_r");
+	FName HandSocketName = TEXT("weapon_hand_r");
 
 	/** 武器 Static Mesh 组件（BP 中可微调相对 Transform） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WeaponVisual")

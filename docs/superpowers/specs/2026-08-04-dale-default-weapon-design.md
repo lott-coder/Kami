@@ -82,7 +82,7 @@ Scripts/create_datatables.py（唯一数据源）
 ### 7. 入场拔刀通知（已确认）
 
 - 新增 `UAnimNotify_Hold`，按 Montage 类别归档于 `Animation/AnimNotifies/Entrance/`（不按具体 Montage 命名；后续其他 Montage 类别各自建目录）。
-- 触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)`（默认 `hand_r`），把武器从背上转移到手部。
+- 触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)`（默认 `weapon_hand_r`），把武器从背上转移到手部。
 - `UWeaponVisualComponent` 新增 `HandSocketName`、`AttachWeaponToSocket(FName)`，缓存网格引用；`BeginPlay` 背部挂载复用同一方法。
 - 流程定名：Boss 开场动画为**剧情动画**；玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放，`UBattleComponent` 现有 `PlayerEntryMontage` 时序不变。
 
@@ -90,7 +90,7 @@ Scripts/create_datatables.py（唯一数据源）
 
 1. 重启编辑器加载新 DLL。
 2. 打开 `MTG_DrawGreatSword`，把现有 `Hold` 通知右键 **Change to → AnimNotify_Hold**（保留名称与位置）。
-3. 通知放在剑到达手部的帧；如手型不对，调骨骼 `hand_r` socket 朝向。
+3. 通知放在剑到达手部的帧；如手型不对，调骨骼 `weapon_hand_r` socket 朝向。
 4. PIE：Boss 剧情动画结束 → HUD 出现 → 入场 Montage → `Hold` 触发时武器从背转移到手。
 
 ## Files

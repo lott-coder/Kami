@@ -3,6 +3,7 @@
 #include "Character/BaseCharacter.h"
 #include "Component/AttributeComponent.h"
 #include "Component/InventoryComponent.h"
+#include "Component/WeaponVisualComponent.h"
 #include "DataTable/CharacterConfigTable.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -20,6 +21,9 @@ ABaseCharacter::ABaseCharacter()
 
 	// 创建物品/装备容器组件
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("InventoryComponent"));
+
+	// 创建背上武器显示组件
+	WeaponVisualComponent = CreateDefaultSubobject<UWeaponVisualComponent>(TEXT("WeaponVisualComponent"));
 
 	// 运行时状态（不再是硬编码 100 —— 由 InitializeAttributes() 从 DataTable 加载后覆盖）
 	CurrentHealth = 1.0f;

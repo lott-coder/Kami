@@ -1,0 +1,56 @@
+// Copyright Epic Games, Inc. All Rights Reserved.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Components/SceneComponent.h"
+#include "WeaponVisualComponent.generated.h"
+
+class UStaticMeshComponent;
+class USkeletalMeshComponent;
+
+/**
+ * UWeaponVisualComponent — 角色背上武器显示组件
+ *
+ * 读取 UInventoryComponent 的已装备武器 ID，从 DT_WeaponConfig 加载 MeshAsset，
+ * 把 WeaponMesh 挂到角色骨骼背部 socket；所有 Role（以及后续敌人）复用。
+ * 战斗拔出/收回后续通过 SetWeaponVisible() 控制，当前阶段始终显示背上状态。
+ */
+UCLASS(ClassGroup = (Inventory), Blueprintable, meta = (BlueprintSpawnableComponent))
+class HOLE_API UWeaponVisualComponent : public USceneComponent
+{
+	GENERATED_BODY()
+
+public:
+	UWeaponVisualComponent();
+
+	virtual void BeginPlay() override;
+
+	/** 显示/隐藏背上武器（后续战斗拔出/收回用） */
+	UFUNCTION(BlueprintCallable, Category = "WeaponVisual")
+	void SetWeaponVisible(bool bShow);
+
+	/** 按当前已装备武器刷新网格（装备变化或外部调用） */
+	UFUNCTION(BlueprintCallable, Category = "WeaponVisual")
+	void RefreshWeaponVisual();
+
+	/** 背部挂载 socket 名（不存在时回退到网格根节点 + BackAttachOffset） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponVisual|Config")
+	FName BackSocketName = TEXT("weapon_back");
+
+	/** socket 不存在时的回退相对偏移 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponVisual|Config")
+	FTransform BackAttachOffset = FTransform::Identity;
+
+	/** 武器 Static Mesh 组件（BP 中可微调相对 Transform） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WeaponVisual")
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+private:
+	/** Inventory 武器变化回调 */
+	UFUNCTION()
+	void HandleWeaponChanged(FName WeaponID);
+
+	/** 显示开关（后续战斗系统控制拔出/收回） */
+	bool bWeaponVisible = true;
+};

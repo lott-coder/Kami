@@ -8,6 +8,7 @@
 
 class UAttributeComponent;
 class UInventoryComponent;
+class UWeaponVisualComponent;
 
 /**
  * 三色属性枚举 — 红克制蓝、蓝克制白、白克制红
@@ -65,6 +66,10 @@ public:
 	/** 物品/装备容器（面具等装备槽） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Component")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
+
+	/** 背上武器显示组件（读取已装备武器 MeshAsset 并挂到背部 socket） */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "BaseCharacter|Component")
+	TObjectPtr<UWeaponVisualComponent> WeaponVisualComponent;
 
 	// ---- 运行时状态 ----
 

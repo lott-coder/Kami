@@ -116,6 +116,7 @@ bool UInventoryComponent::EquipWeapon(FName WeaponID)
 
 	EquippedWeaponID = WeaponID;
 	ApplyWeaponModifiers(*Row, true);
+	OnWeaponChanged.Broadcast(EquippedWeaponID);
 	return true;
 }
 
@@ -136,6 +137,8 @@ void UInventoryComponent::UnequipWeapon()
 			Character->AttributeComponent->RemoveModifiersBySource(OldTag);
 		}
 	}
+
+	OnWeaponChanged.Broadcast(NAME_None);
 }
 
 void UInventoryComponent::ApplyWeaponModifiers(const FWeaponConfigRow& Row, bool bApply)

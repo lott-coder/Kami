@@ -11,6 +11,9 @@ class UCombatFormulaSubsystem;
 struct FMaskConfigRow;
 struct FWeaponConfigRow;
 
+/** 武器装备/卸下时广播（WeaponID = NAME_None 表示卸下） */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnWeaponChanged, FName, WeaponID);
+
 /**
  * UInventoryComponent — 物品/装备容器
  *
@@ -61,6 +64,10 @@ public:
 	/** 是否已装备武器 */
 	UFUNCTION(BlueprintPure, Category = "Inventory|Weapon")
 	bool HasWeaponEquipped() const { return EquippedWeaponID != NAME_None; }
+
+	/** 武器装备/卸下完成后的广播事件（视觉组件等订阅） */
+	UPROPERTY(BlueprintAssignable, Category = "Inventory|Weapon")
+	FOnWeaponChanged OnWeaponChanged;
 
 private:
 	/** 应用/移除面具修正（bApply=true 添加，false 移除） */

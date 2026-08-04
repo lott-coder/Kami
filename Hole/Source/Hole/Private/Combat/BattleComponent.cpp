@@ -260,7 +260,7 @@ void UBattleComponent::EnterBattle()
 	if (PlayerEntryMontage && PlayerRole.IsValid())
 	{
 		const float PlayLength = PlayerEntryMontage->GetPlayLength();
-		PlayerRole->PlayAnimMontage(PlayerEntryMontage);
+		PlayerRole->PlayAnimMontage(PlayerEntryMontage, 1.0f, PlayerEntrySectionName);
 		if (PlayLength > 0.0f)
 		{
 			GetWorld()->GetTimerManager().SetTimer(EntryDelayTimer, this, &UBattleComponent::StartNewRound, PlayLength, false);

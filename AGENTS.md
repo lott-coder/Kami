@@ -82,6 +82,7 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - `SetWeaponVisible(bool)` is reserved for future combat draw/sheath; currently the weapon is always visible on the back.
 - `AWeapon` / `WeaponClass` remains the future weapon-actor placeholder and is separate from the visual mounting path (both share the same `FWeaponConfigRow`).
 - Battle terminology: the Boss opening sequence is a **cinematic (剧情动画)**; the player entry Montage plays after the battle starts (HUD already visible) and `UAnimNotify_Hold` moves the weapon to the hand.
+- `UBattleComponent::PlayerEntrySectionName` (default `Draw`) is passed to `PlayAnimMontage` so the entry Montage starts from the designated section (e.g. `Draw_A_Great_Sword_1 → _2`); the Montage must have both segments inside one section or chained via Next Section.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

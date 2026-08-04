@@ -63,6 +63,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	TObjectPtr<UAnimMontage> PlayerEntryMontage;
 
+	/** 玩家入场 Montage 起始 Section（如 "Draw"；NAME_None = 从头播放） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	FName PlayerEntrySectionName = TEXT("Draw");
+
 	/** 同色碰撞：敌方攻击前摇时间（秒），期间提示格挡/闪避 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	float ClashTelegraphTime = 0.8f;

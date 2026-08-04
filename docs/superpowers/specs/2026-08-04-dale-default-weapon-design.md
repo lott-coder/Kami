@@ -84,6 +84,7 @@ Scripts/create_datatables.py（唯一数据源）
 - 新增 `UAnimNotify_Hold`，按 Montage 类别归档于 `Animation/AnimNotifies/Entrance/`（不按具体 Montage 命名；后续其他 Montage 类别各自建目录）。
 - 触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)`（默认 `weapon_hand_r`），把武器从背上转移到手部。
 - `UWeaponVisualComponent` 新增 `HandSocketName`、`AttachWeaponToSocket(FName)`，缓存网格引用；`BeginPlay` 背部挂载复用同一方法。
+- `UBattleComponent` 新增 `PlayerEntrySectionName`（默认 `Draw`），`PlayAnimMontage` 从该 section 开始，支持 `Draw_A_Great_Sword_1 → _2` 完整播放；Montage 内两段序列需在同一 section 内或通过 Next Section 串联。
 - 流程定名：Boss 开场动画为**剧情动画**；玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放，`UBattleComponent` 现有 `PlayerEntryMontage` 时序不变。
 
 ### 8. 编辑器操作（用户执行）

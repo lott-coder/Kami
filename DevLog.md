@@ -47,11 +47,13 @@
 2. 主角美术设定更新（v2.1）：从“不携带可见武器”改为“短剑背于背上、战斗时拔出”；补背部 socket `weapon_back` 设计。
 3. C++：新增 `UWeaponVisualComponent`（`USceneComponent` 子类，`ABaseCharacter` 默认子对象；按 `EquippedWeaponID → GetWeaponRow → MeshAsset` 加载并挂到背部 socket，socket 缺失回退根节点+偏移，提供 `SetWeaponVisible` 供后续拔出/收回）；`UInventoryComponent` 新增 `OnWeaponChanged` 委托并在装备/卸下后广播。
 4. Bug 修复：PIE 复现“武器停在场景中心不跟随人物”——日志定位 `Template Mismatch during attachment`（`WeaponMesh` 作为 `WeaponVisualComponent` 的嵌套默认子对象创建，UE 实例化时未正确挂到实例）与 `weapon_back` socket 不在身体网格实际骨架；修复为 `WeaponMesh` 在 `ABaseCharacter` 构造器中以 Actor 级默认子对象创建并 `SetupAttachment` 到显示组件，编译通过。
-5. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
+5. 入场拔刀接入：新增 `UAnimNotify_Hold`（按 Montage 类别归档在 `Animation/AnimNotifies/Entrance/`，不按 Montage 命名）；触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)` 把武器从背上转移到 `hand_r`；组件新增 `HandSocketName` 与通用挂载方法 `AttachWeaponToSocket`，缓存网格引用，`BeginPlay` 背部挂载复用同一方法。
+6. 流程定名：Boss 开场动画归类为**剧情动画**（过场），玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放；`UBattleComponent` 现有 `PlayerEntryMontage` 时序满足，无需改流程。
+7. 文档/脚本同步：`create_datatables.py` 新增行与默认武器字段、DataTable_Spec v0.7、GDD v0.7、角色设计文档 v2.1；不运行表重建命令let。
 
-**结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突）；用户按操作流程手动填表、建 socket、微调挂载。
+**结果/解决方案：** C++ 编译通过（修正 `SetWeaponVisible` 参数名与 `USceneComponent::bVisible` 冲突；AnimNotify 头文件在 UE 5.6 位于 `Animation/AnimNotifies/AnimNotify.h`）；用户按操作流程手动填表、建 socket、微调挂载、把 Montage 中 `Hold` 通知替换为 `AnimNotify_Hold`。
 
-**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突；UE 中场景子组件不要在组件构造器里用嵌套默认子对象创建（会 Template Mismatch），应作为 Actor 级默认子对象创建后 `SetupAttachment`。
+**经验教训：** 武器“实体”（`AWeapon`/`WeaponClass`）与“角色可见表现”（`UWeaponVisualComponent`/`MeshAsset`）职责分离，共用同一行数据；形参命名注意避免与 UE 基类成员冲突；UE 中场景子组件不要在组件构造器里用嵌套默认子对象创建（会 Template Mismatch），应作为 Actor 级默认子对象创建后 `SetupAttachment`；AnimNotify 类按 Montage 类别归档目录（`Animation/AnimNotifies/<类别>/`），不按具体 Montage 命名，便于同类通知复用。
 
 ### 2026-08-02 | 程序 ⚡
 

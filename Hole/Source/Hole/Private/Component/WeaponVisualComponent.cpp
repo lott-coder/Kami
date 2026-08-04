@@ -41,29 +41,43 @@ void UWeaponVisualComponent::BeginPlay()
 
 	if (ACharacter* Character = Cast<ACharacter>(GetOwner()))
 	{
-		if (USkeletalMeshComponent* CharacterMesh = Character->GetMesh())
+		CachedMesh = Character->GetMesh();
+	}
+
+	AttachWeaponToSocket(BackSocketName);
+	RefreshWeaponVisual();
+}
+
+void UWeaponVisualComponent::AttachWeaponToSocket(FName SocketName)
+{
+	if (!CachedMesh)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::AttachWeaponToSocket - owner '%s' has no skeletal mesh, weapon visual disabled"),
+			*GetNameSafe(GetOwner()));
+		return;
+	}
+
+	const FName FinalSocket = SocketName.IsNone() ? BackSocketName : SocketName;
+	if (CachedMesh->DoesSocketExist(FinalSocket))
+	{
+		if (!AttachToComponent(CachedMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, FinalSocket))
 		{
-			const FName SocketName = BackSocketName.IsNone() ? TEXT("weapon_back") : BackSocketName;
-			if (CharacterMesh->DoesSocketExist(SocketName))
-			{
-				AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetIncludingScale, SocketName);
-			}
-			else
-			{
-				SetRelativeTransform(BackAttachOffset);
-				AttachToComponent(CharacterMesh, FAttachmentTransformRules::KeepRelativeTransform);
-				UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::BeginPlay - socket '%s' not found on '%s', fallback to mesh root"),
-					*SocketName.ToString(), *GetNameSafe(CharacterMesh->GetSkeletalMeshAsset()));
-			}
+			UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::AttachWeaponToSocket - attach to socket '%s' failed"), *FinalSocket.ToString());
+		}
+	}
+	else
+	{
+		SetRelativeTransform(BackAttachOffset);
+		if (!AttachToComponent(CachedMesh, FAttachmentTransformRules::KeepRelativeTransform))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::AttachWeaponToSocket - fallback attach to mesh root failed"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::BeginPlay - owner '%s' has no skeletal mesh, weapon visual disabled"),
-				*GetNameSafe(GetOwner()));
+			UE_LOG(LogTemp, Warning, TEXT("UWeaponVisualComponent::AttachWeaponToSocket - socket '%s' not found on '%s', fallback to mesh root"),
+				*FinalSocket.ToString(), *GetNameSafe(CachedMesh->GetSkeletalMeshAsset()));
 		}
 	}
-
-	RefreshWeaponVisual();
 }
 
 void UWeaponVisualComponent::SetWeaponVisible(bool bShow)

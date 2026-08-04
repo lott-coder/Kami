@@ -77,9 +77,11 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 ### Weapon visual mounting (2026-08-04)
 - `UWeaponVisualComponent` (a `USceneComponent` subclass, default subobject on `ABaseCharacter`) mounts the equipped weapon's `MeshAsset` (from `DT_WeaponConfig`) onto the character's back socket (`BackSocketName`, default `weapon_back`; falls back to mesh root + `BackAttachOffset`).
 - `WeaponMesh` is an actor-level default subobject created in `ABaseCharacter` and attached via `SetupAttachment(WeaponVisualComponent)`; do NOT create it as a nested default subobject inside the component constructor (UE fails to instance it → `Template Mismatch during attachment`, mesh stays at world origin).
+- `UWeaponVisualComponent::AttachWeaponToSocket(FName)` moves the weapon between sockets (`BackSocketName` default `weapon_back`, `HandSocketName` default `hand_r`); `UAnimNotify_Hold` (under `Animation/AnimNotifies/Entrance/`) triggers it during the player entry Montage. AnimNotify classes are organized by Montage category directories (`Animation/AnimNotifies/<Category>/`), not named per Montage.
 - `UInventoryComponent::OnWeaponChanged(FName)` broadcasts on equip/unequip (`NAME_None` = unequip); the visual component subscribes instead of polling.
 - `SetWeaponVisible(bool)` is reserved for future combat draw/sheath; currently the weapon is always visible on the back.
 - `AWeapon` / `WeaponClass` remains the future weapon-actor placeholder and is separate from the visual mounting path (both share the same `FWeaponConfigRow`).
+- Battle terminology: the Boss opening sequence is a **cinematic (剧情动画)**; the player entry Montage plays after the battle starts (HUD already visible) and `UAnimNotify_Hold` moves the weapon to the hand.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

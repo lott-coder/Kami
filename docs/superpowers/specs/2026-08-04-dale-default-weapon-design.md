@@ -79,6 +79,20 @@ Scripts/create_datatables.py（唯一数据源）
 
 与 `AWeapon`（`Weapon.h`）的关系：`AWeapon` 是武器 Actor 占位（对应 `WeaponClass`），本组件直接使用 `MeshAsset` 做角色可见表现，两者共用同一行数据但职责分离，不冲突。
 
+### 7. 入场拔刀通知（已确认）
+
+- 新增 `UAnimNotify_Hold`，按 Montage 类别归档于 `Animation/AnimNotifies/Entrance/`（不按具体 Montage 命名；后续其他 Montage 类别各自建目录）。
+- 触发时调用 `UWeaponVisualComponent::AttachWeaponToSocket(HandSocketName)`（默认 `hand_r`），把武器从背上转移到手部。
+- `UWeaponVisualComponent` 新增 `HandSocketName`、`AttachWeaponToSocket(FName)`，缓存网格引用；`BeginPlay` 背部挂载复用同一方法。
+- 流程定名：Boss 开场动画为**剧情动画**；玩家入场动画在战斗开始（Boss 剧情结束、战斗 HUD 已出现）后播放，`UBattleComponent` 现有 `PlayerEntryMontage` 时序不变。
+
+### 8. 编辑器操作（用户执行）
+
+1. 重启编辑器加载新 DLL。
+2. 打开 `MTG_DrawGreatSword`，把现有 `Hold` 通知右键 **Change to → AnimNotify_Hold**（保留名称与位置）。
+3. 通知放在剑到达手部的帧；如手型不对，调骨骼 `hand_r` socket 朝向。
+4. PIE：Boss 剧情动画结束 → HUD 出现 → 入场 Montage → `Hold` 触发时武器从背转移到手。
+
 ## Files
 
 | 文件 | 改动 |
@@ -90,6 +104,7 @@ Scripts/create_datatables.py（唯一数据源）
 | `DevLog.md` | 合并一条 2026-08-04 记录（策划/程序） |
 | `/Game/DataTable/DT_WeaponConfig`、`DT_CharacterConfig` | 用户手动编辑（不运行命令let） |
 | `Hole/Source/Hole/Public/Component/WeaponVisualComponent.h` + `Private/Component/WeaponVisualComponent.cpp` | 新增：背上武器显示组件 |
+| `Hole/Source/Hole/Public/Animation/AnimNotifies/Entrance/AnimNotify_Hold.h` + `Private/Animation/AnimNotifies/Entrance/AnimNotify_Hold.cpp` | 新增：入场 Montage 拔刀通知 |
 | `Hole/Source/Hole/Public/Component/InventoryComponent.h` + `Private/Component/InventoryComponent.cpp` | 新增 `OnWeaponChanged` 委托并广播 |
 | `Hole/Source/Hole/Public/Character/BaseCharacter.h` + `Private/Character/BaseCharacter.cpp` | 新增默认子对象 `WeaponVisualComponent` |
 | 本文件 | 设计文档 |

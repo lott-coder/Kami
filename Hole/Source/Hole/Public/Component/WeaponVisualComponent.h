@@ -42,6 +42,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponVisual|Config")
 	FTransform BackAttachOffset = FTransform::Identity;
 
+	/** 手部挂载 socket 名（入场拔刀通知触发时使用） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponVisual|Config")
+	FName HandSocketName = TEXT("hand_r");
+
 	/** 武器 Static Mesh 组件（BP 中可微调相对 Transform） */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "WeaponVisual")
 	TObjectPtr<UStaticMeshComponent> WeaponMesh;
@@ -49,10 +53,18 @@ public:
 	/** 由 Actor 构造器传入已创建好的武器网格组件（Actor 级默认子对象，避免嵌套子对象实例化问题） */
 	void SetWeaponMeshComponent(UStaticMeshComponent* InMesh);
 
+	/** 把武器挂到指定 socket（背部/手部通用；socket 缺失回退网格根节点 + BackAttachOffset） */
+	UFUNCTION(BlueprintCallable, Category = "WeaponVisual")
+	void AttachWeaponToSocket(FName SocketName);
+
 private:
 	/** Inventory 武器变化回调 */
 	UFUNCTION()
 	void HandleWeaponChanged(FName WeaponID);
+
+	/** 缓存的主人网格体 */
+	UPROPERTY(Transient)
+	TObjectPtr<USkeletalMeshComponent> CachedMesh;
 
 	/** 显示开关（后续战斗系统控制拔出/收回） */
 	bool bWeaponVisible = true;

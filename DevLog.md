@@ -51,6 +51,7 @@
 6. 蓄力规则细化：红防/白攻会清空自身蓄力层数（不获得蓄力加成）；蓄力满上限后不能再选蓄力（玩家入口拦截 + HUD 禁用 + 敌人 AI 排除该选项）；敌人侧红防/白攻同样清空层数。
 7. 战斗结束收刀：`UBattleComponent::SheathePlayerWeapon()` 在胜利清理/失败重开/调试结束时把武器直接挂回背部 socket（`AttachWeaponToSocket(BackSocketName)`，**无收刀动画**），并停止入场拔刀 Montage 防止通知回调再次拔刀；`bWeaponDrawn` 自动置回 false，玩家动画回到未拔刀 Idle。
 8. 规则确认收口：额外回合触发条件=对方出白攻（白攻已清空出刀方自身层数，无需额外清空对方残留层数）；蓝攻打断蓄力/蓄力被蓝攻打断均清空对方层数（已实现）。文档同步（GDD v0.8 / DataTable_Spec v0.8 / AGENTS.md / 计划书）并推送远程 GitHub。
+9. 收尾确认：`WBP_CombatHUD` 控件树已补全；`WBP_BattleResult` 暂不创建（基础战斗系统完善后再做，当前战斗结束仅日志提示未配置）；PIE 初步验证无明显问题，后续 Bug 另行修复。
 
 **结果/解决方案：** 编译通过。待编辑器操作：`WBP_CombatHUD` 删除 5 个旧控件并补按钮描述；新建 `WBP_BattleResult`（父类 `UBattleResultHUDWidget`，含 `ResultText` 控件）。
 

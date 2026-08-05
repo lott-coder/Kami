@@ -2767,5 +2767,6 @@ git commit -m "docs(combat): record combat v1 implementation and decisions"
 
 ## 执行状态（2026-08-05）
 
-- C++ Tasks 1-9 已完成并提交（`9d7b6bf..a9372d2`）；Task 10 编辑器资产接线由用户手动进行中；PIE 全流程验证待完成。
+- C++ Tasks 1-9 已完成并提交（`9d7b6bf..a9372d2`）；Task 10 编辑器资产接线基本完成（`WBP_CombatHUD` 控件树已补全；`WBP_BattleResult` 暂缓创建，基础战斗系统完善后再做）。
 - 文档同步：GDD v0.8 / DataTable_Spec v0.8 / AGENTS.md / DevLog 2026-08-05；已推送远程 GitHub。
+- PIE 初步验证无明显问题；后续出现 Bug 再另行修复。

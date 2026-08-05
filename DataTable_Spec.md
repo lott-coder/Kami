@@ -2,7 +2,7 @@
 
 > **版本：** v0.9
 > **日期：** 2026-08-05
-> **关联策划案：** GDD_Outline.md v0.8
+> **关联策划案：** GDD_Outline.md v0.9
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -1226,3 +1226,4 @@ DT_CombatParams (单例，无外键)
 > | v0.6 | 2026-08-02 | DT_BattleStage 扩展 Spring/位移选项：Boss/玩家本地空间偏移与朝向偏航、FOV、SocketOffset、TargetOffset、镜头滞后开关与速度 |
 > | v0.7 | 2026-08-04 | 新增主角默认武器 `dale_sword`（漂泊者短剑，单手剑系，MeshAsset=SM_Sword_B）；`drifter.DefaultWeaponID` 落库；C++ 新增 `UWeaponVisualComponent` 背上挂载与 `UInventoryComponent::OnWeaponChanged` 委托 |
 > | v0.8 | 2026-08-05 | 战斗系统 v1 规则落地说明：蓝攻需 ≥1 层蓄力（0 层基础值保留为倍率基数），同步 GDD v0.8 |
+> | v0.9 | 2026-08-05 | 新增 13 号表 `DT_CombatAnimConfig`（`FCombatAnimRow` + `FAnimRef`，一行一实体，19 个动作列）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`；同步 GDD v0.9 |

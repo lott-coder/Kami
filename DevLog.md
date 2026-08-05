@@ -38,6 +38,21 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-05 | 策划 ⚡ + 程序
+
+**事项：** 战斗动画表定案并接入 v1——新增 13 号表 `DT_CombatAnimConfig`（`FAnimRef` + `FCombatAnimRow`），`UBattleComponent` 按行动/结算/碰撞播放玩家与敌人 Montage，支持玩家碰撞准备姿态与"格挡成功=弹反+金色反击"连播。
+
+**处理过程：**
+1. 动画表定案（用户确认）：收刀动画留空、敌人动画先占位、蓝攻不分蓄力层级共用一条；玩家增加同色碰撞准备姿态（`ClashReady`，碰撞期间 Idle 切换，结束后回退）；敌人增加金色反击（红防成功触发）；格挡成功后先播 `BlockSuccess` 弹反、播完再接 `GoldCounter`。
+2. DataTable_Spec v0.9 新增 13 号表 `DT_CombatAnimConfig`：一行一个实体（v1：`drifter`/`satan`），19 个 `FAnimRef` 动作列（Montage 软引用 + Section + PlayRate + BlendOutTime）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`。设计说明落 `docs/superpowers/specs/2026-08-05-combat-anim-design.md`，实现计划落 `docs/superpowers/plans/2026-08-05-combat-animations.md`。
+3. C++：新增 `FAnimRef`/`FCombatAnimRow`；`UCombatFormulaSubsystem::GetCombatAnimRow()` 读表；`UBaseCharacterAnimInstance` 暴露 `bClashReady`/`SetClashReady`；`UBattleComponent` 新增播放辅助（`GetCombatAnimRow/PlayCombatAnim/PlayActionAnim/PlayResolutionAnimations`），普通回合按"受击 > 金色反击 > 蓄力被打断 > 行动动画"编排，碰撞阶段播敌方前摇 + 玩家准备姿态，结算后复位；格挡成功连播用 `OnMontageEnded` 回调；入场 Montage 优先读表 `Entry`（BP 字段回退）；收刀时 `StopAllMontages` 并复位连播/准备状态；结算时败方播 `Death`、胜方播 `Victory`。
+4. 三个数据表脚本（create/verify/export）同步 13 号表（不运行重建，避免覆盖手动编辑）。
+5. 编译通过（7 次提交：`7b327aa..06cae5d`）。
+
+**结果/解决方案：** 战斗动画接入代码完成，表资产与占位动画待编辑器操作：新建 `DT_CombatAnimConfig` 填 `drifter`/`satan` 行、填占位动画、ABP_Dale 增加 `ClashReady` 状态、PIE 验证（10 项清单见实现计划 Task 9）。
+
+**经验教训：** 动画事件以 DataTable 一行一实体 + `FAnimRef` 软引用承载，播放/回落逻辑留在组件层，符合三层架构；状态型姿态（碰撞准备）沿用 `bWeaponDrawn` 的 AnimInstance 状态变量模式，避免 ABP 硬编码 Cast。
+
 ### 2026-08-05 | 程序 ⚡
 
 **事项：** 战斗 HUD 结构调整——行动按钮增加文字描述（BP 侧）、同色碰撞提示从 HUD 移除、结算横幅独立为单独 HUD。

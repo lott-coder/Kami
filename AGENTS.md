@@ -8,8 +8,8 @@
 - **Engine:** Unreal Engine 5.6, project root `d:\UE5\UE_project\Kami`, UE project in the `Hole/` subdirectory
 - **Game:** Hole — a roguelike semi-turn-based RPG with red/blue/white three-color counters + real-time parry/dodge + time loop
 - **Key documents:**
-  - `GDD_Outline.md` — game design document (v0.8, 19 chapters); the reference baseline for design and implementation
-  - `DataTable_Spec.md` — data table specification (v0.8, 12 tables); the basis for C++ USTRUCT definitions
+  - `GDD_Outline.md` — game design document (v0.9, 19 chapters); the reference baseline for design and implementation
+  - `DataTable_Spec.md` — data table specification (v0.9, 13 tables); the basis for C++ USTRUCT definitions
   - `DevLog.md` — development log (timeline + key decisions + FAQ)
 - **Version control:** Git (branch master), remote managed via GitHub MCP; generated directories (`Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, etc.) are not tracked
 
@@ -98,6 +98,12 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - HUD: `UCombatHUDWidget` + `WBP_CombatHUD` (state bars, action buttons with descriptions and hover scale `HoverScale`); the result banner is a separate `UBattleResultHUDWidget` + `WBP_BattleResult` (default `/Game/UI/HUD/WBP_BattleResult`, viewport layer 20). `WBP_BattleResult` asset creation is deferred until the basic combat loop is finalized; until then `FinishBattle` logs a warning and shows no banner. Same-color clash text prompts were removed; gameplay timers remain and dedicated collision animations are the planned prompt.
 - Stage/camera tuning lives in `DT_BattleStage` (12th table, `FCombatStageRow`, row `Default`): player offset (world or boss-local), facing yaw offsets, camera pitch/yaw/arm/FOV/SocketOffset/TargetOffset/lag. Battle start snapshots exploration transform/camera and restores on end; the player landing spot is ground-traced to avoid falling.
 - Battle end: `SheathePlayerWeapon()` attaches the weapon back to `BackSocketName` directly (no sheath animation) and stops the entry Montage, so the player returns to the not-drawn Idle; runs on victory cleanup, defeat restart, and debug end.
+
+### Combat animations (2026-08-05)
+- `DT_CombatAnimConfig` (13th table; `FCombatAnimRow` + `FAnimRef`) — one row per combat entity; each action column is a Montage soft reference + `SectionName` + `PlayRate` + `BlendOutTime`; lookup via `UCombatFormulaSubsystem::GetCombatAnimRow(EntityID)`; playback orchestration lives in `UBattleComponent`.
+- Fallback conventions (runtime, not USTRUCT): empty `BlockFail`/`DodgeFail`/`ChargeInterrupted` → play `Hurt`; block success plays `BlockSuccess` (parry) first, then `GoldCounter` via the `OnMontageEnded` callback guarded by `bBlockSuccessChainPending`.
+- Player clash-ready state: `UBaseCharacterAnimInstance::bClashReady` + `SetClashReady(bool)`, set by `UBattleComponent` in `StartClash` and cleared in `ResolveClash`/`SheathePlayerWeapon`; ABP switches Idle → ClashReady stance (same mirror pattern as `bWeaponDrawn`).
+- Entry montage reads the table `Entry` first; `UBattleComponent::PlayerEntryMontage`/`PlayerEntrySectionName` remain BP fallbacks. `SheathePlayerWeapon` stops all montages and unbinds the block-success chain delegate.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

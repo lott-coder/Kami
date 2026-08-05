@@ -128,6 +128,9 @@ public:
 	int32 GetPlayerChargeStacks() const { return PlayerChargeStacks; }
 
 	UFUNCTION(BlueprintPure, Category = "Battle")
+	int32 GetPlayerMaxChargeStacks() const { return GetMaxChargeStacks(true); }
+
+	UFUNCTION(BlueprintPure, Category = "Battle")
 	int32 GetEnemyChargeStacks() const { return EnemyChargeStacks; }
 
 	UFUNCTION(BlueprintPure, Category = "Battle")

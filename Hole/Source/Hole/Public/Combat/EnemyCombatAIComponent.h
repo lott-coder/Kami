@@ -25,4 +25,8 @@ public:
 	/** 选择敌人本回合行动；bExtraTurn=true 时返回 BlueAttack 或 Charge */
 	UFUNCTION(BlueprintCallable, Category = "EnemyAI")
 	EBattleAction ChooseAction(int32 RoundNumber, EBattleAction LastPlayerAction, bool bExtraTurn, int32 ChargeStacks) const;
+
+private:
+	/** 从 Owner 属性读取最大蓄力层数（回退 2） */
+	int32 GetMaxChargeStacks() const;
 };

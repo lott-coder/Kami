@@ -20,6 +20,7 @@
 6. **HUD 结构调整（2026-08-05）**：同色碰撞提示（ClashPanel/ClashPromptText/ClashWindowBar）与结算横幅（ResultPanel/ResultText）从 `WBP_CombatHUD` 移除；新增独立结算 HUD `UBattleResultHUDWidget` + `WBP_BattleResult`（`/Game/UI/HUD/WBP_BattleResult`，`BattleResultHUDClass` 默认自动加载）；行动按钮文字描述由 WBP 静态文本提供。
 7. **按钮悬停缩放（2026-08-05）**：`UCombatHUDWidget::HoverScale`（默认 1.1，设为 1.0 可关闭）自动绑定 5 个行动按钮 OnHovered/OnUnhovered，围绕按钮中心缩放，无需 BP 连线。
 8. **蓝攻蓄力门槛（2026-08-05）**：蓝攻需要 ≥1 层蓄力才能使用（玩家入口拦截 + HUD 按钮禁用），使用后清空层数；敌人 AI 同样遵守（0 层不选蓝攻）。
+9. **蓄力规则细化（2026-08-05）**：红防/白攻清空自身蓄力层数（无加成）；蓄力满上限后不能再蓄力（玩家入口拦截 + HUD 禁用 + AI 排除）；敌人侧同样生效。
 
 ## Global Constraints
 

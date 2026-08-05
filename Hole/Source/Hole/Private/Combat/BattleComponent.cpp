@@ -170,6 +170,11 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓝攻需要至少 1 层蓄力"));
 		return;
 	}
+	if (Action == EBattleAction::Charge && PlayerChargeStacks >= GetMaxChargeStacks(true))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓄力已达上限"));
+		return;
+	}
 	if (bPlayerExtraTurnPending && Action != EBattleAction::BlueAttack && Action != EBattleAction::Charge)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 额外回合只能蓝攻或蓄力"));
@@ -308,22 +313,28 @@ void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 	{
 		EnemyChosenAction = EnemyAI->ChooseAction(RoundNumber, PlayerLastAction, bExtraTurn, EnemyChargeStacks);
 	}
-	else if (bExtraTurn)
-	{
-		EnemyChosenAction = (EnemyChargeStacks > 0 && FMath::RandBool()) ? EBattleAction::BlueAttack : EBattleAction::Charge;
-	}
 	else
 	{
-		// 蓝攻需要至少 1 层蓄力；其余行动始终可选
+		const int32 MaxStacks = GetMaxChargeStacks(false);
 		TArray<EBattleAction> Options;
-		Options.Add(EBattleAction::RedDefense);
-		Options.Add(EBattleAction::WhiteAttack);
-		Options.Add(EBattleAction::Charge);
-		if (EnemyChargeStacks > 0)
+		if (bExtraTurn)
 		{
-			Options.Add(EBattleAction::BlueAttack);
+			// 额外回合：只能 出蓝刀 或 继续蓄力
+			if (EnemyChargeStacks > 0) Options.Add(EBattleAction::BlueAttack);
+			if (EnemyChargeStacks < MaxStacks) Options.Add(EBattleAction::Charge);
+			EnemyChosenAction = Options.Num() > 0
+				? Options[FMath::RandRange(0, Options.Num() - 1)]
+				: EBattleAction::RedDefense;
 		}
-		EnemyChosenAction = Options[FMath::RandRange(0, Options.Num() - 1)];
+		else
+		{
+			// 蓝攻需 ≥1 层蓄力；蓄力满上限后不能再蓄力
+			Options.Add(EBattleAction::RedDefense);
+			Options.Add(EBattleAction::WhiteAttack);
+			if (EnemyChargeStacks > 0) Options.Add(EBattleAction::BlueAttack);
+			if (EnemyChargeStacks < MaxStacks) Options.Add(EBattleAction::Charge);
+			EnemyChosenAction = Options[FMath::RandRange(0, Options.Num() - 1)];
+		}
 	}
 }
 
@@ -503,6 +514,16 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 	}
 	default:
 		break;
+	}
+
+	// 攻击（白攻）与防御（红防）会清空自身蓄力层数，且不获得蓄力加成（加成只属于蓝攻）
+	if (PlayerAction == EBattleAction::RedDefense || PlayerAction == EBattleAction::WhiteAttack)
+	{
+		PlayerChargeStacks = 0;
+	}
+	if (EnemyAction == EBattleAction::RedDefense || EnemyAction == EBattleAction::WhiteAttack)
+	{
+		EnemyChargeStacks = 0;
 	}
 
 	return R;

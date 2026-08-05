@@ -224,6 +224,9 @@ private:
 	UFUNCTION()
 	void OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
+	/** 战斗结束：败方播 Death，胜方播 Victory（空引用跳过） */
+	void PlayDeathAnimations(bool bPlayerWon);
+
 	// ==================== 数值辅助（只调子系统） ====================
 
 	float GetPlayerWhiteDamage() const;

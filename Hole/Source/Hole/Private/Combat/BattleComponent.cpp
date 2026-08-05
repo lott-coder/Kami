@@ -1351,6 +1351,20 @@ void UBattleComponent::OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bI
 	}
 }
 
+void UBattleComponent::PlayDeathAnimations(bool bPlayerWon)
+{
+	if (const FCombatAnimRow* LoserRow = GetCombatAnimRow(!bPlayerWon))
+	{
+		ABaseCharacter* Loser = bPlayerWon ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
+		PlayCombatAnim(Loser, LoserRow->Death);
+	}
+	if (const FCombatAnimRow* WinnerRow = GetCombatAnimRow(bPlayerWon))
+	{
+		ABaseCharacter* Winner = bPlayerWon ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
+		PlayCombatAnim(Winner, WinnerRow->Victory);
+	}
+}
+
 void UBattleComponent::SheathePlayerWeapon()
 {
 	if (PlayerRole.IsValid())
@@ -1383,6 +1397,7 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 
 	SetPhase(EBattlePhase::Ended);
 	ClearClashTimers();
+	PlayDeathAnimations(bPlayerWon);
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);

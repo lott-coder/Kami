@@ -1105,13 +1105,13 @@ enum class EConsumableType : uint8
 | `Entry` | `FAnimRef` | 入场拔刀（玩家） |
 | `Sheathe` | `FAnimRef` | 收刀；v1 留空（无收刀动画） |
 | `RedDefense` | `FAnimRef` | 红色防御姿态（循环） |
-| `GoldCounter` | `FAnimRef` | 金色反击（红防克蓝攻 / 格挡成功；玩家与敌人都可填） |
+| `GoldCounter` | `FAnimRef` | 金色反击（红防克蓝攻 / 格挡成功后衔接；玩家与敌人都可填） |
 | `BlueAttack` | `FAnimRef` | 蓝色攻击；v1 不分蓄力层级，共用一条 |
 | `WhiteAttack` | `FAnimRef` | 白色攻击 |
 | `Charge` | `FAnimRef` | 蓄力姿态（循环） |
 | `ChargeInterrupted` | `FAnimRef` | 蓄力被打断；空 = 回落 `Hurt` |
 | `Hurt` | `FAnimRef` | 受击（含格挡失败/闪避失败回落） |
-| `BlockSuccess` | `FAnimRef` | 格挡成功（弹反 → 金色反击） |
+| `BlockSuccess` | `FAnimRef` | 格挡成功弹反动作；播完后衔接 `GoldCounter` |
 | `BlockFail` | `FAnimRef` | 格挡失败；空 = 回落 `Hurt` |
 | `DodgeSuccess` | `FAnimRef` | 闪避成功 |
 | `DodgeFail` | `FAnimRef` | 闪避失败；空 = 回落 `Hurt` |
@@ -1122,7 +1122,7 @@ enum class EConsumableType : uint8
 | `ClashTelegraphBlue` | `FAnimRef` | 蓝 vs 蓝碰撞前摇（敌方攻击提示） |
 | `ClashTelegraphWhite` | `FAnimRef` | 白 vs 白碰撞前摇（敌方攻击提示） |
 
-> **回落约定（运行时逻辑，不属于 USTRUCT）：** `BlockFail`/`DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；红 vs 红、双蓄力等"无事发生"回合不播动作。
+> **回落约定（运行时逻辑，不属于 USTRUCT）：** `BlockFail`/`DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；格挡成功时先播 `BlockSuccess`（弹反），播完再播 `GoldCounter`（金色反击）；红 vs 红、双蓄力等"无事发生"回合不播动作。
 
 ### 15.4 行数据（v1）
 

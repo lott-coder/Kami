@@ -25,13 +25,13 @@
 | `entry_draw` | 入场拔刀 | 战斗开始，HUD 出现后 | Montage（`Draw` Section + `AnimNotify_Hold`） | ✅ `MTG_DrawGreatSword`（大剑动作占位） |
 | `sheathe` | 收刀 | 战斗结束 | Montage | ⬜ 留空 |
 | `red_defense` | 红防姿态 | 选择红防时 | 循环姿态 | ❌ 待资产 |
-| `gold_counter` | 金色反击 | 红防克蓝攻 / 格挡成功 | 一次性挥砍 Montage | ❌ 待资产 |
+| `gold_counter` | 金色反击 | 红防克蓝攻 / 格挡成功后衔接 | 一次性挥砍 Montage | ❌ 待资产 |
 | `blue_attack` | 蓝攻 | 选择蓝攻（≥1 蓄力） | Montage + 伤害通知 | ❌ 待资产 |
 | `white_attack` | 白攻 | 选择白攻 | 快速 Montage | ❌ 待资产 |
 | `charge` | 蓄力姿态 | 选择蓄力后持续 | 循环动画 | ❌ 待资产 |
 | `charge_interrupted` | 蓄力被打断 | 蓝攻打断蓄力 / 蓝攻被红防克制清层 | Montage | ❌ 可先复用 `hurt` |
 | `hurt` | 受击 | 受到伤害（含格挡/闪避失败） | Montage | ❌ 待资产 |
-| `block_success` | 格挡成功 | 同色碰撞按 E 成功 | Montage（弹反 → 金色反击） | ❌ 待资产 |
+| `block_success` | 格挡成功 | 同色碰撞按 E 成功 | Montage（弹反动作，播完接 `gold_counter`） | ❌ 待资产 |
 | `block_fail` | 格挡失败 | 按 E 失败或未按 | 复用 `hurt` | 可复用 |
 | `dodge_success` | 闪避成功 | 同色碰撞按 Shift 成功 | Montage（侧闪/翻滚） | ❌ 待资产 |
 | `dodge_fail` | 闪避失败 | Shift 失败 | 复用 `hurt` | 可复用 |
@@ -64,7 +64,7 @@
   → 敌方播放 ClashTelegraph{Blue|White} 前摇（对齐 ClashTelegraphTime = 0.8s）
   → 玩家进入 ClashReady 准备姿态（战斗 Idle 切换，AnimInstance 暴露 bClashReady）
   → 判定窗口：格挡 E（0.25s）/ 闪避 Shift（0.35s）
-      ├─ 格挡成功 → BlockSuccess（金色反击）
+      ├─ 格挡成功 → BlockSuccess（弹反）→ GoldCounter（金色反击）
       ├─ 闪避成功 → DodgeSuccess
       └─ 失败/未按 → Hurt（闪避失败伤害 ×1.2）
   → 双方回战斗 Idle（bClashReady 复位）
@@ -78,7 +78,7 @@
 
 - 行 ID：实体 ID（v1：`drifter`、`satan`）
 - 列：`DisplayName` + 19 个 `FAnimRef` 动作列（`Entry / Sheathe / RedDefense / GoldCounter / BlueAttack / WhiteAttack / Charge / ChargeInterrupted / Hurt / BlockSuccess / BlockFail / DodgeSuccess / DodgeFail / Death / Victory / Skill / ClashReady / ClashTelegraphBlue / ClashTelegraphWhite`）
-- 回落约定（运行时逻辑）：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`
+- 回落约定（运行时逻辑）：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`；格挡成功先播 `BlockSuccess`（弹反），播完再接 `GoldCounter`（金色反击）
 
 ### `FAnimRef` 嵌套结构
 
@@ -106,10 +106,11 @@ struct FAnimRef
 
 1. **C++**：新增 `FCombatAnimRow` + `FAnimRef`（`Public/DataTable/CombatAnimConfigTable.h`）；`UCombatFormulaSubsystem` 或新战斗动画组件提供 `GetCombatAnimRow(EntityID)`；`UBattleComponent` 在回合结算/碰撞阶段按结果播放对应 Montage。
 2. **状态型动画**：`UBaseCharacterAnimInstance` 暴露 `bClashReady`（镜像 `bWeaponDrawn` 的同步方式），ABP_Dale 增加碰撞准备状态切换；`UBattleComponent` 在 `StartClash` 置位、`ResolveClash`/清理时复位。
-3. **入口配置迁移**：玩家入场 Montage 从 `UBattleComponent::PlayerEntryMontage` 改为读表 `Entry`（BP 字段保留作回退）。
-4. **通知约定**：伤害/命中帧用 Montage 内 AnimNotify 表达；新通知类按类别归档在 `Animation/AnimNotifies/<类别>/`。
-5. **脚本同步**：`Scripts/create_datatables.py`、`verify_datatables.py`、`export_datatables.py` 增加 13 号表（等 C++ 结构体落地后再启用，避免重建失败）。
-6. **编辑器资产**：`DT_CombatAnimConfig` 建表并填 `drifter`/`satan` 两行；动画资产按上表补齐（先占位跑通流程）。
+3. **格挡成功连播**：格挡成功时先播 `BlockSuccess`（弹反动作），Montage 播完回调再播 `GoldCounter`（金色反击），两者各自独立配置在表内。
+4. **入口配置迁移**：玩家入场 Montage 从 `UBattleComponent::PlayerEntryMontage` 改为读表 `Entry`（BP 字段保留作回退）。
+5. **通知约定**：伤害/命中帧用 Montage 内 AnimNotify 表达；新通知类按类别归档在 `Animation/AnimNotifies/<类别>/`。
+6. **脚本同步**：`Scripts/create_datatables.py`、`verify_datatables.py`、`export_datatables.py` 增加 13 号表（等 C++ 结构体落地后再启用，避免重建失败）。
+7. **编辑器资产**：`DT_CombatAnimConfig` 建表并填 `drifter`/`satan` 两行；动画资产按上表补齐（先占位跑通流程）。
 
 ## 资产现状与获取
 

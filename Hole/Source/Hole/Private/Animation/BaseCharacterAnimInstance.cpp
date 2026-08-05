@@ -10,6 +10,11 @@
 #include "WorldCollision.h"
 #include "CollisionQueryParams.h"
 
+void UBaseCharacterAnimInstance::SetClashReady(bool bReady)
+{
+	bClashReady = bReady;
+}
+
 void UBaseCharacterAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();

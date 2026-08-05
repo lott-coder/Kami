@@ -53,6 +53,14 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Animation")
 	bool bWeaponDrawn = false;
 
+	/** 同色碰撞准备阶段：由战斗组件置位，ABP 切换到 ClashReady 姿态，结束后复位 */
+	UPROPERTY(BlueprintReadOnly, Category = "Animation")
+	bool bClashReady = false;
+
+	/** 设置 bClashReady（事件驱动，仅战斗组件在 Clash 阶段调用） */
+	UFUNCTION(BlueprintCallable, Category = "Animation")
+	void SetClashReady(bool bReady);
+
 protected:
 	/** 缓存的拥有者角色引用 */
 	UPROPERTY()

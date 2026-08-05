@@ -8,8 +8,8 @@
 - **Engine:** Unreal Engine 5.6, project root `d:\UE5\UE_project\Kami`, UE project in the `Hole/` subdirectory
 - **Game:** Hole — a roguelike semi-turn-based RPG with red/blue/white three-color counters + real-time parry/dodge + time loop
 - **Key documents:**
-  - `GDD_Outline.md` — game design document (v0.3, 19 chapters); the reference baseline for design and implementation
-  - `DataTable_Spec.md` — data table specification (v0.1, 11 tables); the basis for C++ USTRUCT definitions
+  - `GDD_Outline.md` — game design document (v0.8, 19 chapters); the reference baseline for design and implementation
+  - `DataTable_Spec.md` — data table specification (v0.8, 12 tables); the basis for C++ USTRUCT definitions
   - `DevLog.md` — development log (timeline + key decisions + FAQ)
 - **Version control:** Git (branch master), remote managed via GitHub MCP; generated directories (`Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, etc.) are not tracked
 
@@ -90,6 +90,14 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - `AWeapon` / `WeaponClass` remains the future weapon-actor placeholder and is separate from the visual mounting path (both share the same `FWeaponConfigRow`).
 - Battle terminology: the Boss opening sequence is a **cinematic (剧情动画)**; the player entry Montage plays after the battle starts (HUD already visible) and `UAnimNotify_Hold` moves the weapon to the hand.
 - `UBattleComponent::PlayerEntrySectionName` (default `Draw`) is passed to `PlayAnimMontage` so the entry Montage starts from the designated section (e.g. `Draw_A_Great_Sword_1 → _2`); the Montage must have both segments inside one section or chained via Next Section.
+
+### Battle System v1 (2026-08-05)
+- `UBattleComponent` (player-mounted, BP_Dale) owns the battle session: phase state machine, simultaneous-turn resolution matrix, same-color clash timers, extra turns, victory/defeat and failure restart. Damage formulas live only in `UCombatFormulaSubsystem`.
+- `UEnemyCombatAIComponent` (BP_Satan) picks enemy actions; v1 is uniform random subject to rules (BlueAttack requires >=1 charge stack, Charge disabled at max stacks, extra turn only BlueAttack/Charge).
+- Battle rules: normal neutral start (first-strike interface reserved); BlueAttack requires >=1 charge stack and clears stacks on use; RedDefense/WhiteAttack clear the actor's own charge stacks (no charge bonus); charge caps at `MaxChargeStacks` (2) and cannot be selected at cap; interrupting charge (BlueAttack vs Charge, either side) clears the charger's stacks; extra turn is triggered by WhiteAttack vs charging (resistance, x0.3 + extra turn) and only allows BlueAttack or Charge.
+- HUD: `UCombatHUDWidget` + `WBP_CombatHUD` (state bars, action buttons with descriptions and hover scale `HoverScale`); the result banner is a separate `UBattleResultHUDWidget` + `WBP_BattleResult` (default `/Game/UI/HUD/WBP_BattleResult`, viewport layer 20). Same-color clash text prompts were removed; gameplay timers remain and dedicated collision animations are the planned prompt.
+- Stage/camera tuning lives in `DT_BattleStage` (12th table, `FCombatStageRow`, row `Default`): player offset (world or boss-local), facing yaw offsets, camera pitch/yaw/arm/FOV/SocketOffset/TargetOffset/lag. Battle start snapshots exploration transform/camera and restores on end; the player landing spot is ground-traced to avoid falling.
+- Battle end: `SheathePlayerWeapon()` attaches the weapon back to `BackSocketName` directly (no sheath animation) and stops the entry Montage, so the player returns to the not-drawn Idle; runs on victory cleanup, defeat restart, and debug end.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

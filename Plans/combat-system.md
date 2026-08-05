@@ -2764,3 +2764,8 @@ git commit -m "docs(combat): record combat v1 implementation and decisions"
 
 1. **Subagent-Driven（推荐）**：每个 Task 派一个全新 subagent 执行，任务间做两阶段审查，迭代快、上下文干净。
 2. **Inline Execution**：在当前会话按 executing-plans 批量执行，设检查点供用户审查。
+
+## 执行状态（2026-08-05）
+
+- C++ Tasks 1-9 已完成并提交（`9d7b6bf..a9372d2`）；Task 10 编辑器资产接线由用户手动进行中；PIE 全流程验证待完成。
+- 文档同步：GDD v0.8 / DataTable_Spec v0.8 / AGENTS.md / DevLog 2026-08-05；已推送远程 GitHub。

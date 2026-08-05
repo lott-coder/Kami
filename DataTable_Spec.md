@@ -1,8 +1,8 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.7
-> **日期：** 2026-08-04
-> **关联策划案：** GDD_Outline.md v0.7
+> **版本：** v0.8
+> **日期：** 2026-08-05
+> **关联策划案：** GDD_Outline.md v0.8
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -143,6 +143,7 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 > **注意：** WalkSpeed/SprintSpeed 已迁移至 DT_CharacterConfig（每个角色可独立设置移动速度）。
 > **注意：** 此表用**单例模式**——一张表只有一行（RowName = `Default`），策划一次修改影响全局。
 > **注意：** `PlayerDefaultHP` 仅是全局回退值；具体角色的 MaxHP 以 DT_CharacterConfig 行值为准（如主角 drifter = 120，见 §4.3）。
+> **注意（2026-08-05）：** 蓝攻需要 ≥1 层蓄力才能使用（0 层不可选），`BlueAttackDamageMin/Max_0Charge` 保留作为 1.0 倍率基数。
 > 如果是不同难度分别配置，后续可扩展为多行（RowName = `Normal` / `Hard` / `Nightmare`）。
 
 ---
@@ -1163,3 +1164,4 @@ DT_CombatParams (单例，无外键)
 > | v0.5 | 2026-08-02 | 新增 12 号表 DT_BattleStage（战斗舞台站位/朝向/固定镜头参数），随战斗系统 v1 落地 |
 > | v0.6 | 2026-08-02 | DT_BattleStage 扩展 Spring/位移选项：Boss/玩家本地空间偏移与朝向偏航、FOV、SocketOffset、TargetOffset、镜头滞后开关与速度 |
 > | v0.7 | 2026-08-04 | 新增主角默认武器 `dale_sword`（漂泊者短剑，单手剑系，MeshAsset=SM_Sword_B）；`drifter.DefaultWeaponID` 落库；C++ 新增 `UWeaponVisualComponent` 背上挂载与 `UInventoryComponent::OnWeaponChanged` 委托 |
+> | v0.8 | 2026-08-05 | 战斗系统 v1 规则落地说明：蓝攻需 ≥1 层蓄力（0 层基础值保留为倍率基数），同步 GDD v0.8 |

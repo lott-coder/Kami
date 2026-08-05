@@ -1,6 +1,6 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.8
+> **版本：** v0.9
 > **日期：** 2026-08-05
 > **关联策划案：** GDD_Outline.md v0.8
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
@@ -23,7 +23,8 @@
 12. [10 — 消耗品配置 (DT_ConsumableConfig)](#12-10--消耗品配置)
 13. [11 — 货币/经济配置 (DT_EconomyConfig)](#13-11--货币经济配置)
 14. [12 — 战斗舞台配置 (DT_BattleStage)](#14-12--战斗舞台配置)
-15. [13 — 数据关联总览](#15-13--数据关联总览)
+15. [13 — 战斗动画配置 (DT_CombatAnimConfig)](#15-13--战斗动画配置)
+16. [数据关联总览](#16-数据关联总览)
 
 ---
 
@@ -97,6 +98,7 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | 10 | `DT_ConsumableConfig` | `FConsumableConfigRow` | `ConsumableClass` | 10 | 消耗品定义 |
 | 11 | `DT_EconomyConfig` | `FEconomyConfigRow` | — | 8 | 货币兑换率与价格基数 |
 | 12 | `DT_BattleStage` | `FCombatStageRow` | — | 1（单例） | 战斗舞台站位与固定摄像机参数 |
+| 13 | `DT_CombatAnimConfig` | `FCombatAnimRow` | — | 2（规划中，目标按实体扩充） | 战斗动画事件配置（实体 × FAnimRef） |
 
 > **实况说明（2026-08-01）：** 上表"行数"为当前资产实况；目标行数见各章节"基本信息"。
 
@@ -1074,9 +1076,66 @@ enum class EConsumableType : uint8
 
 ---
 
-## 15. 13 — 数据关联总览
+## 15. 13 — 战斗动画配置 (DT_CombatAnimConfig)
 
-### 15.1 外键引用关系
+### 15.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_CombatAnimConfig` |
+| 结构体 | `FCombatAnimRow` |
+| 行 ID | 实体 ID（`snake_case`），v1 为 `drifter`、`satan` |
+| 行数 | 2（目标：按可玩角色/敌人实体扩充） |
+| 来源 | 2026-08-05 战斗动画设计定案；承接 GDD §5.2.3/§5.2.5 的动画化落地 |
+
+### 15.2 FAnimRef 嵌套结构
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Montage` | `TSoftObjectPtr<UAnimMontage>` | 空 | 动画蒙太奇软引用；空 = 不播放或按运行约定回落 |
+| `SectionName` | `FName` | `NAME_None` | 起始 Section；空 = 从头播放 |
+| `PlayRate` | `float` | 1.0 | 播放速率 |
+| `BlendOutTime` | `float` | 0.25 | 播放结束混合出时长 |
+
+### 15.3 列定义
+
+| 列名 | 类型 | 说明 |
+|------|------|------|
+| `DisplayName` | `FText` | 行显示名 |
+| `Entry` | `FAnimRef` | 入场拔刀（玩家） |
+| `Sheathe` | `FAnimRef` | 收刀；v1 留空（无收刀动画） |
+| `RedDefense` | `FAnimRef` | 红色防御姿态（循环） |
+| `GoldCounter` | `FAnimRef` | 金色反击（红防克蓝攻 / 格挡成功；玩家与敌人都可填） |
+| `BlueAttack` | `FAnimRef` | 蓝色攻击；v1 不分蓄力层级，共用一条 |
+| `WhiteAttack` | `FAnimRef` | 白色攻击 |
+| `Charge` | `FAnimRef` | 蓄力姿态（循环） |
+| `ChargeInterrupted` | `FAnimRef` | 蓄力被打断；空 = 回落 `Hurt` |
+| `Hurt` | `FAnimRef` | 受击（含格挡失败/闪避失败回落） |
+| `BlockSuccess` | `FAnimRef` | 格挡成功（弹反 → 金色反击） |
+| `BlockFail` | `FAnimRef` | 格挡失败；空 = 回落 `Hurt` |
+| `DodgeSuccess` | `FAnimRef` | 闪避成功 |
+| `DodgeFail` | `FAnimRef` | 闪避失败；空 = 回落 `Hurt` |
+| `Death` | `FAnimRef` | 倒地/失败 |
+| `Victory` | `FAnimRef` | 胜利姿态；可空 |
+| `Skill` | `FAnimRef` | 技能动作；v1 预留留空 |
+| `ClashReady` | `FAnimRef` | 玩家同色碰撞准备姿态（状态型循环；碰撞期间切换 Idle，结束后回退） |
+| `ClashTelegraphBlue` | `FAnimRef` | 蓝 vs 蓝碰撞前摇（敌方攻击提示） |
+| `ClashTelegraphWhite` | `FAnimRef` | 白 vs 白碰撞前摇（敌方攻击提示） |
+
+> **回落约定（运行时逻辑，不属于 USTRUCT）：** `BlockFail`/`DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；红 vs 红、双蓄力等"无事发生"回合不播动作。
+
+### 15.4 行数据（v1）
+
+| RowName | DisplayName | Entry.Montage | Entry.SectionName | 备注 |
+|---------|-------------|---------------|-------------------|------|
+| `drifter` | 漂泊者 | `/Game/Blueprint/Character/Roles/Dale/Animations/Entrance/MTG_DrawGreatSword` | `Draw` | 其余列空：战斗动作待资产占位，`Sheathe`/`Skill`/`Victory` 留空 |
+| `satan` | 撒旦 | 空 | — | 开场咆哮走 `LS_SatanIntro`，不入本表；其余列空/占位 |
+
+---
+
+## 16. 数据关联总览
+
+### 16.1 外键引用关系
 
 ```
 DT_CombatParams (单例，无外键)
@@ -1103,15 +1162,17 @@ DT_CombatParams (单例，无外键)
      ├── DT_ConsumableConfig
      │      └── ObtainFromSmokeType ─► DT_SmokeConfig
      │
-     └── DT_EconomyConfig (单例，无外键)
+     ├── DT_EconomyConfig (单例，无外键)
+     └── DT_CombatAnimConfig (独立，无外键；软引用 UAnimMontage 资产)
 ```
 
-### 15.2 GDD 章节 → 配置表映射
+### 16.2 GDD 章节 → 配置表映射
 
 | GDD 章节 | 主要内容 | 对应配置表 |
 |----------|----------|-----------|
 | §5.1 移动系统 | 移动速度、操作按键 | DT_CombatParams (速度), DT_CharacterConfig (角色差异化) |
 | §5.2.3-5.2.5 战斗 | 三色克制、蓄力、同色碰撞 | DT_CombatParams |
+| §5.2.5 同色碰撞动画 | 实时格挡/闪避与碰撞动画提示 | DT_CombatAnimConfig |
 | §5.2.6 技能系统 | 技能类型 | DT_SkillConfig |
 | §5.2.7 战斗参数表 | 初始数值 | DT_CombatParams |
 | §5.3.2 烟分类体系 | 9种烟 | DT_SmokeConfig |
@@ -1129,7 +1190,7 @@ DT_CombatParams (单例，无外键)
 | §8.3 关键角色 | 6个角色 | DT_CharacterConfig |
 | §14 经济系统 | 货币、产出/消耗 | DT_EconomyConfig |
 
-### 15.3 `[待定]` 项清单
+### 16.3 `[待定]` 项清单
 
 | 编号 | 位置 | 内容 | 影响范围 |
 |------|------|------|----------|

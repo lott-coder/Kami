@@ -38,6 +38,19 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-05 | 程序 ⚡
+
+**事项：** 战斗 HUD 结构调整——行动按钮增加文字描述（BP 侧）、同色碰撞提示从 HUD 移除、结算横幅独立为单独 HUD。
+
+**处理过程：**
+1. `UCombatHUDWidget` 移除碰撞提示（`ClashPanel` / `ClashPromptText` / `ClashWindowBar`）与结算横幅（`ResultPanel` / `ResultText`），删除 `NativeTick` 及 `ShowClashPrompt` / `ShowResult` 等接口；碰撞判定计时保留在 `UBattleComponent`（后续改用玩家/敌人专属碰撞动画提示）。
+2. 新增 `UBattleResultHUDWidget`（C++ 基类，BindWidget `ResultText`）与独立结算 HUD：`UBattleComponent::BattleResultHUDClass`（默认自动加载 `/Game/UI/HUD/WBP_BattleResult`），`FinishBattle` 时 `AddToViewport(20)` 显示结果，胜利清理/失败重开/调试结束时移除。
+3. 行动按钮文字描述由 WBP 静态文本承担（推荐文案：红防=防御姿态克制蓝攻；蓝攻=高伤害克制白攻；白攻=快速攻击克制红防；蓄力=最高2层强化蓝攻；技能=未实装禁用）。
+
+**结果/解决方案：** 编译通过。待编辑器操作：`WBP_CombatHUD` 删除 5 个旧控件并补按钮描述；新建 `WBP_BattleResult`（父类 `UBattleResultHUDWidget`，含 `ResultText` 控件）。
+
+**经验教训：** HUD 职责分层——状态区/行动区/实时提示/结算层分开承载；结算层独立 Widget 便于皮肤替换与后续扩展（重试/继续按钮等）。
+
 ### 2026-08-04 | 策划 ⚡ + 程序
 
 **事项：** 为 Dale（漂泊者）定案并落地默认武器：新增 `dale_sword`（漂泊者短剑，单手剑系，SM_Sword_B）；主角改为可随身携带武器（非战斗背在背上、战斗时拔出，动作后续接入）；C++ 新增背上武器显示组件。

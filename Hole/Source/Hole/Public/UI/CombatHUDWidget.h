@@ -26,25 +26,12 @@ class HOLE_API UCombatHUDWidget : public UUserWidget
 
 public:
 	virtual void NativeConstruct() override;
-	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
 	void BindToBattle(UBattleComponent* InBattle);
 
 	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
 	void SetChoiceButtonsEnabled(bool bRed, bool bBlue, bool bWhite, bool bCharge, bool bSkill);
-
-	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
-	void ShowClashPrompt(const FText& Text, float TotalTime);
-
-	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
-	void HideClashPrompt();
-
-	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
-	void ShowResult(const FText& Text);
-
-	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
-	void HideResult();
 
 protected:
 	// ---- BindWidget：名称必须与 WBP_CombatHUD 中的控件名完全一致 ----
@@ -85,21 +72,6 @@ protected:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> SkillButton;
 
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UWidget> ClashPanel;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> ClashPromptText;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UProgressBar> ClashWindowBar;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UWidget> ResultPanel;
-
-	UPROPERTY(meta = (BindWidget))
-	TObjectPtr<UTextBlock> ResultText;
-
 private:
 	UFUNCTION()
 	void OnRedDefenseClicked();
@@ -122,7 +94,4 @@ private:
 	void RefreshAll();
 
 	TWeakObjectPtr<UBattleComponent> Battle;
-	float ClashTotalTime = 0.0f;
-	float ClashRemainingTime = 0.0f;
-	bool bClashActive = false;
 };

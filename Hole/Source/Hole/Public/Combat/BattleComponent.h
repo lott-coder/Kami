@@ -11,6 +11,7 @@ class ARole;
 class AEnemy;
 class ABaseCharacter;
 class UCombatHUDWidget;
+class UBattleResultHUDWidget;
 class UEnemyCombatAIComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -48,6 +49,10 @@ public:
 	/** 战斗 HUD 类（默认自动加载 /Game/UI/WBP_CombatHUD） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	TSubclassOf<UCombatHUDWidget> CombatHUDClass;
+
+	/** 战斗结算 HUD 类（独立于战斗 HUD；默认自动加载 /Game/UI/HUD/WBP_BattleResult） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	TSubclassOf<UBattleResultHUDWidget> BattleResultHUDClass;
 
 	/** 战斗输入映射（默认自动加载 /Game/Input/IMC_Combat） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
@@ -183,6 +188,8 @@ private:
 	void UnlockPlayer();
 	void ShowHUD();
 	void HideHUD();
+	void ShowResultHUD(const FText& Text);
+	void HideResultHUD();
 
 	// ==================== 数值辅助（只调子系统） ====================
 
@@ -210,6 +217,7 @@ private:
 	TWeakObjectPtr<ARole> PlayerRole;
 	TWeakObjectPtr<AEnemy> BossEnemy;
 	TWeakObjectPtr<UCombatHUDWidget> CombatHUD;
+	TWeakObjectPtr<UBattleResultHUDWidget> ResultHUD;
 	TWeakObjectPtr<UEnemyCombatAIComponent> EnemyAI;
 
 	int32 RoundNumber = 0;

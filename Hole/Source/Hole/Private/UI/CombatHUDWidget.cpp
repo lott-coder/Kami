@@ -32,33 +32,6 @@ void UCombatHUDWidget::NativeConstruct()
 	{
 		SkillButton->OnClicked.AddDynamic(this, &UCombatHUDWidget::OnSkillClicked);
 	}
-
-	HideClashPrompt();
-	HideResult();
-}
-
-void UCombatHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
-{
-	Super::NativeTick(MyGeometry, InDeltaTime);
-
-	// 仅在同色碰撞倒计时期间做逐帧刷新（性能：不在此处刷血条）
-	if (!bClashActive)
-	{
-		return;
-	}
-
-	ClashRemainingTime -= InDeltaTime;
-	if (ClashWindowBar)
-	{
-		const float Percent = ClashTotalTime > 0.0f
-			? FMath::Clamp(ClashRemainingTime / ClashTotalTime, 0.0f, 1.0f)
-			: 0.0f;
-		ClashWindowBar->SetPercent(Percent);
-	}
-	if (ClashRemainingTime <= 0.0f)
-	{
-		bClashActive = false;
-	}
 }
 
 void UCombatHUDWidget::BindToBattle(UBattleComponent* InBattle)
@@ -127,55 +100,6 @@ void UCombatHUDWidget::SetChoiceButtonsEnabled(bool bRed, bool bBlue, bool bWhit
 	if (WhiteAttackButton) WhiteAttackButton->SetIsEnabled(bWhite);
 	if (ChargeButton) ChargeButton->SetIsEnabled(bCharge);
 	if (SkillButton) SkillButton->SetIsEnabled(bSkill);
-}
-
-void UCombatHUDWidget::ShowClashPrompt(const FText& Text, float TotalTime)
-{
-	ClashTotalTime = TotalTime;
-	ClashRemainingTime = TotalTime;
-	bClashActive = true;
-
-	if (ClashPanel)
-	{
-		ClashPanel->SetVisibility(ESlateVisibility::Visible);
-	}
-	if (ClashPromptText)
-	{
-		ClashPromptText->SetText(Text);
-	}
-	if (ClashWindowBar)
-	{
-		ClashWindowBar->SetPercent(1.0f);
-	}
-}
-
-void UCombatHUDWidget::HideClashPrompt()
-{
-	bClashActive = false;
-	if (ClashPanel)
-	{
-		ClashPanel->SetVisibility(ESlateVisibility::Collapsed);
-	}
-}
-
-void UCombatHUDWidget::ShowResult(const FText& Text)
-{
-	if (ResultPanel)
-	{
-		ResultPanel->SetVisibility(ESlateVisibility::Visible);
-	}
-	if (ResultText)
-	{
-		ResultText->SetText(Text);
-	}
-}
-
-void UCombatHUDWidget::HideResult()
-{
-	if (ResultPanel)
-	{
-		ResultPanel->SetVisibility(ESlateVisibility::Collapsed);
-	}
 }
 
 void UCombatHUDWidget::OnRedDefenseClicked()

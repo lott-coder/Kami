@@ -17,6 +17,7 @@
 3. **DT_BattleStage 扩展 Spring/位移选项（2026-08-02）**：新增 `bPlayerOffsetInBossLocalSpace`（Boss 本地/世界空间）、`BossFacingYawOffset`、`PlayerFacingYawOffset`、`CameraFOV`、`SpringSocketOffset`、`SpringTargetOffset`、`bSpringEnableCameraLag`、`SpringCameraLagSpeed`；战斗结束恢复 SocketOffset/TargetOffset/FOV。
 4. **HUD 资产路径按实际创建位置对齐**：`WBP_CombatHUD` 实际位于 `Content/HUD`，随后按用户要求迁移至 `Content/UI/HUD`（`/Game/UI/HUD/WBP_CombatHUD`），`UBattleComponent` 默认加载路径已同步。旧路径资产已删除；迁移过程中 BP_Dale 上 BattleComponent 的 4 个引用（CombatHUDClass / CombatMappingContext / BlockAction / DodgeAction）被清空，需在编辑器中重新指定。
 5. **战斗落点与入场动画（2026-08-02）**：战斗开始时对玩家落点做地面射线检测（向下 1500cm 检测、落点 Z=地面+胶囊半高），并清除移动残留速度，修复“从天上落下”；新增 `PlayerEntryMontage` 占位（BP_Dale 组件上配置，为空则跳过；有动画时播放并等播完再进第 1 回合，失败重开会重播）。
+6. **HUD 结构调整（2026-08-05）**：同色碰撞提示（ClashPanel/ClashPromptText/ClashWindowBar）与结算横幅（ResultPanel/ResultText）从 `WBP_CombatHUD` 移除；新增独立结算 HUD `UBattleResultHUDWidget` + `WBP_BattleResult`（`/Game/UI/HUD/WBP_BattleResult`，`BattleResultHUDClass` 默认自动加载）；行动按钮文字描述由 WBP 静态文本提供。
 
 ## Global Constraints
 

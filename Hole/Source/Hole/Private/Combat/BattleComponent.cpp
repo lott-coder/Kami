@@ -3,6 +3,7 @@
 #include "Combat/BattleComponent.h"
 #include "Combat/EnemyCombatAIComponent.h"
 #include "UI/CombatHUDWidget.h"
+#include "UI/BattleResultHUDWidget.h"
 #include "Character/Role.h"
 #include "Character/Enemy.h"
 #include "Character/BaseCharacter.h"
@@ -38,6 +39,12 @@ UBattleComponent::UBattleComponent()
 	if (HUDClass.Succeeded())
 	{
 		CombatHUDClass = HUDClass.Class;
+	}
+
+	static ConstructorHelpers::FClassFinder<UBattleResultHUDWidget> ResultHUDClass(TEXT("/Game/UI/HUD/WBP_BattleResult"));
+	if (ResultHUDClass.Succeeded())
+	{
+		BattleResultHUDClass = ResultHUDClass.Class;
 	}
 
 	static ConstructorHelpers::FObjectFinder<UInputMappingContext> CombatIMC(TEXT("/Game/Input/IMC_Combat"));
@@ -86,6 +93,11 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
+	if (ResultHUD.IsValid())
+	{
+		ResultHUD->RemoveFromParent();
+		ResultHUD.Reset();
+	}
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -134,10 +146,7 @@ void UBattleComponent::EndBattle()
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
-	if (CombatHUD.IsValid())
-	{
-		CombatHUD->HideClashPrompt();
-	}
+	HideResultHUD();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();
@@ -630,14 +639,6 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	GetWorld()->GetTimerManager().SetTimer(ClashOpenTimer, this, &UBattleComponent::OpenClashWindow, OpenDelay, false);
 	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashTelegraphTime, false);
 
-	if (CombatHUD.IsValid())
-	{
-		const FText Prompt = (ClashType == EClashType::BlueClash)
-			? FText::FromString(TEXT("蓝色碰撞！格挡(E) / 闪避(Shift)"))
-			: FText::FromString(TEXT("白色碰撞！格挡(E) / 闪避(Shift)"));
-		CombatHUD->ShowClashPrompt(Prompt, ClashTelegraphTime);
-	}
-
 	OnBattleStateChanged.Broadcast();
 }
 
@@ -711,11 +712,6 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	default:
 		// 全额伤害
 		break;
-	}
-
-	if (CombatHUD.IsValid())
-	{
-		CombatHUD->HideClashPrompt();
 	}
 
 	if (Incoming > 0.0f)
@@ -1056,6 +1052,39 @@ void UBattleComponent::HideHUD()
 	}
 }
 
+void UBattleComponent::ShowResultHUD(const FText& Text)
+{
+	if (ResultHUD.IsValid())
+	{
+		ResultHUD->ShowResult(Text);
+		return;
+	}
+	if (!BattleResultHUDClass || !GetWorld())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ShowResultHUD - 未配置 WBP_BattleResult"));
+		return;
+	}
+
+	ResultHUD = CreateWidget<UBattleResultHUDWidget>(GetWorld(), BattleResultHUDClass);
+	if (!ResultHUD.IsValid())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ShowResultHUD - 创建 WBP_BattleResult 失败"));
+		return;
+	}
+
+	ResultHUD->AddToViewport(20);
+	ResultHUD->ShowResult(Text);
+}
+
+void UBattleComponent::HideResultHUD()
+{
+	if (ResultHUD.IsValid())
+	{
+		ResultHUD->RemoveFromParent();
+		ResultHUD.Reset();
+	}
+}
+
 void UBattleComponent::FinishBattle(bool bPlayerWon)
 {
 	if (Phase == EBattlePhase::Ended)
@@ -1071,11 +1100,7 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
-	if (CombatHUD.IsValid())
-	{
-		CombatHUD->HideClashPrompt();
-		CombatHUD->ShowResult(bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败")));
-	}
+	ShowResultHUD(bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败")));
 	OnBattleStateChanged.Broadcast();
 
 	const float Delay = bPlayerWon ? 2.0f : DefeatRestartDelay;
@@ -1092,6 +1117,7 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 void UBattleComponent::HandleVictoryCleanup()
 {
 	bBossDefeated = true;
+	HideResultHUD();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();
@@ -1101,6 +1127,7 @@ void UBattleComponent::HandleVictoryCleanup()
 
 void UBattleComponent::HandleDefeatRestart()
 {
+	HideResultHUD();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();

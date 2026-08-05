@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Regenerate all DataTable assets per DataTable_Spec.md (currently 12 tables).
+Regenerate all DataTable assets per DataTable_Spec.md (currently 13 tables).
 
 Usage (UE editor commandlet):
   UnrealEditor-Cmd.exe <Hole.uproject> -run=pythonscript -script=create_datatables.py -unattended -nop4 -nosplash -NoSound -nullrhi
@@ -564,6 +564,57 @@ economy = [
 
 
 # ---------------------------------------------------------------------------
+# 13 - DT_CombatAnimConfig
+# ---------------------------------------------------------------------------
+ANIM_COLUMNS = [
+    "Entry", "Sheathe", "RedDefense", "GoldCounter", "BlueAttack", "WhiteAttack",
+    "Charge", "ChargeInterrupted", "Hurt", "BlockSuccess", "BlockFail",
+    "DodgeSuccess", "DodgeFail", "Death", "Victory", "Skill",
+    "ClashReady", "ClashTelegraphBlue", "ClashTelegraphWhite",
+]
+
+
+def _anim_headers():
+    headers = ["DisplayName"]
+    for column in ANIM_COLUMNS:
+        headers.append("{}.Montage".format(column))
+        headers.append("{}.SectionName".format(column))
+        headers.append("{}.PlayRate".format(column))
+        headers.append("{}.BlendOutTime".format(column))
+    return headers
+
+
+def _anim_ref(montage="", section="", play_rate=1.0, blend_out=0.25):
+    return {
+        "Montage": montage,
+        "SectionName": section,
+        "PlayRate": play_rate,
+        "BlendOutTime": blend_out,
+    }
+
+
+def _anim_row(display_name, refs):
+    row = {"DisplayName": display_name}
+    for column in ANIM_COLUMNS:
+        ref = refs.get(column, {})
+        row["{}.Montage".format(column)] = ref.get("Montage", "")
+        row["{}.SectionName".format(column)] = ref.get("SectionName", "")
+        row["{}.PlayRate".format(column)] = ref.get("PlayRate", 1.0)
+        row["{}.BlendOutTime".format(column)] = ref.get("BlendOutTime", 0.25)
+    return row
+
+
+COMBATANIM_HEADERS = _anim_headers()
+combat_anims = [
+    ("drifter", _anim_row("漂泊者", {
+        "Entry": _anim_ref(
+            "/Game/Blueprint/Character/Roles/Dale/Animations/Entrance/MTG_DrawGreatSword.MTG_DrawGreatSword",
+            "Draw", 1.0, 0.25),
+    })),
+    ("satan", _anim_row("撒旦", {})),
+]
+
+# ---------------------------------------------------------------------------
 # 12 - DT_BattleStage
 # ---------------------------------------------------------------------------
 BATTLESTAGE_HEADERS = [
@@ -602,6 +653,7 @@ def main():
         ("DT_ConsumableConfig", "ConsumableConfigRow", CONSUMABLE_HEADERS, consumables),
         ("DT_EconomyConfig", "EconomyConfigRow", ECONOMY_HEADERS, economy),
         ("DT_BattleStage", "CombatStageRow", BATTLESTAGE_HEADERS, battle_stage),
+        ("DT_CombatAnimConfig", "CombatAnimRow", COMBATANIM_HEADERS, combat_anims),
     ]
     for asset_name, struct_short, headers, rows in jobs:
         try:

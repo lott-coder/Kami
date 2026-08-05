@@ -12,6 +12,7 @@ TABLES = [
     "DT_SkillConfig", "DT_SkillTreeConfig", "DT_AreaConfig",
     "DT_ConsumableConfig", "DT_EconomyConfig",
     "DT_BattleStage",
+    "DT_CombatAnimConfig",
 ]
 
 
@@ -56,6 +57,11 @@ def main():
     if stage is not None:
         for line in stage.export_to_csv_string().splitlines()[:3]:
             print("STAGE_CSV: " + line)
+
+    anim = unreal.load_asset("/Game/DataTable/DT_CombatAnimConfig")
+    if anim is not None:
+        for line in anim.export_to_csv_string().splitlines()[:3]:
+            print("ANIM_CSV: " + line)
 
 
 main()

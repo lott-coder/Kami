@@ -19,6 +19,7 @@ TABLES = [
     "DT_ConsumableConfig",
     "DT_EconomyConfig",
     "DT_BattleStage",
+    "DT_CombatAnimConfig",
 ]
 
 

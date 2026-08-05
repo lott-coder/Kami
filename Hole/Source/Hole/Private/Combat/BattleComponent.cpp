@@ -9,6 +9,7 @@
 #include "Character/BaseCharacter.h"
 #include "Component/AttributeComponent.h"
 #include "Component/BossIntroComponent.h"
+#include "Component/WeaponVisualComponent.h"
 #include "Components/SphereComponent.h"
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "DataTable/CombatParamsTable.h"
@@ -147,6 +148,7 @@ void UBattleComponent::EndBattle()
 	UnbindCombatInput();
 	RemoveCombatMapping();
 	HideResultHUD();
+	SheathePlayerWeapon();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();
@@ -1114,6 +1116,26 @@ void UBattleComponent::HideResultHUD()
 	}
 }
 
+void UBattleComponent::SheathePlayerWeapon()
+{
+	if (PlayerRole.IsValid())
+	{
+		// 停止入场拔刀 Montage，避免其通知回调再次把武器拿回手上
+		if (PlayerEntryMontage)
+		{
+			PlayerRole->StopAnimMontage(PlayerEntryMontage);
+		}
+
+		// 武器收回背部 socket；AttachWeaponToSocket 会把 IsWeaponDrawn 置回 false，
+		// 动画实例逐帧镜像后玩家自动回到未拔刀 Idle
+		if (PlayerRole->WeaponVisualComponent)
+		{
+			PlayerRole->WeaponVisualComponent->AttachWeaponToSocket(
+				PlayerRole->WeaponVisualComponent->BackSocketName);
+		}
+	}
+}
+
 void UBattleComponent::FinishBattle(bool bPlayerWon)
 {
 	if (Phase == EBattlePhase::Ended)
@@ -1147,6 +1169,7 @@ void UBattleComponent::HandleVictoryCleanup()
 {
 	bBossDefeated = true;
 	HideResultHUD();
+	SheathePlayerWeapon();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();
@@ -1157,6 +1180,7 @@ void UBattleComponent::HandleVictoryCleanup()
 void UBattleComponent::HandleDefeatRestart()
 {
 	HideResultHUD();
+	SheathePlayerWeapon();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();

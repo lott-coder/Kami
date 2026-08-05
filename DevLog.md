@@ -49,6 +49,7 @@
 4. 行动按钮悬停效果内置到 C++ 基类：`UCombatHUDWidget::HoverScale`（默认 1.1，可配 1.0 关闭），`NativeConstruct` 自动绑定 5 个按钮的 OnHovered/OnUnhovered 并围绕按钮中心缩放（`SetRenderScale` + `SetRenderTransformPivot`），无需 BP 连线。
 5. 按 GDD 落实蓝攻蓄力门槛：蓝攻需要至少 1 层蓄力才能使用（玩家入口拦截 + HUD 0 层时禁用按钮），使用后清空蓄力层数（结算矩阵原有逻辑）；敌人 AI 同步遵守（0 层时不会选蓝攻，额外回合 0 层只能继续蓄力）。
 6. 蓄力规则细化：红防/白攻会清空自身蓄力层数（不获得蓄力加成）；蓄力满上限后不能再选蓄力（玩家入口拦截 + HUD 禁用 + 敌人 AI 排除该选项）；敌人侧红防/白攻同样清空层数。
+7. 战斗结束收刀：`UBattleComponent::SheathePlayerWeapon()` 在胜利清理/失败重开/调试结束时把武器直接挂回背部 socket（`AttachWeaponToSocket(BackSocketName)`，**无收刀动画**），并停止入场拔刀 Montage 防止通知回调再次拔刀；`bWeaponDrawn` 自动置回 false，玩家动画回到未拔刀 Idle。
 
 **结果/解决方案：** 编译通过。待编辑器操作：`WBP_CombatHUD` 删除 5 个旧控件并补按钮描述；新建 `WBP_BattleResult`（父类 `UBattleResultHUDWidget`，含 `ResultText` 控件）。
 

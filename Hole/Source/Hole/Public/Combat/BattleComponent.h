@@ -193,6 +193,7 @@ private:
 	void HideHUD();
 	void ShowResultHUD(const FText& Text);
 	void HideResultHUD();
+	void SheathePlayerWeapon();
 
 	// ==================== 数值辅助（只调子系统） ====================
 

@@ -12,6 +12,7 @@ struct FCharacterConfigRow;
 struct FEnemyConfigRow;
 struct FCombatParamsRow;
 struct FCombatStageRow;
+struct FCombatAnimRow;
 struct FMaskConfigRow;
 struct FWeaponConfigRow;
 struct FAttributeModifier;
@@ -51,6 +52,9 @@ public:
 
 	/** DT_WeaponConfig 行（找不到返回 nullptr） */
 	const FWeaponConfigRow* GetWeaponRow(FName WeaponID) const;
+
+	/** DT_CombatAnimConfig 行（找不到返回 nullptr） */
+	const FCombatAnimRow* GetCombatAnimRow(FName EntityID) const;
 
 	// ---- 跨表合并（角色/敌人基础属性） ----
 
@@ -102,4 +106,5 @@ private:
 	mutable TObjectPtr<UDataTable> BattleStageTable;
 	mutable TObjectPtr<UDataTable> MaskTable;
 	mutable TObjectPtr<UDataTable> WeaponTable;
+	mutable TObjectPtr<UDataTable> CombatAnimTable;
 };

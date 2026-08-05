@@ -5,6 +5,7 @@
 #include "DataTable/CharacterConfigTable.h"
 #include "DataTable/CombatParamsTable.h"
 #include "DataTable/CombatStageTable.h"
+#include "DataTable/CombatAnimConfigTable.h"
 #include "DataTable/EnemyConfigTable.h"
 #include "DataTable/MaskConfigTable.h"
 #include "DataTable/WeaponConfigTable.h"
@@ -53,6 +54,12 @@ const FWeaponConfigRow* UCombatFormulaSubsystem::GetWeaponRow(FName WeaponID) co
 {
 	UDataTable* Table = GetTable(WeaponTable, TEXT("/Game/DataTable/DT_WeaponConfig"));
 	return Table ? Table->FindRow<FWeaponConfigRow>(WeaponID, TEXT("CombatFormula::Weapon")) : nullptr;
+}
+
+const FCombatAnimRow* UCombatFormulaSubsystem::GetCombatAnimRow(FName EntityID) const
+{
+	UDataTable* Table = GetTable(CombatAnimTable, TEXT("/Game/DataTable/DT_CombatAnimConfig"));
+	return Table ? Table->FindRow<FCombatAnimRow>(EntityID, TEXT("CombatFormula::CombatAnim")) : nullptr;
 }
 
 TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName CharacterID) const

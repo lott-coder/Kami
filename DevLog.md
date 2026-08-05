@@ -47,6 +47,7 @@
 2. 新增 `UBattleResultHUDWidget`（C++ 基类，BindWidget `ResultText`）与独立结算 HUD：`UBattleComponent::BattleResultHUDClass`（默认自动加载 `/Game/UI/HUD/WBP_BattleResult`），`FinishBattle` 时 `AddToViewport(20)` 显示结果，胜利清理/失败重开/调试结束时移除。
 3. 行动按钮文字描述由 WBP 静态文本承担（推荐文案：红防=防御姿态克制蓝攻；蓝攻=高伤害克制白攻；白攻=快速攻击克制红防；蓄力=最高2层强化蓝攻；技能=未实装禁用）。
 4. 行动按钮悬停效果内置到 C++ 基类：`UCombatHUDWidget::HoverScale`（默认 1.1，可配 1.0 关闭），`NativeConstruct` 自动绑定 5 个按钮的 OnHovered/OnUnhovered 并围绕按钮中心缩放（`SetRenderScale` + `SetRenderTransformPivot`），无需 BP 连线。
+5. 按 GDD 落实蓝攻蓄力门槛：蓝攻需要至少 1 层蓄力才能使用（玩家入口拦截 + HUD 0 层时禁用按钮），使用后清空蓄力层数（结算矩阵原有逻辑）；敌人 AI 同步遵守（0 层时不会选蓝攻，额外回合 0 层只能继续蓄力）。
 
 **结果/解决方案：** 编译通过。待编辑器操作：`WBP_CombatHUD` 删除 5 个旧控件并补按钮描述；新建 `WBP_BattleResult`（父类 `UBattleResultHUDWidget`，含 `ResultText` 控件）。
 

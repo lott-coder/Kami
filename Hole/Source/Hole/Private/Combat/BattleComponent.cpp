@@ -165,6 +165,11 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 技能系统未实装"));
 		return;
 	}
+	if (Action == EBattleAction::BlueAttack && PlayerChargeStacks <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓝攻需要至少 1 层蓄力"));
+		return;
+	}
 	if (bPlayerExtraTurnPending && Action != EBattleAction::BlueAttack && Action != EBattleAction::Charge)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 额外回合只能蓝攻或蓄力"));
@@ -305,17 +310,20 @@ void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 	}
 	else if (bExtraTurn)
 	{
-		EnemyChosenAction = FMath::RandBool() ? EBattleAction::BlueAttack : EBattleAction::Charge;
+		EnemyChosenAction = (EnemyChargeStacks > 0 && FMath::RandBool()) ? EBattleAction::BlueAttack : EBattleAction::Charge;
 	}
 	else
 	{
-		switch (FMath::RandRange(0, 3))
+		// 蓝攻需要至少 1 层蓄力；其余行动始终可选
+		TArray<EBattleAction> Options;
+		Options.Add(EBattleAction::RedDefense);
+		Options.Add(EBattleAction::WhiteAttack);
+		Options.Add(EBattleAction::Charge);
+		if (EnemyChargeStacks > 0)
 		{
-		case 0: EnemyChosenAction = EBattleAction::RedDefense; break;
-		case 1: EnemyChosenAction = EBattleAction::BlueAttack; break;
-		case 2: EnemyChosenAction = EBattleAction::WhiteAttack; break;
-		default: EnemyChosenAction = EBattleAction::Charge; break;
+			Options.Add(EBattleAction::BlueAttack);
 		}
+		EnemyChosenAction = Options[FMath::RandRange(0, Options.Num() - 1)];
 	}
 }
 

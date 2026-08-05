@@ -102,7 +102,8 @@ void UCombatHUDWidget::RefreshAll()
 
 	// 额外回合：只允许 蓝攻/蓄力；技能 v1 始终禁用
 	const bool bExtra = Battle->IsPlayerExtraTurn();
-	SetChoiceButtonsEnabled(!bExtra, true, !bExtra, true, false);
+	const bool bCanBlueAttack = Battle->GetPlayerChargeStacks() > 0;
+	SetChoiceButtonsEnabled(!bExtra, bCanBlueAttack, !bExtra, true, false);
 }
 
 void UCombatHUDWidget::SetChoiceButtonsEnabled(bool bRed, bool bBlue, bool bWhite, bool bCharge, bool bSkill)

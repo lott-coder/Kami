@@ -12,18 +12,17 @@ EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAc
 	if (bExtraTurn)
 	{
 		// GDD 5.2.4：额外回合只能 出蓝刀 或 继续蓄力
-		return FMath::RandBool() ? EBattleAction::BlueAttack : EBattleAction::Charge;
+		return (ChargeStacks > 0 && FMath::RandBool()) ? EBattleAction::BlueAttack : EBattleAction::Charge;
 	}
 
-	switch (FMath::RandRange(0, 3))
+	// 蓝攻需要至少 1 层蓄力；其余行动始终可选
+	TArray<EBattleAction> Options;
+	Options.Add(EBattleAction::RedDefense);
+	Options.Add(EBattleAction::WhiteAttack);
+	Options.Add(EBattleAction::Charge);
+	if (ChargeStacks > 0)
 	{
-	case 0:
-		return EBattleAction::RedDefense;
-	case 1:
-		return EBattleAction::BlueAttack;
-	case 2:
-		return EBattleAction::WhiteAttack;
-	default:
-		return EBattleAction::Charge;
+		Options.Add(EBattleAction::BlueAttack);
 	}
+	return Options[FMath::RandRange(0, Options.Num() - 1)];
 }

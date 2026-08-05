@@ -32,6 +32,18 @@ void UCombatHUDWidget::NativeConstruct()
 	{
 		SkillButton->OnClicked.AddDynamic(this, &UCombatHUDWidget::OnSkillClicked);
 	}
+
+	// 缩放中心设为按钮中心，悬停放大时围绕中心变化
+	TArray<UButton*> ActionButtons = { RedDefenseButton, BlueAttackButton, WhiteAttackButton, ChargeButton, SkillButton };
+	for (UButton* Btn : ActionButtons)
+	{
+		if (Btn)
+		{
+			Btn->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+		}
+	}
+
+	BindHoverEffects();
 }
 
 void UCombatHUDWidget::BindToBattle(UBattleComponent* InBattle)
@@ -126,3 +138,53 @@ void UCombatHUDWidget::OnSkillClicked()
 {
 	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::Skill);
 }
+
+void UCombatHUDWidget::BindHoverEffects()
+{
+	if (RedDefenseButton)
+	{
+		RedDefenseButton->OnHovered.AddDynamic(this, &UCombatHUDWidget::OnRedDefenseHovered);
+		RedDefenseButton->OnUnhovered.AddDynamic(this, &UCombatHUDWidget::OnRedDefenseUnhovered);
+	}
+	if (BlueAttackButton)
+	{
+		BlueAttackButton->OnHovered.AddDynamic(this, &UCombatHUDWidget::OnBlueAttackHovered);
+		BlueAttackButton->OnUnhovered.AddDynamic(this, &UCombatHUDWidget::OnBlueAttackUnhovered);
+	}
+	if (WhiteAttackButton)
+	{
+		WhiteAttackButton->OnHovered.AddDynamic(this, &UCombatHUDWidget::OnWhiteAttackHovered);
+		WhiteAttackButton->OnUnhovered.AddDynamic(this, &UCombatHUDWidget::OnWhiteAttackUnhovered);
+	}
+	if (ChargeButton)
+	{
+		ChargeButton->OnHovered.AddDynamic(this, &UCombatHUDWidget::OnChargeHovered);
+		ChargeButton->OnUnhovered.AddDynamic(this, &UCombatHUDWidget::OnChargeUnhovered);
+	}
+	if (SkillButton)
+	{
+		SkillButton->OnHovered.AddDynamic(this, &UCombatHUDWidget::OnSkillHovered);
+		SkillButton->OnUnhovered.AddDynamic(this, &UCombatHUDWidget::OnSkillUnhovered);
+	}
+}
+
+void UCombatHUDWidget::ApplyHoverScale(UButton* Button, bool bHovered)
+{
+	if (!Button)
+	{
+		return;
+	}
+	const float Scale = bHovered ? FMath::Max(1.0f, HoverScale) : 1.0f;
+	Button->SetRenderScale(FVector2D(Scale, Scale));
+}
+
+void UCombatHUDWidget::OnRedDefenseHovered() { ApplyHoverScale(RedDefenseButton, true); }
+void UCombatHUDWidget::OnRedDefenseUnhovered() { ApplyHoverScale(RedDefenseButton, false); }
+void UCombatHUDWidget::OnBlueAttackHovered() { ApplyHoverScale(BlueAttackButton, true); }
+void UCombatHUDWidget::OnBlueAttackUnhovered() { ApplyHoverScale(BlueAttackButton, false); }
+void UCombatHUDWidget::OnWhiteAttackHovered() { ApplyHoverScale(WhiteAttackButton, true); }
+void UCombatHUDWidget::OnWhiteAttackUnhovered() { ApplyHoverScale(WhiteAttackButton, false); }
+void UCombatHUDWidget::OnChargeHovered() { ApplyHoverScale(ChargeButton, true); }
+void UCombatHUDWidget::OnChargeUnhovered() { ApplyHoverScale(ChargeButton, false); }
+void UCombatHUDWidget::OnSkillHovered() { ApplyHoverScale(SkillButton, true); }
+void UCombatHUDWidget::OnSkillUnhovered() { ApplyHoverScale(SkillButton, false); }

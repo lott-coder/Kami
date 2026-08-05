@@ -33,6 +33,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
 	void SetChoiceButtonsEnabled(bool bRed, bool bBlue, bool bWhite, bool bCharge, bool bSkill);
 
+	/** 鼠标悬停按钮时的缩放倍率（1.0 = 关闭 C++ 悬停效果，可改用 BP 动画） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatHUD")
+	float HoverScale = 1.1f;
+
 protected:
 	// ---- BindWidget：名称必须与 WBP_CombatHUD 中的控件名完全一致 ----
 
@@ -89,9 +93,41 @@ private:
 	void OnSkillClicked();
 
 	UFUNCTION()
+	void OnRedDefenseHovered();
+
+	UFUNCTION()
+	void OnRedDefenseUnhovered();
+
+	UFUNCTION()
+	void OnBlueAttackHovered();
+
+	UFUNCTION()
+	void OnBlueAttackUnhovered();
+
+	UFUNCTION()
+	void OnWhiteAttackHovered();
+
+	UFUNCTION()
+	void OnWhiteAttackUnhovered();
+
+	UFUNCTION()
+	void OnChargeHovered();
+
+	UFUNCTION()
+	void OnChargeUnhovered();
+
+	UFUNCTION()
+	void OnSkillHovered();
+
+	UFUNCTION()
+	void OnSkillUnhovered();
+
+	UFUNCTION()
 	void HandleBattleStateChanged();
 
 	void RefreshAll();
+	void BindHoverEffects();
+	void ApplyHoverScale(UButton* Button, bool bHovered);
 
 	TWeakObjectPtr<UBattleComponent> Battle;
 };

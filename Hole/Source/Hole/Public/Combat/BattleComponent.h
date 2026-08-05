@@ -214,6 +214,16 @@ private:
 	/** 玩家进入/退出同色碰撞准备姿态 */
 	void SetPlayerClashReady(bool bReady);
 
+	/** 格挡成功：先播 BlockSuccess（弹反），播完回调接 GoldCounter */
+	void PlayBlockSuccessChain();
+
+	/** 格挡/闪避失败：优先对应 Fail 动画，空则回落 Hurt */
+	void PlayClashFailReaction(EClashResult Result);
+
+	/** BlockSuccess 播完回调：接金色反击 */
+	UFUNCTION()
+	void OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	// ==================== 数值辅助（只调子系统） ====================
 
 	float GetPlayerWhiteDamage() const;

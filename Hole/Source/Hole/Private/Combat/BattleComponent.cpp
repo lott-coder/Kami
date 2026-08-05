@@ -280,11 +280,23 @@ void UBattleComponent::EnterBattle()
 	SetPhase(EBattlePhase::Entering);
 	OnBattleStateChanged.Broadcast();
 
-	// 玩家入场 Montage 占位：有动画则播放并等它播完再进入第 1 回合；没有则直接开始
-	if (PlayerEntryMontage && PlayerRole.IsValid())
+	// 入场动画优先读 DT_CombatAnimConfig.Entry，BP 字段回退
+	UAnimMontage* EntryMontage = PlayerEntryMontage;
+	FName EntrySection = PlayerEntrySectionName;
+	float EntryPlayRate = 1.0f;
+	if (const FCombatAnimRow* AnimRow = GetCombatAnimRow(true))
 	{
-		const float PlayLength = PlayerEntryMontage->GetPlayLength();
-		PlayerRole->PlayAnimMontage(PlayerEntryMontage, 1.0f, PlayerEntrySectionName);
+		if (!AnimRow->Entry.Montage.IsNull())
+		{
+			EntryMontage = AnimRow->Entry.Montage.LoadSynchronous();
+			EntrySection = AnimRow->Entry.SectionName;
+			EntryPlayRate = AnimRow->Entry.PlayRate;
+		}
+	}
+	if (EntryMontage && PlayerRole.IsValid())
+	{
+		const float PlayLength = EntryMontage->GetPlayLength();
+		PlayerRole->PlayAnimMontage(EntryMontage, EntryPlayRate, EntrySection);
 		if (PlayLength > 0.0f)
 		{
 			GetWorld()->GetTimerManager().SetTimer(EntryDelayTimer, this, &UBattleComponent::StartNewRound, PlayLength, false);
@@ -672,6 +684,16 @@ void UBattleComponent::StartClash(EClashType ClashType)
 
 	SetPhase(EBattlePhase::Clash);
 
+	// 动画：敌方碰撞前摇 + 玩家进入准备姿态（Idle 切换）
+	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+	{
+		const FAnimRef& Telegraph = (ClashType == EClashType::BlueClash)
+			? Row->ClashTelegraphBlue
+			: Row->ClashTelegraphWhite;
+		PlayCombatAnim(BossEnemy.Get(), Telegraph);
+	}
+	SetPlayerClashReady(true);
+
 	const float BlockWindow = GetBlockWindow();
 	const float DodgeWindow = GetDodgeWindow();
 	const float OpenDelay = FMath::Max(0.0f, ClashTelegraphTime - FMath::Max(BlockWindow, DodgeWindow));
@@ -711,6 +733,7 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	}
 	bClashResolved = true;
 	ClearClashTimers();
+	SetPlayerClashReady(false);
 
 	float Incoming = PendingIncomingDamage;
 
@@ -722,6 +745,7 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 		{
 			ApplyDamageTo(BossEnemy.Get(), GetPlayerGoldDamage(), PlayerRole.Get());
 		}
+		PlayBlockSuccessChain();
 		break;
 	case EClashResult::DodgeSuccess:
 		Incoming = 0.0f;
@@ -738,6 +762,10 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 				P.DodgeBuffTurns,
 				FName(TEXT("DodgeBuff")));
 		}
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayCombatAnim(PlayerRole.Get(), Row->DodgeSuccess);
+		}
 		break;
 	case EClashResult::DodgeFail:
 	{
@@ -746,11 +774,13 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 		const FCombatParamsRow* Params = Subsystem ? Subsystem->GetCombatParams() : nullptr;
 		const FCombatParamsRow& P = Params ? *Params : Defaults;
 		Incoming *= P.DodgeFailDamageScale;
+		PlayClashFailReaction(EClashResult::DodgeFail);
 		break;
 	}
 	case EClashResult::BlockFail:
 	default:
 		// 全额伤害
+		PlayClashFailReaction(EClashResult::BlockFail);
 		break;
 	}
 
@@ -1254,15 +1284,85 @@ void UBattleComponent::SetPlayerClashReady(bool bReady)
 	}
 }
 
+void UBattleComponent::PlayBlockSuccessChain()
+{
+	const FCombatAnimRow* Row = GetCombatAnimRow(true);
+	if (!Row)
+	{
+		return;
+	}
+	if (Row->BlockSuccess.Montage.IsNull())
+	{
+		// 无弹反动作时直接尝试金色反击
+		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
+		return;
+	}
+	if (!PlayerRole.IsValid())
+	{
+		return;
+	}
+	UAnimMontage* BlockMontage = Row->BlockSuccess.Montage.LoadSynchronous();
+	if (!BlockMontage)
+	{
+		// 弹反资产缺失：不进入连播待机，直接尝试金色反击
+		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
+		return;
+	}
+	bBlockSuccessChainPending = true;
+	if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->OnMontageEnded.AddDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
+	}
+	PlayCombatAnim(PlayerRole.Get(), Row->BlockSuccess);
+}
+
+void UBattleComponent::PlayClashFailReaction(EClashResult Result)
+{
+	const FCombatAnimRow* Row = GetCombatAnimRow(true);
+	if (!Row)
+	{
+		return;
+	}
+	const FAnimRef& Ref = (Result == EClashResult::DodgeFail) ? Row->DodgeFail : Row->BlockFail;
+	PlayCombatAnim(PlayerRole.Get(), Ref.Montage.IsNull() ? Row->Hurt : Ref);
+}
+
+void UBattleComponent::OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (!bBlockSuccessChainPending)
+	{
+		return;
+	}
+	bBlockSuccessChainPending = false;
+	if (PlayerRole.IsValid())
+	{
+		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
+		}
+	}
+	if (bInterrupted)
+	{
+		return;
+	}
+	if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+	{
+		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
+	}
+}
+
 void UBattleComponent::SheathePlayerWeapon()
 {
 	if (PlayerRole.IsValid())
 	{
-		// 停止入场拔刀 Montage，避免其通知回调再次把武器拿回手上
-		if (PlayerEntryMontage)
+		// 停止全部 Montage（入场/动作/碰撞残留），避免通知回调再次拔刀或连播反击
+		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
 		{
-			PlayerRole->StopAnimMontage(PlayerEntryMontage);
+			AnimInstance->StopAllMontages(0.0f);
+			AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
 		}
+		SetPlayerClashReady(false);
+		bBlockSuccessChainPending = false;
 
 		// 武器收回背部 socket；AttachWeaponToSocket 会把 IsWeaponDrawn 置回 false，
 		// 动画实例逐帧镜像后玩家自动回到未拔刀 Idle

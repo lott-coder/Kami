@@ -19,6 +19,9 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Animation/AnimMontage.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/BaseCharacterAnimInstance.h"
+#include "DataTable/CombatAnimConfigTable.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -597,6 +600,12 @@ void UBattleComponent::ApplyResolution(const FTurnResolution& Resolution)
 	{
 		ApplyDamageTo(BossEnemy.Get(), Resolution.EnemyDamageTaken, PlayerRole.Get());
 	}
+
+	// 战斗动画（v1 与回合推进解耦：播放后不阻塞 EndTurnAndAdvance）
+	if (Phase != EBattlePhase::Ended)
+	{
+		PlayResolutionAnimations(Resolution);
+	}
 }
 
 void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActor* Causer)
@@ -1113,6 +1122,135 @@ void UBattleComponent::HideResultHUD()
 	{
 		ResultHUD->RemoveFromParent();
 		ResultHUD.Reset();
+	}
+}
+
+const FCombatAnimRow* UBattleComponent::GetCombatAnimRow(bool bPlayer) const
+{
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	if (!Subsystem)
+	{
+		return nullptr;
+	}
+	const FName EntityID = bPlayer
+		? (PlayerRole.IsValid() ? PlayerRole->CharacterID : NAME_None)
+		: (BossEnemy.IsValid() ? BossEnemy->EnemyID : NAME_None);
+	return EntityID.IsNone() ? nullptr : Subsystem->GetCombatAnimRow(EntityID);
+}
+
+void UBattleComponent::PlayCombatAnim(ABaseCharacter* Character, const FAnimRef& AnimRef)
+{
+	if (!Character || AnimRef.Montage.IsNull())
+	{
+		return;
+	}
+	UAnimMontage* Montage = AnimRef.Montage.LoadSynchronous();
+	if (!Montage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayCombatAnim - 无法加载 Montage: %s"), *AnimRef.Montage.ToString());
+		return;
+	}
+	Character->PlayAnimMontage(Montage, AnimRef.PlayRate, AnimRef.SectionName);
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayCombatAnim - %s 播放 %s"), *GetNameSafe(Character), *Montage->GetName());
+}
+
+void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
+{
+	const FCombatAnimRow* Row = GetCombatAnimRow(bPlayer);
+	if (!Row)
+	{
+		return;
+	}
+	const FAnimRef* Ref = nullptr;
+	switch (Action)
+	{
+	case EBattleAction::RedDefense: Ref = &Row->RedDefense; break;
+	case EBattleAction::BlueAttack: Ref = &Row->BlueAttack; break;
+	case EBattleAction::WhiteAttack: Ref = &Row->WhiteAttack; break;
+	case EBattleAction::Charge: Ref = &Row->Charge; break;
+	default: return;
+	}
+	ABaseCharacter* Target = bPlayer ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
+	PlayCombatAnim(Target, *Ref);
+}
+
+void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolution)
+{
+	if (!PlayerRole.IsValid() || !BossEnemy.IsValid())
+	{
+		return;
+	}
+
+	const EBattleAction PlayerAction = PlayerLastAction;
+	const EBattleAction EnemyAction = EnemyChosenAction;
+
+	// 玩家侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
+	if (Resolution.PlayerDamageTaken > 0.0f)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayCombatAnim(PlayerRole.Get(), Row->Hurt);
+		}
+	}
+	else if (PlayerAction == EBattleAction::RedDefense && EnemyAction == EBattleAction::BlueAttack)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
+		}
+	}
+	else if (Resolution.bPlayerChargeInterrupted)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayCombatAnim(PlayerRole.Get(), Row->ChargeInterrupted);
+		}
+	}
+	else
+	{
+		PlayActionAnim(true, PlayerAction);
+	}
+
+	// 敌人侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
+	if (Resolution.EnemyDamageTaken > 0.0f)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		{
+			PlayCombatAnim(BossEnemy.Get(), Row->Hurt);
+		}
+	}
+	else if (EnemyAction == EBattleAction::RedDefense && PlayerAction == EBattleAction::BlueAttack)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		{
+			PlayCombatAnim(BossEnemy.Get(), Row->GoldCounter);
+		}
+	}
+	else if (Resolution.bEnemyChargeInterrupted)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		{
+			PlayCombatAnim(BossEnemy.Get(), Row->ChargeInterrupted);
+		}
+	}
+	else
+	{
+		PlayActionAnim(false, EnemyAction);
+	}
+}
+
+void UBattleComponent::SetPlayerClashReady(bool bReady)
+{
+	if (!PlayerRole.IsValid())
+	{
+		return;
+	}
+	if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
+	{
+		if (UBaseCharacterAnimInstance* BaseAnim = Cast<UBaseCharacterAnimInstance>(AnimInstance))
+		{
+			BaseAnim->SetClashReady(bReady);
+		}
 	}
 }
 

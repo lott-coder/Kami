@@ -16,6 +16,8 @@ class UEnemyCombatAIComponent;
 class UInputAction;
 class UInputMappingContext;
 class UAnimMontage;
+struct FCombatAnimRow;
+struct FAnimRef;
 class UAttributeComponent;
 class UCombatFormulaSubsystem;
 class UBossIntroComponent;
@@ -195,6 +197,23 @@ private:
 	void HideResultHUD();
 	void SheathePlayerWeapon();
 
+	// ==================== 战斗动画 ====================
+
+	/** 读取玩家/敌人对应的 DT_CombatAnimConfig 行（角色/敌人 ID 取 CharacterID / EnemyID） */
+	const FCombatAnimRow* GetCombatAnimRow(bool bPlayer) const;
+
+	/** 通用播放：空引用直接跳过；播放时输出日志便于 PIE 验证 */
+	void PlayCombatAnim(ABaseCharacter* Character, const FAnimRef& AnimRef);
+
+	/** 按行动播放下一个动作动画（红防/蓝攻/白攻/蓄力） */
+	void PlayActionAnim(bool bPlayer, EBattleAction Action);
+
+	/** 非碰撞回合的动画编排：受击 > 金色反击 > 蓄力被打断 > 行动动画（双方各一次） */
+	void PlayResolutionAnimations(const FTurnResolution& Resolution);
+
+	/** 玩家进入/退出同色碰撞准备姿态 */
+	void SetPlayerClashReady(bool bReady);
+
 	// ==================== 数值辅助（只调子系统） ====================
 
 	float GetPlayerWhiteDamage() const;
@@ -239,6 +258,8 @@ private:
 	bool bClashWindowOpen = false;
 	bool bClashResolved = false;
 	bool bClashStarted = false;
+	/** 格挡成功弹反 Montage 播完后待接金色反击 */
+	bool bBlockSuccessChainPending = false;
 	EClashType ActiveClashType = EClashType::None;
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;

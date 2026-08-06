@@ -8,7 +8,7 @@
 - **Engine:** Unreal Engine 5.6, project root `d:\UE5\UE_project\Kami`, UE project in the `Hole/` subdirectory
 - **Game:** Hole — a roguelike semi-turn-based RPG with red/blue/white three-color counters + real-time parry/dodge + time loop
 - **Key documents:**
-  - `GDD_Outline.md` — game design document (v0.9, 19 chapters); the reference baseline for design and implementation
+  - `GDD_Outline.md` — game design document (v0.10, 19 chapters); the reference baseline for design and implementation
   - `DataTable_Spec.md` — data table specification (v0.9, 13 tables); the basis for C++ USTRUCT definitions
   - `DevLog.md` — development log (timeline + key decisions + FAQ)
 - **Version control:** Git (branch master), remote managed via GitHub MCP; generated directories (`Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, etc.) are not tracked
@@ -95,6 +95,7 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - `UBattleComponent` (player-mounted, BP_Dale) owns the battle session: phase state machine, simultaneous-turn resolution matrix, same-color clash timers, extra turns, victory/defeat and failure restart. Damage formulas live only in `UCombatFormulaSubsystem`.
 - `UEnemyCombatAIComponent` (BP_Satan) picks enemy actions; v1 is uniform random subject to rules (BlueAttack requires >=1 charge stack, Charge disabled at max stacks, extra turn only BlueAttack/Charge).
 - Battle rules: normal neutral start (first-strike interface reserved); BlueAttack requires >=1 charge stack and clears stacks on use; RedDefense/WhiteAttack clear the actor's own charge stacks (no charge bonus); charge caps at `MaxChargeStacks` (2) and cannot be selected at cap; interrupting charge (BlueAttack vs Charge, either side) clears the charger's stacks; extra turn is triggered by WhiteAttack vs charging (resistance, x0.3 + extra turn) and only allows BlueAttack or Charge.
+- Same-color clash rules (2026-08-06): Blue vs Blue and White vs White deal no damage to either side — they only enter the real-time defend phase (the enemy attack damage is pending and resolved by Block/Dodge); Red vs Red skips the turn.
 - HUD: `UCombatHUDWidget` + `WBP_CombatHUD` (state bars, action buttons with descriptions and hover scale `HoverScale`); the result banner is a separate `UBattleResultHUDWidget` + `WBP_BattleResult` (default `/Game/UI/HUD/WBP_BattleResult`, viewport layer 20). `WBP_BattleResult` asset creation is deferred until the basic combat loop is finalized; until then `FinishBattle` logs a warning and shows no banner. Same-color clash text prompts were removed; gameplay timers remain and dedicated collision animations are the planned prompt.
 - Stage/camera tuning lives in `DT_BattleStage` (12th table, `FCombatStageRow`, row `Default`): player offset (world or boss-local), facing yaw offsets, camera pitch/yaw/arm/FOV/SocketOffset/TargetOffset/lag. Battle start snapshots exploration transform/camera and restores on end; the player landing spot is ground-traced to avoid falling.
 - Battle end: `SheathePlayerWeapon()` attaches the weapon back to `BackSocketName` directly (no sheath animation) and stops the entry Montage, so the player returns to the not-drawn Idle; runs on victory cleanup, defeat restart, and debug end.

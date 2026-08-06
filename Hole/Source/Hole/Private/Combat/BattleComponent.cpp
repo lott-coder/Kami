@@ -1189,6 +1189,8 @@ void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
 	const FCombatAnimRow* Row = GetCombatAnimRow(bPlayer);
 	if (!Row)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayActionAnim - %s 未找到 DT_CombatAnimConfig 行（检查 EntityID 与表行名）"),
+			bPlayer ? TEXT("玩家") : TEXT("敌人"));
 		return;
 	}
 	const FAnimRef* Ref = nullptr;
@@ -1199,6 +1201,12 @@ void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
 	case EBattleAction::WhiteAttack: Ref = &Row->WhiteAttack; break;
 	case EBattleAction::Charge: Ref = &Row->Charge; break;
 	default: return;
+	}
+	if (Ref->Montage.IsNull())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayActionAnim - %s 行动动画未配置（Action=%d）"),
+			bPlayer ? TEXT("玩家") : TEXT("敌人"), (int32)Action);
+		return;
 	}
 	ABaseCharacter* Target = bPlayer ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
 	PlayCombatAnim(Target, *Ref);
@@ -1219,7 +1227,15 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	{
 		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
 		{
+			if (Row->Hurt.Montage.IsNull())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 玩家 Hurt 动画未配置"));
+			}
 			PlayCombatAnim(PlayerRole.Get(), Row->Hurt);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 未找到玩家 DT_CombatAnimConfig 行（受击动画缺失）"));
 		}
 	}
 	else if (PlayerAction == EBattleAction::RedDefense && EnemyAction == EBattleAction::BlueAttack)
@@ -1246,7 +1262,15 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	{
 		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 		{
+			if (Row->Hurt.Montage.IsNull())
+			{
+				UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 敌人 Hurt 动画未配置"));
+			}
 			PlayCombatAnim(BossEnemy.Get(), Row->Hurt);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 未找到敌人 DT_CombatAnimConfig 行（受击动画缺失）"));
 		}
 	}
 	else if (EnemyAction == EBattleAction::RedDefense && PlayerAction == EBattleAction::BlueAttack)

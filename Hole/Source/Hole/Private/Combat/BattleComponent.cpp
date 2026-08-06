@@ -1611,12 +1611,6 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 		PlayCombatAnim(Attacker, *BlueRef);
 	}
 
-	FAnimRef DefenderFollowUp = bCounterSucceeds ? DefenderRow->GoldCounter : DefenderRow->Hurt;
-	RegisterPendingHit(bAttackerPlayer, FName(TEXT("BlueAttackHit")), Defender, IncomingAmount, Attacker,
-		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
-		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
-	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
-
 	if (bCounterSucceeds)
 	{
 		const float GoldAmount = bAttackerPlayer ? GetEnemyGoldDamage() : GetPlayerGoldDamage();
@@ -1625,6 +1619,14 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 			AttackerRow->Hurt, nullptr, FAnimRef(), FAnimRef(),
 			GoldCounterRef.Montage.IsNull() ? nullptr : GoldCounterRef.Montage.LoadSynchronous(), false);
 	}
+
+	// 先注册金色反击（会清理对方侧槽），再注册蓝攻事件并最后预排红防，
+	// 避免后续 RegisterPendingHit 的 ClearPendingHit 清掉刚排好的防御定时器
+	FAnimRef DefenderFollowUp = bCounterSucceeds ? DefenderRow->GoldCounter : DefenderRow->Hurt;
+	RegisterPendingHit(bAttackerPlayer, FName(TEXT("BlueAttackHit")), Defender, IncomingAmount, Attacker,
+		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
+		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
+	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
 }
 
 void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
@@ -1661,6 +1663,8 @@ void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 蓝攻无 BlueAttackHit 通知，红防立即启动"));
 	}
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防预排 Delay=%f (HitTime=%f, GuardReadyTime=%f)"),
+		Delay, HitTime, GuardReadyTime);
 
 	World->GetTimerManager().SetTimer(Timer, [this, Defender = Hit.Defender,
 		Reaction = Hit.DefenderReaction, FollowUp = Hit.DefenderFollowUp]()

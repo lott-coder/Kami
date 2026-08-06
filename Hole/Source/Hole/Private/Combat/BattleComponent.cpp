@@ -677,25 +677,25 @@ void UBattleComponent::StartClash(EClashType ClashType)
 
 	SetPhase(EBattlePhase::Clash);
 
-	// 动画：敌方碰撞前摇 + 玩家进入准备姿态（Idle 切换）
+	// 动画：敌方碰撞攻击 + 玩家进入准备姿态（Idle 切换）
 	UAnimMontage* TelegraphMontage = nullptr;
 	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 	{
 		const FAnimRef& Telegraph = (ClashType == EClashType::BlueClash)
-			? Row->ClashTelegraphBlue
-			: Row->ClashTelegraphWhite;
+			? Row->ClashAttackBlue
+			: Row->ClashAttackWhite;
 		TelegraphMontage = Telegraph.Montage.IsNull() ? nullptr : Telegraph.Montage.LoadSynchronous();
 		PlayCombatAnim(BossEnemy.Get(), Telegraph);
 	}
 	SetPlayerClashReady(true);
 
-	// 命中时间锚点：优先取前摇 Montage 的 ClashTelegraphHit 通知时间，缺失回落 ClashTelegraphTime
-	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashTelegraphHit")));
-	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashTelegraphTime;
+	// 命中时间锚点：优先取碰撞攻击 Montage 的 ClashAttackHit 通知时间，缺失回落 ClashAttackTime
+	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashAttackHit")));
+	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashAttackTime;
 	LastClashInputTime = -1.0f;
 
-	// 注册敌方前摇待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
-	RegisterPendingHit(false, FName(TEXT("ClashTelegraphHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
+	// 注册敌方碰撞攻击待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
+	RegisterPendingHit(false, FName(TEXT("ClashAttackHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
 		FAnimRef(), nullptr, FAnimRef(), FAnimRef(), TelegraphMontage, false);
 
 	const float BlockWindow = GetBlockWindow();
@@ -728,8 +728,8 @@ void UBattleComponent::OnClashImpact()
 	}
 	ResolveClash(Result);
 
-	// 前摇无 ClashTelegraphHit 通知：由影响计时器回落结算（若通知已消费则跳过）
-	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
+	// 碰撞攻击无 ClashAttackHit 通知：由影响计时器回落结算（若通知已消费则跳过）
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashAttackHit")))
 	{
 		ApplyPendingHitNow(false);
 	}
@@ -813,8 +813,8 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 		break;
 	}
 
-	// 伤害延迟到 ClashTelegraphHit 通知/回落触发；金额写回待命中事件
-	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
+	// 伤害延迟到 ClashAttackHit 通知/回落触发；金额写回待命中事件
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashAttackHit")))
 	{
 		EnemyPendingHit.Amount = Incoming;
 	}

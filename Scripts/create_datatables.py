@@ -572,7 +572,7 @@ ANIM_COLUMNS = [
     "Entry", "Sheathe", "RedDefense", "GoldCounter", "BlueAttack", "WhiteAttack",
     "Charge", "ChargeInterrupted", "BlockedReaction", "Hurt", "BlockSuccess", "BlockFail",
     "DodgeSuccess", "DodgeFail", "Death", "Victory", "Skill",
-    "ClashReady", "ClashTelegraphBlue", "ClashTelegraphWhite",
+    "ClashReady", "ClashAttackBlue", "ClashAttackWhite",
 ]
 
 

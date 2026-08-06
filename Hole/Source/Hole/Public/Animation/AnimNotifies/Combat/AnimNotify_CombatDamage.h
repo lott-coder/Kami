@@ -16,7 +16,7 @@ class HOLE_API UAnimNotify_CombatDamage : public UAnimNotify
 	GENERATED_BODY()
 
 public:
-	/** 与待命中事件槽匹配的事件名（WhiteAttackHit / BlueAttackHit / GoldCounterHit / ClashTelegraphHit） */
+	/** 与待命中事件槽匹配的事件名（WhiteAttackHit / BlueAttackHit / GoldCounterHit / ClashAttackHit） */
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName EventName;
 

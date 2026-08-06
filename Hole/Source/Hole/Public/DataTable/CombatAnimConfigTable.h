@@ -99,8 +99,8 @@ struct HOLE_API FCombatAnimRow : public FTableRowBase
 	FAnimRef ClashReady;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
-	FAnimRef ClashTelegraphBlue;
+	FAnimRef ClashAttackBlue;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
-	FAnimRef ClashTelegraphWhite;
+	FAnimRef ClashAttackWhite;
 };

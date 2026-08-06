@@ -91,9 +91,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	FName PlayerEntrySectionName = TEXT("Draw");
 
-	/** 同色碰撞：敌方攻击前摇时间（秒），期间提示格挡/闪避 */
+	/** 同色碰撞：敌方碰撞攻击时长（秒），命中帧前提示格挡/闪避 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
-	float ClashTelegraphTime = 0.8f;
+	float ClashAttackTime = 0.8f;
 
 	/** 失败横幅停留时间（秒）后回到 Boss 触发点 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
@@ -351,7 +351,7 @@ private:
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;
 	float PendingOutgoingDamage = 0.0f;
-	/** 碰撞命中时间（来自敌方前摇 ClashTelegraphHit 通知；无通知 = ClashTelegraphTime） */
+	/** 碰撞命中时间（来自敌方 ClashAttackHit 通知；无通知 = ClashAttackTime） */
 	float ClashHitTime = 0.0f;
 	/** 上次格挡/闪避输入时间（秒），用于 ClashInputCooldown 防连按 */
 	float LastClashInputTime = -1.0f;

@@ -40,16 +40,24 @@
 
 ### 2026-08-06 | 程序 ⚡
 
-**事项：** 红防 vs 蓝攻应等红防动画播完再反击——回合推进改为等待"红防→金色反击"链播完。
+**事项：** 回合推进升级为"通用动画闸门"——每次结算的完整播出链（行动 + 命中反应）播完且无待命中/待接反应后才推进；红防 vs 蓝攻的"红防→金色反击"链从专用等待变为通用规则。
 
 **处理过程：**
-1. 新增 `bAwaitingDefenderChain` / `AwaitingChainFinalMontage`：`RegisterBlueVsRedHit` 预排红防后置位，`EndTurnAndAdvance` 入口与调用点挂起推进。
-2. 链终点 = 接续动画（金色反击/受击）Montage 结束（空则红防结束），在 `OnActionMontageEnded` 中复位并推进。
-3. 战斗结束/重试清理时复位等待标志。
+1. 先落专用方案（提交 `f47efc7`）：`bAwaitingDefenderChain` / `AwaitingChainFinalMontage` 挂起红防链的回合推进，验证"等动画链播完"方向可行。
+2. 泛化为通用闸门（当前工作区）：`ApplyResolution` / `StartClash` 开启 `bTurnGateOpen`，`PlayCombatAnim` 将本结算的非循环 Montage 计入 `GatedMontages`，`OnActionMontageEnded` 移出并在"无播放中蒙太奇 + 无待命中事件 + 无待接反应"时经 `TryAdvanceTurnIfGateDone` 推进。
+3. 防死锁：待命中事件无承载 Montage（`FallbackMontage == nullptr` 且伤害 > 0）立即结算；循环姿态（如蓄力，`Montage->bLoop`）不计入播出链；战斗结束/重试清理时关闭闸门并清空播出链。
 
-**结果/解决方案：** 编译通过，提交 `f47efc7`。PIE 待验证：红防 vs 蓝攻 → 红防完整播放 → 金色反击 → 结算 → 才进入下一回合；快速点下一回合不会清掉红防预排。
+**结果/解决方案：** 编译通过（`-NoUba`，修复 `bIsLooping` → `bLoop` 编译错误）。PIE 待验证：任意结算 → 行动/命中反应完整播完才进入下一回合；红防 vs 蓝攻 → 红防完整播放 → 金色反击 → 结算 → 才推进；快速点下一回合不会清掉红防预排。
 
-**经验教训：** "结算驱动动画"的回合需要以动画链终点作为推进闸门，否则快速操作会破坏演出时序。
+**经验教训：** "结算驱动动画"的回合需要以动画链终点作为推进闸门；等待条件要统一收敛到"无播放中蒙太奇 + 无待命中 + 无待接反应"，避免每类结算各写一套挂起逻辑。
+
+### 2026-08-06 | 项目管理
+
+**事项：** 构建卡住处理规则——UBA 因内存压力限流导致构建长时间无产出时，直接取消旧构建重新构建。
+
+**处理过程：** 构建长时间停在"Delaying ... due to memory pressure"（机器可用物理内存仅 1.7GB），取消遗留的 Build.bat/UnrealBuildTool 进程后加 `-NoUba` 重新构建，6.6 秒编译通过。
+
+**经验教训：** UBA 内存限流可能让构建无限期等待；机器内存吃紧时直接用 `-NoUba` 本地编译，比等待加速器调度更快可预期。
 
 ### 2026-08-06 | Bug修复
 

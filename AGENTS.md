@@ -25,6 +25,7 @@
 
 ### Operational conventions
 - **Retry limit 3:** any task (compile, code change, bug fix, etc.) may be retried at most 3 times; if it still fails, stop immediately and send the complete error to the user for a decision (unless the user explicitly asks to "keep retrying until success")
+- **Build stall rule (2026-08-06):** if a build stalls (e.g. UBA repeatedly logs "Delaying ... due to memory pressure" with no new outputs for several minutes), cancel the stale Build.bat/UnrealBuildTool processes immediately and relaunch the build; do not keep waiting on the old process. When the machine is under memory pressure, relaunch with `-NoUba` so UBT compiles locally without UBA throttling.
 - **Confirm the path before creating new files:** always confirm the target path with the user before creating any new file; editing existing files is exempt
 - **At the end of each conversation:** consolidate important information back into this file
 
@@ -110,7 +111,7 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - Clash attack random sections (2026-08-06): `ClashAttackBlueSections`/`ClashAttackWhiteSections` are pipe-separated section names; when non-empty, `StartClash` picks one at random for the clash attack montage, otherwise it falls back to `ClashAttack*.SectionName`.
 - Animation playback rights (2026-08-06): the resolution layer suppresses action animations for the countered/interrupted side (`IsActionSuppressed`: WhiteAttack vs BlueAttack, RedDefense vs WhiteAttack, Charge vs BlueAttack); hit-reaction priority is Death > BlockedReaction > ChargeInterrupted > Charge (resist) > Hurt; a 2-stack charge auto-blue plays as BlueAttack.
 - Hit reactions always interrupt the target's current montage (`Montage_Stop` before playing the reaction in `ApplyPendingHitNow`); pending-hit `HitReaction` comes from the TARGET's anim row, never the attacker's.
-- Blue-vs-red turn gating (2026-08-06): `bAwaitingDefenderChain` suspends `EndTurnAndAdvance` until the RedDefense → GoldCounter chain's final montage ends, so a fast next action cannot cancel the pre-scheduled red defense.
+- Turn gate (2026-08-06): every resolution opens a generic gate (`bTurnGateOpen` + `GatedMontages` + `TryAdvanceTurnIfGateDone`) — `EndTurnAndAdvance` is suspended until the full playback chain of that resolution (all non-looping action/reaction montages, `Montage->bLoop == false`) has ended, no pending hits remain, and no pending reactions remain. Looping poses (e.g. Charge) do not block the gate; pending hits without a carrying montage settle immediately to avoid deadlock. This replaces the earlier blue-vs-red-only `bAwaitingDefenderChain`, so a fast next action cannot cancel pre-scheduled reactions (e.g. RedDefense → GoldCounter) in any resolution.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

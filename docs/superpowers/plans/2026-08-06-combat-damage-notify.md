@@ -20,7 +20,7 @@
 - **重试上限 3 次：** 失败即停止并把完整错误发给用户决策。
 - **三层架构：** USTRUCT 纯数据；公式在 Subsystem；播放/注册/消费在 `UBattleComponent`。
 - **伤害只结算一次：** 待命中事件槽由"命中通知"或"回落路径"二选一消费（先到先得），禁止双重结算。
-- **回合推进保持解耦（v1）：** 不阻塞 `EndTurnAndAdvance`；命中通知若被下一动作打断，回落在 Montage 结束（含被打断）时结算，保证伤害不丢。PIE 验证后再决定是否改为"等动画播完再推进"。
+- **回合推进（2026-08-06 晚定案，通用闸门）：** 每次结算开启 `bTurnGateOpen` + `GatedMontages`，等完整播出链（行动+命中反应，非循环 Montage）播完、无待命中/待接反应后经 `TryAdvanceTurnIfGateDone` 才推进；循环姿态（蓄力，`Montage->bLoop`）不计入；待命中事件无承载蒙太奇（`FallbackMontage == nullptr` 且伤害 > 0）立即结算防死锁。
 - **回落约定：** 动作 Montage 无命中通知 → 播完（含打断）结算 + 警告日志；碰撞攻击无 `ClashAttackHit` → 沿用 `ClashAttackTime` 计时器。
 - **通知类目录约定：** `Animation/AnimNotifies/Combat/`；不按 Montage 命名。
 - **编辑器资产操作由用户手动完成**；不运行 `create_datatables.py` 重建命令。
@@ -1119,4 +1119,4 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 - 覆盖：设计文档全部条目（通知类、待命中事件槽、普通回合注册、蓝红预排、碰撞窗口、输入冷却、停帧与被格挡动画、回落、参数、脚本、文档、编辑器/PIE）均有对应任务。
 - 无占位符：代码步骤给出完整代码或精确插入点；`RegisterBlueVsRedHit` 在 Task 3 以空实现占位并在 Task 4 补齐（已显式说明）。
 - 类型一致性：`RegisterPendingHit`（末参 `bDefenderBlocked`） / `ApplyPendingHitNow` / `OnHitNotify` / `GetNotifyTime` / `ScheduleDefenderReaction` / `StartHitStop` 签名在任务间一致；`EventName` 常量（`BlueAttackHit`/`WhiteAttackHit`/`GoldCounterHit`/`ClashAttackHit`/`GuardReady`）全文一致。
-- 风险：回合推进与动画解耦，命中通知若被下一动作打断由回落保证伤害不丢；PIE 验证后如需"等动画播完再推进"另行迭代。
+- 风险（已定案）：通用回合闸门以"完整播出链播完"为推进条件，命中通知若被下一动作打断由回落保证伤害不丢；循环姿态与无承载蒙太奇的待命中事件不阻塞闸门，避免死锁。

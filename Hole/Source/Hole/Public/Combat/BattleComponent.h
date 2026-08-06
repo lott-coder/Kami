@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Combat/BattleTypes.h"
+#include "DataTable/CombatAnimConfigTable.h"
 #include "BattleComponent.generated.h"
 
 class ARole;
@@ -217,12 +218,21 @@ private:
 	/** 格挡成功：先播 BlockSuccess（弹反），播完回调接 GoldCounter */
 	void PlayBlockSuccessChain();
 
+	/** 先播动作 Montage，播完（含被打断）再接反应动画；动作为空/缺失时直接播反应（玩家/敌人分槽） */
+	void PlayAnimThenReaction(ABaseCharacter* Character, const FAnimRef& ActionRef, const FAnimRef& ReactionRef);
+
+	/** 清理单侧待接反应：解绑回调并复位状态 */
+	void ClearPendingReactionSide(bool bPlayer);
+
+	/** 清理玩家/敌人两侧待接反应 */
+	void ClearPendingReactions();
+
 	/** 格挡/闪避失败：优先对应 Fail 动画，空则回落 Hurt */
 	void PlayClashFailReaction(EClashResult Result);
 
-	/** BlockSuccess 播完回调：接金色反击 */
+	/** 动作 Montage 播完回调：接待接反应动画 */
 	UFUNCTION()
-	void OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	void OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
 	/** 战斗结束：败方播 Death，胜方播 Victory（空引用跳过） */
 	void PlayDeathAnimations(bool bPlayerWon);
@@ -271,8 +281,14 @@ private:
 	bool bClashWindowOpen = false;
 	bool bClashResolved = false;
 	bool bClashStarted = false;
-	/** 格挡成功弹反 Montage 播完后待接金色反击 */
-	bool bBlockSuccessChainPending = false;
+	/** 玩家/敌人待接反应（动作 Montage 播完后触发；支持双方同时排队） */
+	bool bPlayerReactionPending = false;
+	UAnimMontage* PlayerPendingActionMontage = nullptr;
+	FAnimRef PlayerPendingReactionRef;
+
+	bool bEnemyReactionPending = false;
+	UAnimMontage* EnemyPendingActionMontage = nullptr;
+	FAnimRef EnemyPendingReactionRef;
 	EClashType ActiveClashType = EClashType::None;
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;

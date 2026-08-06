@@ -1220,6 +1220,38 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	const EBattleAction PlayerAction = PlayerLastAction;
 	const EBattleAction EnemyAction = EnemyChosenAction;
 
+	// 红防克蓝攻（金色反击）：红防 + 蓝攻同播 → 红防结束接金色反击，蓝攻结束接敌方受击
+	if (PlayerAction == EBattleAction::RedDefense
+		&& EnemyAction == EBattleAction::BlueAttack
+		&& Resolution.PlayerDamageTaken <= 0.0f)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayAnimThenReaction(PlayerRole.Get(), Row->RedDefense, Row->GoldCounter);
+		}
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		{
+			PlayAnimThenReaction(BossEnemy.Get(), Row->BlueAttack, Row->Hurt);
+		}
+		return;
+	}
+
+	// 敌方红防克我方蓝攻：蓝攻 + 红防同播 → 蓝攻结束接我方受击，红防结束接敌方金色反击
+	if (EnemyAction == EBattleAction::RedDefense
+		&& PlayerAction == EBattleAction::BlueAttack
+		&& Resolution.EnemyDamageTaken <= 0.0f)
+	{
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayAnimThenReaction(PlayerRole.Get(), Row->BlueAttack, Row->Hurt);
+		}
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		{
+			PlayAnimThenReaction(BossEnemy.Get(), Row->RedDefense, Row->GoldCounter);
+		}
+		return;
+	}
+
 	// 玩家侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
 	if (Resolution.PlayerDamageTaken > 0.0f)
 	{
@@ -1313,29 +1345,7 @@ void UBattleComponent::PlayBlockSuccessChain()
 	{
 		return;
 	}
-	if (Row->BlockSuccess.Montage.IsNull())
-	{
-		// 无弹反动作时直接尝试金色反击
-		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
-		return;
-	}
-	if (!PlayerRole.IsValid())
-	{
-		return;
-	}
-	UAnimMontage* BlockMontage = Row->BlockSuccess.Montage.LoadSynchronous();
-	if (!BlockMontage)
-	{
-		// 弹反资产缺失：不进入连播待机，直接尝试金色反击
-		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
-		return;
-	}
-	bBlockSuccessChainPending = true;
-	if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
-	{
-		AnimInstance->OnMontageEnded.AddDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
-	}
-	PlayCombatAnim(PlayerRole.Get(), Row->BlockSuccess);
+	PlayAnimThenReaction(PlayerRole.Get(), Row->BlockSuccess, Row->GoldCounter);
 }
 
 void UBattleComponent::PlayClashFailReaction(EClashResult Result)
@@ -1349,27 +1359,105 @@ void UBattleComponent::PlayClashFailReaction(EClashResult Result)
 	PlayCombatAnim(PlayerRole.Get(), Ref.Montage.IsNull() ? Row->Hurt : Ref);
 }
 
-void UBattleComponent::OnBlockSuccessMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+void UBattleComponent::PlayAnimThenReaction(ABaseCharacter* Character, const FAnimRef& ActionRef, const FAnimRef& ReactionRef)
 {
-	if (!bBlockSuccessChainPending)
+	if (!Character)
 	{
 		return;
 	}
-	bBlockSuccessChainPending = false;
-	if (PlayerRole.IsValid())
+	if (ActionRef.Montage.IsNull())
 	{
-		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
+		PlayCombatAnim(Character, ReactionRef);
+		return;
+	}
+	UAnimMontage* ActionMontage = ActionRef.Montage.LoadSynchronous();
+	if (!ActionMontage)
+	{
+		PlayCombatAnim(Character, ReactionRef);
+		return;
+	}
+
+	const bool bPlayerSide = (Character == PlayerRole.Get());
+	bool* bPending = bPlayerSide ? &bPlayerReactionPending : &bEnemyReactionPending;
+	UAnimMontage** PendingMontage = bPlayerSide ? &PlayerPendingActionMontage : &EnemyPendingActionMontage;
+	FAnimRef* PendingRef = bPlayerSide ? &PlayerPendingReactionRef : &EnemyPendingReactionRef;
+
+	if (*bPending)
+	{
+		// 该侧前一个动作尚未播完：先补播其反应，再开始新动作
+		const FAnimRef OldReaction = *PendingRef;
+		ClearPendingReactionSide(bPlayerSide);
+		PlayCombatAnim(Character, OldReaction);
+	}
+
+	*bPending = true;
+	*PendingMontage = ActionMontage;
+	*PendingRef = ReactionRef;
+	if (UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->OnMontageEnded.AddDynamic(this, &UBattleComponent::OnActionMontageEnded);
+	}
+	PlayCombatAnim(Character, ActionRef);
+}
+
+void UBattleComponent::ClearPendingReactionSide(bool bPlayer)
+{
+	ABaseCharacter* Character = bPlayer ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
+	if (bPlayer)
+	{
+		if (bPlayerReactionPending && Character)
 		{
-			AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
+			if (UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance())
+			{
+				AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnActionMontageEnded);
+			}
 		}
+		bPlayerReactionPending = false;
+		PlayerPendingActionMontage = nullptr;
+		PlayerPendingReactionRef = FAnimRef();
 	}
-	if (bInterrupted)
+	else
 	{
+		if (bEnemyReactionPending && Character)
+		{
+			if (UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance())
+			{
+				AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnActionMontageEnded);
+			}
+		}
+		bEnemyReactionPending = false;
+		EnemyPendingActionMontage = nullptr;
+		EnemyPendingReactionRef = FAnimRef();
+	}
+}
+
+void UBattleComponent::ClearPendingReactions()
+{
+	ClearPendingReactionSide(true);
+	ClearPendingReactionSide(false);
+}
+
+void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (bPlayerReactionPending && Montage == PlayerPendingActionMontage)
+	{
+		const FAnimRef ReactionRef = PlayerPendingReactionRef;
+		ClearPendingReactionSide(true);
+		if (PlayerRole.IsValid() && Phase != EBattlePhase::Ended)
+		{
+			PlayCombatAnim(PlayerRole.Get(), ReactionRef);
+		}
 		return;
 	}
-	if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+	if (bEnemyReactionPending && Montage == EnemyPendingActionMontage)
 	{
-		PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
+		const FAnimRef ReactionRef = EnemyPendingReactionRef;
+		ClearPendingReactionSide(false);
+		if (BossEnemy.IsValid() && Phase != EBattlePhase::Ended)
+		{
+			PlayCombatAnim(BossEnemy.Get(), ReactionRef);
+		}
+		return;
 	}
 }
 
@@ -1392,13 +1480,12 @@ void UBattleComponent::SheathePlayerWeapon()
 	if (PlayerRole.IsValid())
 	{
 		// 停止全部 Montage（入场/动作/碰撞残留），避免通知回调再次拔刀或连播反击
+		ClearPendingReactions();
 		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
 		{
 			AnimInstance->StopAllMontages(0.0f);
-			AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnBlockSuccessMontageEnded);
 		}
 		SetPlayerClashReady(false);
-		bBlockSuccessChainPending = false;
 
 		// 武器收回背部 socket；AttachWeaponToSocket 会把 IsWeaponDrawn 置回 false，
 		// 动画实例逐帧镜像后玩家自动回到未拔刀 Idle

@@ -25,6 +25,22 @@ class UBossIntroComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBattleStateChanged);
 
+/** 待命中事件：一次攻击在命中帧要执行的伤害与防御反应（v1 每侧最多一条） */
+struct FPendingHitEvent
+{
+	FName EventName;
+	ABaseCharacter* Target = nullptr;
+	float Amount = 0.0f;
+	AActor* Causer = nullptr;
+	FAnimRef HitReaction;
+	ABaseCharacter* Defender = nullptr;
+	FAnimRef DefenderReaction;
+	FAnimRef DefenderFollowUp;
+	UAnimMontage* FallbackMontage = nullptr;
+	bool bDefenderBlocked = false;   // 本攻击被格挡（含红防反击成功）：命中时攻击者播 BlockedReaction + 停帧
+	bool bActive = false;
+};
+
 /**
  * UBattleComponent - 战斗会话状态机（挂在 BP_Dale 上）
  *
@@ -142,6 +158,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Battle")
 	bool IsPlayerExtraTurn() const { return bPlayerExtraTurnPending; }
 
+	/** 命中通知回调（由 UAnimNotify_CombatDamage 调用；事件驱动，战斗组件外部入口） */
+	void OnHitNotify(ABaseCharacter* Attacker, FName EventName);
+
 protected:
 	UFUNCTION()
 	void HandleIntroFinished();
@@ -237,6 +256,36 @@ private:
 	/** 战斗结束：败方播 Death，胜方播 Victory（空引用跳过） */
 	void PlayDeathAnimations(bool bPlayerWon);
 
+	/** 从行结构取某动作的动画引用（红防/蓝攻/白攻/蓄力；其他返回 nullptr） */
+	const FAnimRef* GetActionRef(const FCombatAnimRow& Row, EBattleAction Action) const;
+
+	/** 注册待命中事件（bPlayerAttacker=true 表示攻击者为玩家） */
+	void RegisterPendingHit(bool bPlayerAttacker, FName EventName, ABaseCharacter* Target, float Amount,
+		AActor* Causer, const FAnimRef& HitReaction, ABaseCharacter* Defender,
+		const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage,
+		bool bDefenderBlocked = false);
+
+	/** 清理单侧待命中事件（含其防御反应定时器） */
+	void ClearPendingHit(bool bPlayerAttacker);
+
+	/** 清理两侧待命中事件（战斗结束/重试） */
+	void ClearPendingHits();
+
+	/** 立即消费单侧待命中事件（通知或回落路径调用；保证只结算一次） */
+	void ApplyPendingHitNow(bool bPlayerAttacker);
+
+	/** 扫描 Montage 中指定 EventName 通知/标记的时间（秒）；找不到返回 -1 */
+	float GetNotifyTime(UAnimMontage* Montage, FName EventName) const;
+
+	/** 停帧：暂停玩家/敌人活动 Montage，Duration 后恢复；Duration<=0 跳过 */
+	void StartHitStop(float Duration);
+
+	/** 普通回合：按攻击方注册命中事件并播放行动动画 */
+	void RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution);
+
+	/** 蓝 vs 红：注册蓝攻命中事件（含防御反应预排与金色反击注册） */
+	void RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds);
+
 	// ==================== 数值辅助（只调子系统） ====================
 
 	float GetPlayerWhiteDamage() const;
@@ -289,6 +338,9 @@ private:
 	bool bEnemyReactionPending = false;
 	UAnimMontage* EnemyPendingActionMontage = nullptr;
 	FAnimRef EnemyPendingReactionRef;
+	FPendingHitEvent PlayerPendingHit;
+	FPendingHitEvent EnemyPendingHit;
+	FTimerHandle HitStopTimer;
 	EClashType ActiveClashType = EClashType::None;
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;

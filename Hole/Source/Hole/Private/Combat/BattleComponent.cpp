@@ -21,6 +21,8 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/BaseCharacterAnimInstance.h"
+#include "Animation/AnimNotifies/Combat/AnimNotify_CombatDamage.h"
+#include "Animation/AnimNotifies/Combat/AnimNotify_CombatMarker.h"
 #include "DataTable/CombatAnimConfigTable.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -604,16 +606,7 @@ void UBattleComponent::ApplyResolution(const FTurnResolution& Resolution)
 		return;
 	}
 
-	if (Resolution.PlayerDamageTaken > 0.0f)
-	{
-		ApplyDamageTo(PlayerRole.Get(), Resolution.PlayerDamageTaken, BossEnemy.Get());
-	}
-	if (Resolution.EnemyDamageTaken > 0.0f)
-	{
-		ApplyDamageTo(BossEnemy.Get(), Resolution.EnemyDamageTaken, PlayerRole.Get());
-	}
-
-	// 战斗动画（v1 与回合推进解耦：播放后不阻塞 EndTurnAndAdvance）
+	// 伤害延迟到动画命中通知：注册与播放由 PlayResolutionAnimations 负责
 	if (Phase != EBattlePhase::Ended)
 	{
 		PlayResolutionAnimations(Resolution);
@@ -1180,6 +1173,11 @@ void UBattleComponent::PlayCombatAnim(ABaseCharacter* Character, const FAnimRef&
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayCombatAnim - 无法加载 Montage: %s"), *AnimRef.Montage.ToString());
 		return;
 	}
+	if (UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->OnMontageEnded.RemoveDynamic(this, &UBattleComponent::OnActionMontageEnded);
+		AnimInstance->OnMontageEnded.AddDynamic(this, &UBattleComponent::OnActionMontageEnded);
+	}
 	Character->PlayAnimMontage(Montage, AnimRef.PlayRate, AnimRef.SectionName);
 	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayCombatAnim - %s 播放 %s"), *GetNameSafe(Character), *Montage->GetName());
 }
@@ -1212,6 +1210,184 @@ void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
 	PlayCombatAnim(Target, *Ref);
 }
 
+const FAnimRef* UBattleComponent::GetActionRef(const FCombatAnimRow& Row, EBattleAction Action) const
+{
+	switch (Action)
+	{
+	case EBattleAction::RedDefense: return &Row.RedDefense;
+	case EBattleAction::BlueAttack: return &Row.BlueAttack;
+	case EBattleAction::WhiteAttack: return &Row.WhiteAttack;
+	case EBattleAction::Charge: return &Row.Charge;
+	default: return nullptr;
+	}
+}
+
+float UBattleComponent::GetNotifyTime(UAnimMontage* Montage, FName EventName) const
+{
+	if (!Montage)
+	{
+		return -1.0f;
+	}
+	for (const FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		if (!Event.Notify)
+		{
+			continue;
+		}
+		if (const UAnimNotify_CombatDamage* DamageNotify = Cast<UAnimNotify_CombatDamage>(Event.Notify))
+		{
+			if (DamageNotify->EventName == EventName)
+			{
+				return Event.GetTime();
+			}
+		}
+		if (const UAnimNotify_CombatMarker* Marker = Cast<UAnimNotify_CombatMarker>(Event.Notify))
+		{
+			if (Marker->MarkerName == EventName)
+			{
+				return Event.GetTime();
+			}
+		}
+	}
+	return -1.0f;
+}
+
+void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName, ABaseCharacter* Target, float Amount,
+	AActor* Causer, const FAnimRef& HitReaction, ABaseCharacter* Defender,
+	const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage,
+	bool bDefenderBlocked)
+{
+	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
+	ClearPendingHit(bPlayerAttacker);
+	Hit.bActive = true;
+	Hit.EventName = EventName;
+	Hit.Target = Target;
+	Hit.Amount = Amount;
+	Hit.Causer = Causer;
+	Hit.HitReaction = HitReaction;
+	Hit.Defender = Defender;
+	Hit.DefenderReaction = DefenderReaction;
+	Hit.DefenderFollowUp = DefenderFollowUp;
+	Hit.FallbackMontage = FallbackMontage;
+	Hit.bDefenderBlocked = bDefenderBlocked;
+}
+
+void UBattleComponent::ClearPendingHit(bool bPlayerAttacker)
+{
+	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
+	Hit = FPendingHitEvent();
+}
+
+void UBattleComponent::ClearPendingHits()
+{
+	ClearPendingHit(true);
+	ClearPendingHit(false);
+}
+
+void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
+{
+	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
+	if (!Hit.bActive)
+	{
+		return;
+	}
+	ABaseCharacter* Target = Hit.Target;
+	const FAnimRef HitReaction = Hit.HitReaction;
+	const float Amount = Hit.Amount;
+	AActor* Causer = Hit.Causer;
+	const bool bBlocked = Hit.bDefenderBlocked;
+	ClearPendingHit(bPlayerAttacker);
+
+	if (Target && Amount > 0.0f)
+	{
+		ApplyDamageTo(Target, Amount, Causer);
+		if (!Target->IsDead() && !HitReaction.Montage.IsNull())
+		{
+			PlayCombatAnim(Target, HitReaction);
+		}
+	}
+
+	// 被格挡：攻击者立即混入 BlockedReaction + 停帧
+	if (bBlocked && Causer)
+	{
+		if (ABaseCharacter* Attacker = Cast<ABaseCharacter>(Causer))
+		{
+			if (!Attacker->IsDead())
+			{
+				const bool bAttackerPlayer = (Attacker == PlayerRole.Get());
+				if (const FCombatAnimRow* Row = GetCombatAnimRow(bAttackerPlayer))
+				{
+					PlayCombatAnim(Attacker, Row->BlockedReaction);
+				}
+			}
+		}
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		StartHitStop(P.HitStopDuration);
+	}
+}
+
+void UBattleComponent::OnHitNotify(ABaseCharacter* Attacker, FName EventName)
+{
+	if (!Attacker)
+	{
+		return;
+	}
+	const bool bPlayerAttacker = (Attacker == PlayerRole.Get());
+	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
+	if (!Hit.bActive || Hit.EventName != EventName)
+	{
+		return;
+	}
+	ApplyPendingHitNow(bPlayerAttacker);
+}
+
+void UBattleComponent::StartHitStop(float Duration)
+{
+	UWorld* World = GetWorld();
+	if (Duration <= 0.0f || !World)
+	{
+		return;
+	}
+	TArray<UAnimInstance*> PausedInstances;
+	TArray<UAnimMontage*> PausedMontages;
+	if (PlayerRole.IsValid())
+	{
+		if (UAnimInstance* AI = PlayerRole->GetMesh()->GetAnimInstance())
+		{
+			if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+			{
+				AI->Montage_Pause(Active);
+				PausedInstances.Add(AI);
+				PausedMontages.Add(Active);
+			}
+		}
+	}
+	if (BossEnemy.IsValid())
+	{
+		if (UAnimInstance* AI = BossEnemy->GetMesh()->GetAnimInstance())
+		{
+			if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+			{
+				AI->Montage_Pause(Active);
+				PausedInstances.Add(AI);
+				PausedMontages.Add(Active);
+			}
+		}
+	}
+	World->GetTimerManager().SetTimer(HitStopTimer, [PausedInstances, PausedMontages]()
+	{
+		for (int32 i = 0; i < PausedInstances.Num() && i < PausedMontages.Num(); ++i)
+		{
+			if (PausedInstances[i] && PausedMontages[i])
+			{
+				PausedInstances[i]->Montage_Resume(PausedMontages[i]);
+			}
+		}
+	}, Duration, false);
+}
+
 void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolution)
 {
 	if (!PlayerRole.IsValid() || !BossEnemy.IsValid())
@@ -1222,123 +1398,75 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	const EBattleAction PlayerAction = PlayerLastAction;
 	const EBattleAction EnemyAction = EnemyChosenAction;
 
-	// 红防克蓝攻（金色反击）：红防 + 蓝攻同播 → 红防结束接金色反击，蓝攻结束接敌方受击
-	if (PlayerAction == EBattleAction::RedDefense
-		&& EnemyAction == EBattleAction::BlueAttack
-		&& Resolution.PlayerDamageTaken <= 0.0f)
+	// 蓝 vs 红（含红防反击/2 层正面承受）：专用注册路径
+	if (PlayerAction == EBattleAction::RedDefense && EnemyAction == EBattleAction::BlueAttack)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-		{
-			PlayAnimThenReaction(PlayerRole.Get(), Row->RedDefense, Row->GoldCounter);
-		}
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-		{
-			PlayAnimThenReaction(BossEnemy.Get(), Row->BlueAttack, Row->Hurt);
-		}
+		RegisterBlueVsRedHit(false, Resolution.PlayerDamageTaken, Resolution.PlayerDamageTaken <= 0.0f);
+		return;
+	}
+	if (EnemyAction == EBattleAction::RedDefense && PlayerAction == EBattleAction::BlueAttack)
+	{
+		RegisterBlueVsRedHit(true, Resolution.PlayerDamageTaken, Resolution.EnemyDamageTaken <= 0.0f);
 		return;
 	}
 
-	// 敌方红防克我方蓝攻：蓝攻 + 红防同播 → 蓝攻结束接我方受击，红防结束接敌方金色反击
-	if (EnemyAction == EBattleAction::RedDefense
-		&& PlayerAction == EBattleAction::BlueAttack
-		&& Resolution.EnemyDamageTaken <= 0.0f)
+	// 普通回合：按攻击方注册命中事件并播行动动画（受击/蓄力反应在命中帧播放）
+	RegisterSideHit(true, Resolution);
+	RegisterSideHit(false, Resolution);
+}
+
+void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution)
+{
+	const EBattleAction AttackerAction = bPlayerAttacker ? PlayerLastAction : EnemyChosenAction;
+	const bool bTargetInterrupted = bPlayerAttacker ? Resolution.bEnemyChargeInterrupted : Resolution.bPlayerChargeInterrupted;
+	const bool bTargetResist = bPlayerAttacker ? Resolution.bEnemyExtraTurn : Resolution.bPlayerExtraTurn;
+	const float Amount = bPlayerAttacker ? Resolution.EnemyDamageTaken : Resolution.PlayerDamageTaken;
+
+	ABaseCharacter* Attacker = bPlayerAttacker ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
+	ABaseCharacter* Target = bPlayerAttacker ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
+	const FCombatAnimRow* AttackerRow = GetCombatAnimRow(bPlayerAttacker);
+	const FCombatAnimRow* TargetRow = GetCombatAnimRow(!bPlayerAttacker);
+	if (!Attacker || !Target || !AttackerRow || !TargetRow)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-		{
-			PlayAnimThenReaction(PlayerRole.Get(), Row->BlueAttack, Row->Hurt);
-		}
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-		{
-			PlayAnimThenReaction(BossEnemy.Get(), Row->RedDefense, Row->GoldCounter);
-		}
 		return;
 	}
 
-	// 玩家侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
-	if (Resolution.PlayerDamageTaken > 0.0f)
+	FName EventName = NAME_None;
+	switch (AttackerAction)
 	{
-		if (Resolution.bPlayerExtraTurn)
-		{
-			// 蓄力抵抗白攻：不打断蓄力、不播受击，保持蓄力姿态
-			if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-			{
-				PlayCombatAnim(PlayerRole.Get(), Row->Charge);
-			}
-		}
-		else if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-		{
-			if (Row->Hurt.Montage.IsNull())
-			{
-				UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 玩家 Hurt 动画未配置"));
-			}
-			PlayCombatAnim(PlayerRole.Get(), Row->Hurt);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 未找到玩家 DT_CombatAnimConfig 行（受击动画缺失）"));
-		}
-	}
-	else if (PlayerAction == EBattleAction::RedDefense && EnemyAction == EBattleAction::BlueAttack)
-	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-		{
-			PlayCombatAnim(PlayerRole.Get(), Row->GoldCounter);
-		}
-	}
-	else if (Resolution.bPlayerChargeInterrupted)
-	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
-		{
-			PlayCombatAnim(PlayerRole.Get(), Row->ChargeInterrupted);
-		}
-	}
-	else
-	{
-		PlayActionAnim(true, PlayerAction);
+	case EBattleAction::BlueAttack: EventName = FName(TEXT("BlueAttackHit")); break;
+	case EBattleAction::WhiteAttack: EventName = FName(TEXT("WhiteAttackHit")); break;
+	default: return;
 	}
 
-	// 敌人侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
-	if (Resolution.EnemyDamageTaken > 0.0f)
+	const FAnimRef* ActionRef = GetActionRef(*AttackerRow, AttackerAction);
+	if (ActionRef)
 	{
-		if (Resolution.bEnemyExtraTurn)
-		{
-			// 蓄力抵抗白攻：不打断蓄力、不播受击，保持蓄力姿态
-			if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-			{
-				PlayCombatAnim(BossEnemy.Get(), Row->Charge);
-			}
-		}
-		else if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-		{
-			if (Row->Hurt.Montage.IsNull())
-			{
-				UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 敌人 Hurt 动画未配置"));
-			}
-			PlayCombatAnim(BossEnemy.Get(), Row->Hurt);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayResolutionAnimations - 未找到敌人 DT_CombatAnimConfig 行（受击动画缺失）"));
-		}
+		PlayCombatAnim(Attacker, *ActionRef);
 	}
-	else if (EnemyAction == EBattleAction::RedDefense && PlayerAction == EBattleAction::BlueAttack)
+
+	FAnimRef HitReaction;
+	if (bTargetInterrupted)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-		{
-			PlayCombatAnim(BossEnemy.Get(), Row->GoldCounter);
-		}
+		HitReaction = TargetRow->ChargeInterrupted;
 	}
-	else if (Resolution.bEnemyChargeInterrupted)
+	else if (bTargetResist)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
-		{
-			PlayCombatAnim(BossEnemy.Get(), Row->ChargeInterrupted);
-		}
+		HitReaction = TargetRow->Charge;
 	}
 	else
 	{
-		PlayActionAnim(false, EnemyAction);
+		HitReaction = TargetRow->Hurt;
 	}
+
+	RegisterPendingHit(bPlayerAttacker, EventName, Target, Amount, Attacker, HitReaction,
+		nullptr, FAnimRef(), FAnimRef(),
+		ActionRef ? ActionRef->Montage.LoadSynchronous() : nullptr, false);
+}
+
+void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds)
+{
+	// Task 4 补齐：注册蓝攻命中事件（伤害 + 防御反应预排）与金色反击注册
 }
 
 void UBattleComponent::SetPlayerClashReady(bool bReady)
@@ -1476,6 +1604,16 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 			PlayCombatAnim(BossEnemy.Get(), ReactionRef);
 		}
 		return;
+	}
+
+	// 待命中事件回落：动作蒙太奇播完（含被打断）仍未触发通知 → 结算，保证伤害不丢
+	if (PlayerPendingHit.bActive && PlayerPendingHit.FallbackMontage == Montage)
+	{
+		ApplyPendingHitNow(true);
+	}
+	if (EnemyPendingHit.bActive && EnemyPendingHit.FallbackMontage == Montage)
+	{
+		ApplyPendingHitNow(false);
 	}
 }
 

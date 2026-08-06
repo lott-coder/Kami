@@ -1775,6 +1775,11 @@ void UBattleComponent::SheathePlayerWeapon()
 	{
 		// 停止全部 Montage（入场/动作/碰撞残留），避免通知回调再次拔刀或连播反击
 		ClearPendingReactions();
+		ClearPendingHits();
+		if (GetWorld())
+		{
+			GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
+		}
 		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
 		{
 			AnimInstance->StopAllMontages(0.0f);
@@ -1884,6 +1889,12 @@ void UBattleComponent::ResetForRetry()
 	bClashResolved = false;
 	bClashWindowOpen = false;
 	PendingClashResult = EClashResult::None;
+	ClearPendingHits();
+	LastClashInputTime = -1.0f;
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
+	}
 }
 
 float UBattleComponent::GetPlayerWhiteDamage() const

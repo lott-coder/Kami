@@ -1494,12 +1494,38 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	RegisterSideHit(false, Resolution);
 }
 
+bool UBattleComponent::IsActionSuppressed(bool bPlayerSide, EBattleAction OtherAction) const
+{
+	const EBattleAction OwnAction = bPlayerSide ? PlayerLastAction : EnemyChosenAction;
+	switch (OwnAction)
+	{
+	case EBattleAction::WhiteAttack:
+		// 白攻被蓝攻克制：不播白攻动画
+		return OtherAction == EBattleAction::BlueAttack;
+	case EBattleAction::RedDefense:
+		// 红防被白攻克制：不播红防动画
+		return OtherAction == EBattleAction::WhiteAttack;
+	case EBattleAction::Charge:
+		// 蓄力被蓝攻打断：不播蓄力动画
+		return OtherAction == EBattleAction::BlueAttack;
+	default:
+		return false;
+	}
+}
+
 void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution)
 {
 	const EBattleAction AttackerAction = bPlayerAttacker ? PlayerLastAction : EnemyChosenAction;
+	const EBattleAction OtherAction = bPlayerAttacker ? EnemyChosenAction : PlayerLastAction;
 	const bool bTargetInterrupted = bPlayerAttacker ? Resolution.bEnemyChargeInterrupted : Resolution.bPlayerChargeInterrupted;
 	const bool bTargetResist = bPlayerAttacker ? Resolution.bEnemyExtraTurn : Resolution.bPlayerExtraTurn;
 	const float Amount = bPlayerAttacker ? Resolution.EnemyDamageTaken : Resolution.PlayerDamageTaken;
+
+	// 结算层播放权：被克制/被打断的侧不播行动动画（白攻被蓝攻克、红防被白攻克、蓄力被蓝攻打断）
+	if (IsActionSuppressed(bPlayerAttacker, OtherAction))
+	{
+		return;
+	}
 
 	ABaseCharacter* Attacker = bPlayerAttacker ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
 	ABaseCharacter* Target = bPlayerAttacker ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
@@ -1510,18 +1536,31 @@ void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResoluti
 		return;
 	}
 
-	FName EventName = NAME_None;
-	switch (AttackerAction)
+	// 满蓄力 vs 红防：蓄力自动发动强化蓝攻，按蓝攻处理（事件/动画）
+	EBattleAction EffectiveAction = AttackerAction;
+	if (EffectiveAction == EBattleAction::Charge && Amount > 0.0f)
 	{
-	case EBattleAction::BlueAttack: EventName = FName(TEXT("BlueAttackHit")); break;
-	case EBattleAction::WhiteAttack: EventName = FName(TEXT("WhiteAttackHit")); break;
-	default: return;
+		EffectiveAction = EBattleAction::BlueAttack;
 	}
 
-	const FAnimRef* ActionRef = GetActionRef(*AttackerRow, AttackerAction);
+	const FAnimRef* ActionRef = GetActionRef(*AttackerRow, EffectiveAction);
 	if (ActionRef)
 	{
 		PlayCombatAnim(Attacker, *ActionRef);
+	}
+
+	FName EventName = NAME_None;
+	switch (EffectiveAction)
+	{
+	case EBattleAction::BlueAttack: EventName = FName(TEXT("BlueAttackHit")); break;
+	case EBattleAction::WhiteAttack: EventName = FName(TEXT("WhiteAttackHit")); break;
+	default: return; // 非攻击行动（红防/蓄力姿态）无命中事件
+	}
+
+	// 无伤害时只播行动（蓄力抵抗/无事发生），不注册命中事件
+	if (Amount <= 0.0f)
+	{
+		return;
 	}
 
 	FAnimRef HitReaction;

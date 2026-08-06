@@ -286,6 +286,9 @@ private:
 	/** 普通回合：按攻击方注册命中事件并播放行动动画 */
 	void RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution);
 
+	/** 结算层播放权：该侧行动是否被克制/打断（是则不播行动动画） */
+	bool IsActionSuppressed(bool bPlayerSide, EBattleAction OtherAction) const;
+
 	/** 蓝 vs 红：注册蓝攻命中事件（含防御反应预排与金色反击注册） */
 	void RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds);
 

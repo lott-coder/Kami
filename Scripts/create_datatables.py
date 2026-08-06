@@ -607,6 +607,8 @@ def _anim_row(display_name, refs):
 
 
 COMBATANIM_HEADERS = _anim_headers()
+COMBATANIM_HEADERS.append("ClashAttackBlueSections")
+COMBATANIM_HEADERS.append("ClashAttackWhiteSections")
 combat_anims = [
     ("drifter", _anim_row("漂泊者", {
         "Entry": _anim_ref(
@@ -615,6 +617,9 @@ combat_anims = [
     })),
     ("satan", _anim_row("撒旦", {})),
 ]
+for row in combat_anims:
+    row[1]["ClashAttackBlueSections"] = ""
+    row[1]["ClashAttackWhiteSections"] = ""
 
 # ---------------------------------------------------------------------------
 # 12 - DT_BattleStage

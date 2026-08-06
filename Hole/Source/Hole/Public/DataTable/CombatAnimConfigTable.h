@@ -101,6 +101,14 @@ struct HOLE_API FCombatAnimRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
 	FAnimRef ClashAttackBlue;
 
+	/** 蓝碰撞攻击可选 Section（竖线分隔，如 "A|B|C"）；空 = 用 ClashAttackBlue.SectionName，非空则每次随机选一段 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
+	FString ClashAttackBlueSections;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
 	FAnimRef ClashAttackWhite;
+
+	/** 白碰撞攻击可选 Section（竖线分隔）；空 = 用 ClashAttackWhite.SectionName，非空则每次随机选一段 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Clash")
+	FString ClashAttackWhiteSections;
 };

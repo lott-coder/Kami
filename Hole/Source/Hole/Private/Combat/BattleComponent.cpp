@@ -681,9 +681,23 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	UAnimMontage* TelegraphMontage = nullptr;
 	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 	{
-		const FAnimRef& Telegraph = (ClashType == EClashType::BlueClash)
+		FAnimRef Telegraph = (ClashType == EClashType::BlueClash)
 			? Row->ClashAttackBlue
 			: Row->ClashAttackWhite;
+		// 随机 Section：配置了竖线分隔列表时随机选一段播放
+		const FString& Sections = (ClashType == EClashType::BlueClash)
+			? Row->ClashAttackBlueSections
+			: Row->ClashAttackWhiteSections;
+		if (!Sections.IsEmpty())
+		{
+			TArray<FString> SectionParts;
+			Sections.ParseIntoArray(SectionParts, TEXT("|"), true);
+			if (SectionParts.Num() > 0)
+			{
+				Telegraph.SectionName = FName(*SectionParts[FMath::RandRange(0, SectionParts.Num() - 1)]);
+				UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartClash - 随机碰撞攻击 Section: %s"), *Telegraph.SectionName.ToString());
+			}
+		}
 		TelegraphMontage = Telegraph.Montage.IsNull() ? nullptr : Telegraph.Montage.LoadSynchronous();
 		PlayCombatAnim(BossEnemy.Get(), Telegraph);
 	}

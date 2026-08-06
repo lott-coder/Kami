@@ -292,6 +292,9 @@ private:
 	/** 蓝 vs 红：注册蓝攻命中事件（含防御反应预排与金色反击注册） */
 	void RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds);
 
+	/** 完整播出链播完且无待命中/待接反应时推进回合（否则保持挂起） */
+	void TryAdvanceTurnIfGateDone();
+
 	// ==================== 数值辅助（只调子系统） ====================
 
 	float GetPlayerWhiteDamage() const;
@@ -347,9 +350,9 @@ private:
 	FAnimRef EnemyPendingReactionRef;
 	FPendingHitEvent PlayerPendingHit;
 	FPendingHitEvent EnemyPendingHit;
-	/** 蓝 vs 红：等待红防→金色反击链播完再推进回合 */
-	bool bAwaitingDefenderChain = false;
-	UAnimMontage* AwaitingChainFinalMontage = nullptr;
+	/** 通用回合闸门：本结算的动画完整播出链（行动+命中反应）播完才推进回合 */
+	bool bTurnGateOpen = false;
+	TSet<UAnimMontage*> GatedMontages;
 	FTimerHandle HitStopTimer;
 	FTimerHandle PlayerDefenderTimer;
 	FTimerHandle EnemyDefenderTimer;

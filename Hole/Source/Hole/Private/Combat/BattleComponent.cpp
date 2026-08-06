@@ -197,18 +197,18 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		const FTurnResolution Resolution = ResolveExtraTurn(true, Action);
 		bPlayerExtraTurnPending = false;
 		ApplyResolution(Resolution);
-		if (!bClashStarted && !bAwaitingDefenderChain)
+		if (!bClashStarted)
 		{
-			EndTurnAndAdvance();
+			TryAdvanceTurnIfGateDone();
 		}
 		return;
 	}
 
 	const FTurnResolution Resolution = ResolveNormalTurn(Action, EnemyChosenAction);
 	ApplyResolution(Resolution);
-	if (!bClashStarted && !bAwaitingDefenderChain)
+	if (!bClashStarted)
 	{
-		EndTurnAndAdvance();
+		TryAdvanceTurnIfGateDone();
 	}
 }
 
@@ -606,9 +606,11 @@ void UBattleComponent::ApplyResolution(const FTurnResolution& Resolution)
 		return;
 	}
 
-	// 伤害延迟到动画命中通知：注册与播放由 PlayResolutionAnimations 负责
+	// 伤害延迟到动画命中通知：注册与播放由 PlayResolutionAnimations 负责；回合推进等完整播出链
 	if (Phase != EBattlePhase::Ended)
 	{
+		bTurnGateOpen = true;
+		GatedMontages.Reset();
 		PlayResolutionAnimations(Resolution);
 	}
 }
@@ -629,9 +631,33 @@ void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActo
 	}
 }
 
+void UBattleComponent::TryAdvanceTurnIfGateDone()
+{
+	if (!bTurnGateOpen)
+	{
+		return;
+	}
+	if (GatedMontages.Num() > 0)
+	{
+		return;
+	}
+	if (PlayerPendingHit.bActive || EnemyPendingHit.bActive)
+	{
+		return;
+	}
+	if (bPlayerReactionPending || bEnemyReactionPending)
+	{
+		return;
+	}
+
+	bTurnGateOpen = false;
+	GatedMontages.Reset();
+	EndTurnAndAdvance();
+}
+
 void UBattleComponent::EndTurnAndAdvance()
 {
-	if (Phase == EBattlePhase::Ended || bAwaitingDefenderChain)
+	if (Phase == EBattlePhase::Ended || bTurnGateOpen)
 	{
 		return;
 	}
@@ -658,9 +684,9 @@ void UBattleComponent::EndTurnAndAdvance()
 		SetPhase(EBattlePhase::Resolving);
 		const FTurnResolution Resolution = ResolveExtraTurn(false, EnemyChosenAction);
 		ApplyResolution(Resolution);
-		if (!bClashStarted && !bAwaitingDefenderChain)
+		if (!bClashStarted)
 		{
-			EndTurnAndAdvance();
+			TryAdvanceTurnIfGateDone();
 		}
 		return;
 	}
@@ -676,6 +702,8 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	PendingClashResult = EClashResult::None;
 
 	SetPhase(EBattlePhase::Clash);
+	bTurnGateOpen = true;
+	GatedMontages.Reset();
 
 	// 动画：敌方碰撞攻击 + 玩家进入准备姿态（Idle 切换）
 	UAnimMontage* TelegraphMontage = nullptr;
@@ -844,7 +872,7 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 
 	if (Phase != EBattlePhase::Ended)
 	{
-		EndTurnAndAdvance();
+		TryAdvanceTurnIfGateDone();
 	}
 }
 
@@ -1259,6 +1287,12 @@ void UBattleComponent::PlayCombatAnim(ABaseCharacter* Character, const FAnimRef&
 	}
 	Character->PlayAnimMontage(Montage, AnimRef.PlayRate, AnimRef.SectionName);
 	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayCombatAnim - %s 播放 %s"), *GetNameSafe(Character), *Montage->GetName());
+
+	// 通用回合闸门：本结算播放的非循环蒙太奇计入播出链（循环姿态如蓄力不阻塞推进）
+	if (bTurnGateOpen && !Montage->bLoop)
+	{
+		GatedMontages.Add(Montage);
+	}
 }
 
 void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
@@ -1349,6 +1383,12 @@ void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName,
 	Hit.DefenderFollowUp = DefenderFollowUp;
 	Hit.FallbackMontage = FallbackMontage;
 	Hit.bDefenderBlocked = bDefenderBlocked;
+
+	// 无蒙太奇承载命中通知时立即结算，避免回合闸门死锁
+	if (Hit.bActive && Hit.Amount > 0.0f && Hit.FallbackMontage == nullptr)
+	{
+		ApplyPendingHitNow(bPlayerAttacker);
+	}
 }
 
 void UBattleComponent::ClearPendingHit(bool bPlayerAttacker)
@@ -1627,15 +1667,6 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
 		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
 	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
-
-	// 蓝 vs 红：回合推进挂起，等红防→接续（金色反击/受击）链播完再推进
-	if (!DefenderRow->RedDefense.Montage.IsNull())
-	{
-		bAwaitingDefenderChain = true;
-		AwaitingChainFinalMontage = DefenderFollowUp.Montage.IsNull()
-			? DefenderRow->RedDefense.Montage.LoadSynchronous()
-			: DefenderFollowUp.Montage.LoadSynchronous();
-	}
 }
 
 void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
@@ -1809,9 +1840,8 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 		{
 			PlayCombatAnim(PlayerRole.Get(), ReactionRef);
 		}
-		return;
 	}
-	if (bEnemyReactionPending && Montage == EnemyPendingActionMontage)
+	else if (bEnemyReactionPending && Montage == EnemyPendingActionMontage)
 	{
 		const FAnimRef ReactionRef = EnemyPendingReactionRef;
 		ClearPendingReactionSide(false);
@@ -1819,7 +1849,12 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 		{
 			PlayCombatAnim(BossEnemy.Get(), ReactionRef);
 		}
-		return;
+	}
+
+	// 通用回合闸门：结束的蒙太奇移出播出链
+	if (bTurnGateOpen)
+	{
+		GatedMontages.Remove(Montage);
 	}
 
 	// 待命中事件回落：动作蒙太奇播完（含被打断）仍未触发通知 → 结算，保证伤害不丢
@@ -1832,13 +1867,8 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 		ApplyPendingHitNow(false);
 	}
 
-	// 蓝 vs 红：红防→接续链播完（最终蒙太奇结束）后推进回合
-	if (bAwaitingDefenderChain && Montage == AwaitingChainFinalMontage)
-	{
-		bAwaitingDefenderChain = false;
-		AwaitingChainFinalMontage = nullptr;
-		EndTurnAndAdvance();
-	}
+	// 完整播出链播完且无待命中/待接反应 → 推进回合
+	TryAdvanceTurnIfGateDone();
 }
 
 void UBattleComponent::PlayDeathAnimations(bool bPlayerWon)
@@ -1862,8 +1892,8 @@ void UBattleComponent::SheathePlayerWeapon()
 		// 停止全部 Montage（入场/动作/碰撞残留），避免通知回调再次拔刀或连播反击
 		ClearPendingReactions();
 		ClearPendingHits();
-		bAwaitingDefenderChain = false;
-		AwaitingChainFinalMontage = nullptr;
+		bTurnGateOpen = false;
+		GatedMontages.Reset();
 		if (GetWorld())
 		{
 			GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
@@ -1978,8 +2008,8 @@ void UBattleComponent::ResetForRetry()
 	bClashWindowOpen = false;
 	PendingClashResult = EClashResult::None;
 	ClearPendingHits();
-	bAwaitingDefenderChain = false;
-	AwaitingChainFinalMontage = nullptr;
+	bTurnGateOpen = false;
+	GatedMontages.Reset();
 	LastClashInputTime = -1.0f;
 	if (GetWorld())
 	{

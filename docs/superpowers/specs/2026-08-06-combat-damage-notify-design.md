@@ -6,7 +6,7 @@
 
 ## Overview
 
-把战斗中的**伤害结算与防御反应**绑定到动画命中帧：攻击 Montage 在挥击帧挂 `UAnimNotify_CombatDamage`（事件名 `EventName`）；回合结算只"注册待命中事件"，通知触发时才 `ApplyDamageTo`、播放目标受击/防御反应并处理死亡。格挡/闪避的判定窗口以敌方命中通知为锚点：碰撞后敌方攻击开始即可按下（带输入冷却防连按），成功判定只落在命中前的各自窗口内。
+把战斗中的**伤害结算与防御反应**绑定到动画命中帧：攻击 Montage 在挥击帧挂 `UAnimNotify_CombatDamage`（事件名 `EventName`）；回合结算只"注册待命中事件"，通知触发时才 `ApplyDamageTo`、播放目标受击/防御反应并处理死亡。格挡/闪避的判定窗口以敌方命中通知为锚点：碰撞后敌方攻击开始即可按下（带输入冷却防连按），成功判定只落在命中前的各自窗口内。格挡/闪避/红防反击成功触发停帧反馈，被格挡的攻击者立即混入被格挡动画。
 
 ## 已确认决策
 
@@ -15,6 +15,7 @@
 3. **通知命名**：`EventName` 用动作语义（`WhiteAttackHit` / `BlueAttackHit` / `GoldCounterHit` / `ClashTelegraphHit`），玩家/敌人可复用；注册表按"攻击者 + EventName"区分。
 4. **格挡/闪避**：输入在敌方攻击开始后即可按下；各自窗口 = `[命中通知时间 - 窗口时长, 命中通知时间]`；输入冷却 `ClashInputCooldown` 防连按。
 5. **蓝 vs 红命中反应（2026-08-06 晚间修订）**：红防动画**提前**于蓝攻命中帧启动，使红防动画的"举剑防御"（`GuardReady` 标记帧）与 `BlueAttackHit` 命中通知帧对齐；红防播完接金色反击（或 2 层正面承受时接受击）。
+6. **命中反馈（2026-08-06 追加）**：格挡成功（含红防反击成功）与闪避成功触发停帧（`HitStopDuration`，默认 0.12s，参数化）；被格挡的攻击者（含红防反击成功）立即从当前攻击动画混入 `BlockedReaction`；闪避成功不触发被格挡动画。
 
 > **决策变更记录：** 本时序经两轮修订：①"红防与蓝攻同播"（早间）→ ②"蓝攻命中通知触发时才播红防"（午后）→ ③"红防提前启动，举剑防御帧与命中帧对齐"（晚间，当前）。版本②的"通知触发才播"会让防御动作看起来慢半拍，版本③由防御动画自身的举剑帧决定提前量。
 
@@ -45,6 +46,7 @@ struct FPendingHitEvent
 	FAnimRef DefenderFollowUp;       // 红防播完接续：GoldCounter（反击）或 Hurt（2 层正面承受）
 
 	UAnimMontage* FallbackMontage;   // 未挂通知时在该 Montage 播完结算
+	bool bDefenderBlocked = false;   // 本攻击被格挡（含红防反击成功）：命中时攻击者播 BlockedReaction + 停帧
 };
 
 UPROPERTY(Transient)
@@ -65,6 +67,7 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
           │    → OnHitNotify(攻击者, EventName)
           │    → 查对应侧槽：
           │        · 有伤害 → ApplyDamageTo → 播放 HitReaction → 死亡/结算
+          │        · bDefenderBlocked → 攻击者播 BlockedReaction + 停帧
           │        · 有 Defender → DefenderReaction 已按提前量播放中 → 播完接 DefenderFollowUp
           │
           └─ 回落：Montage 播完仍未被通知消费 → 播完结算 + 警告日志
@@ -83,6 +86,7 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
 
 > 蓄力抵抗白攻：注册伤害时 `HitReaction = Charge`（保持蓄力姿态，不播受击）；蓝攻打断蓄力：`HitReaction = ChargeInterrupted`。
 > **蓝 vs 红：** `BlueAttackHit` 命中事件同时携带防御反应——Defender 的 `RedDefense` 按提前量预排启动（`GuardReady` 帧与 `BlueAttackHit` 帧对齐），播完接 `GoldCounter`（红防克蓝攻）；若为 2 层强化蓝攻正面承受，Defender 播 `RedDefense` 后接 `Hurt`，且 `BlueAttackHit` 同一通知按蓝攻伤害扣血。
+> **被格挡动画：** `FCombatAnimRow` 新增 `BlockedReaction` 列；在格挡成功/红防反击成功的命中时刻，由攻击者立即混入（打断当前攻击动画），无独立通知。
 
 ### 蓝 vs 红命中反应时序
 
@@ -97,6 +101,15 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
   └─ GoldCounterHit 通知（金色反击命中帧）→ 对方扣血 + 受击
 
 > **提前量计算：** `RedDefenseStartDelay = BlueAttackHitTime - GuardReadyTime`（取非负值，通过 Timer 启动，<=0 立即播放）。`BlueAttackHitTime` 扫描蓝攻 Montage 的 `BlueAttackHit` 通知；`GuardReadyTime` 扫描红防 Montage 的 `GuardReady` 标记。红防无标记时回落 `RedDefenseLeadTime`（默认 0.3s，入 `FCombatParamsRow`）；蓝攻无命中通知时回落"红防立即启动"并打警告。
+
+### 命中反馈（停帧与被格挡动画）
+
+- **停帧**：`StartHitStop(Duration)` 暂停玩家与敌人 AnimInstance 的活动 Montage，`Duration` 后恢复；`Duration <= 0` 跳过。参数 `HitStopDuration`（默认 0.12s，入 `FCombatParamsRow`）。
+- **触发点**：
+  - 碰撞格挡成功：敌方播 `BlockedReaction` + 玩家播 `BlockSuccess`（弹反）→ 停帧 → 恢复后按现有链接 `GoldCounter`。
+  - 红防反击成功（蓝 vs 红）：`BlueAttackHit` 命中帧 → 攻击者播 `BlockedReaction` + 停帧 → 红防链继续 → `GoldCounterHit` 扣血+受击。
+  - 闪避成功：停帧 + `DodgeSuccess`，不播被格挡动画。
+- **混入方式**：对攻击者 `PlayAnimMontage(BlockedReaction)`，引擎自动把当前攻击 Montage 混合过渡到被格挡反应（无需额外代码）。
 ```
 
 ### 格挡/闪避窗口（以命中通知为锚）
@@ -163,8 +176,9 @@ v1 仅用于红防 Montage 的 `GuardReady` 标记；后续可扩展 VFX/音效�
 |---|---|
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatDamage.h` + `Private/.../AnimNotify_CombatDamage.cpp` | 新建：命中通知 |
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatMarker.h` + `Private/.../AnimNotify_CombatMarker.cpp` | 新建：无伤害标记（GuardReady） |
-| `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 修改：待命中伤害槽、OnHitNotify、窗口重做（HitTime 锚定 + 每键独立窗口）、输入冷却、Montage 播完回落 |
-| `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h` | 修改：新增 `ClashInputCooldown`、`RedDefenseLeadTime` |
+| `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 修改：待命中伤害槽、OnHitNotify、窗口重做（HitTime 锚定 + 每键独立窗口）、输入冷却、Montage 播完回落、停帧与被格挡动画 |
+| `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h` | 修改：新增 `ClashInputCooldown`、`RedDefenseLeadTime`、`HitStopDuration` |
+| `Hole/Source/Hole/Public/DataTable/CombatAnimConfigTable.h` | 修改：`FCombatAnimRow` 新增 `BlockedReaction` 列 |
 | `Scripts/create_datatables.py` | 修改：参数表新增列与默认值（不运行重建） |
 | `DataTable_Spec.md` / `GDD_Outline.md` / `AGENTS.md` / `DevLog.md` | 修改：参数、规则、约定同步 |
 | 编辑器资产 | 用户手动：给白攻/蓝攻/金色反击/敌方前摇 Montage 挂 `AnimNotify_CombatDamage` 并填 EventName |
@@ -179,6 +193,8 @@ v1 仅用于红防 Montage 的 `GuardReady` 标记；后续可扩展 VFX/音效�
 | 格挡窗口 | 蓝/白碰撞 | 敌方前摇命中前 0.25s 内按 E 成功；更早按 E 不算成功 |
 | 闪避窗口 | 蓝/白碰撞 | 命中前 0.35s 内按 Shift 成功；窗口外提前按不算 |
 | 输入冷却 | 碰撞中快速连按 | 冷却时间内第二次输入被忽略（日志） |
+| 停帧 | 格挡/闪避成功或红防反击成功 | 命中瞬间双方动作暂停 `HitStopDuration` 后恢复 |
+| 被格挡动画 | 敌方蓝攻被红防/格挡 | 攻击者立即从当前攻击动画混入 `BlockedReaction` |
 | 蓄力抵抗 | 白攻 vs 蓄力 | 微量伤害在命中帧扣，抵抗方保持蓄力姿态、不播受击 |
 | 回落 | 未挂通知的占位动画 | 播完结算 + 警告日志 |
 | 死亡时机 | 致命一击 | 死亡/结算在命中帧触发 |

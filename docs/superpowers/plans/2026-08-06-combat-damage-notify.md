@@ -32,23 +32,25 @@
 | 文件 | 责任 | 动作 |
 |---|---|---|
 | `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h` | 新增 `ClashInputCooldown`、`RedDefenseLeadTime` | 修改（Task 1） |
+| `Hole/Source/Hole/Public/DataTable/CombatAnimConfigTable.h` | `FCombatAnimRow` 新增 `BlockedReaction` 列 | 修改（Task 1） |
 | `Scripts/create_datatables.py` | 参数表新增两列与默认值 | 修改（Task 1） |
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatDamage.h` + `Private/...cpp` | 命中通知（EventName → BattleComponent::OnHitNotify） | 新建（Task 2） |
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatMarker.h` + `Private/...cpp` | 无伤害标记（GuardReady） | 新建（Task 2） |
-| `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 待命中事件槽、注册/消费/回落、蓝红预排、碰撞窗口重做、输入冷却 | 修改（Task 3-5） |
+| `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 待命中事件槽、注册/消费/回落、蓝红预排、碰撞窗口重做、输入冷却、停帧与被格挡动画 | 修改（Task 3-6） |
 | 编辑器资产 | 给攻击/前摇/红防 Montage 挂通知 | 用户手动（Task 8） |
 | `DataTable_Spec.md` / `GDD_Outline.md` / `AGENTS.md` / `DevLog.md` | 参数、规则、约定同步 | 修改（Task 7） |
 
 ---
 
-### Task 1: 战斗参数扩展（ClashInputCooldown / RedDefenseLeadTime）
+### Task 1: 参数与动画表列扩展（ClashInputCooldown / RedDefenseLeadTime / HitStopDuration / BlockedReaction）
 
 **Files:**
 - Modify: `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h`
+- Modify: `Hole/Source/Hole/Public/DataTable/CombatAnimConfigTable.h`
 - Modify: `Scripts/create_datatables.py`
 
 **Interfaces:**
-- Produces: `FCombatParamsRow::ClashInputCooldown`（默认 0.15f）、`FCombatParamsRow::RedDefenseLeadTime`（默认 0.3f）；脚本 `COMBATPARAMS_HEADERS` 与 `combat_params` 行同步。
+- Produces: `FCombatParamsRow::ClashInputCooldown`（0.15f）、`RedDefenseLeadTime`（0.3f）、`HitStopDuration`（0.12f）；`FCombatAnimRow::BlockedReaction`（FAnimRef）；脚本 `COMBATPARAMS_HEADERS`/`combat_params` 行与 `ANIM_COLUMNS` 同步。
 
 - [ ] **Step 1: 头文件新增字段**
 
@@ -62,32 +64,51 @@
 	/** 红防举剑标记（GuardReady）缺失时的回落提前量（秒），用于蓝 vs 红防御反应预排；[PLAYTEST] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float RedDefenseLeadTime = 0.3f;
+
+	/** 格挡/闪避/红防反击成功时的停帧时长（秒），0 关闭；[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
+	float HitStopDuration = 0.12f;
 ```
 
-- [ ] **Step 2: 脚本新增列与默认值**
+- [ ] **Step 2: FCombatAnimRow 新增 BlockedReaction 列**
+
+在 `CombatAnimConfigTable.h` 的 `FCombatAnimRow` 中（`Hurt` 列前）插入：
+
+```cpp
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
+	FAnimRef BlockedReaction;
+```
+
+- [ ] **Step 3: 脚本新增列与默认值**
 
 在 `Scripts/create_datatables.py` 的 `COMBATPARAMS_HEADERS` 中 `"DodgeFailDamageScale"` 后加：
 
 ```python
-    "ClashInputCooldown", "RedDefenseLeadTime",
+    "ClashInputCooldown", "RedDefenseLeadTime", "HitStopDuration",
 ```
 
 在 `combat_params` 行中 `"DodgeFailDamageScale": 1.2,` 后加：
 
 ```python
-        "ClashInputCooldown": 0.15, "RedDefenseLeadTime": 0.3,
+        "ClashInputCooldown": 0.15, "RedDefenseLeadTime": 0.3, "HitStopDuration": 0.12,
 ```
 
-- [ ] **Step 3: 编译 + Python 语法检查**
+在 `ANIM_COLUMNS` 列表（`"Hurt"` 前）加：
+
+```python
+    "BlockedReaction",
+```
+
+- [ ] **Step 4: 编译 + Python 语法检查**
 
 Run: 构建命令；`python -m py_compile Scripts/create_datatables.py`
 Expected: 均通过。
 
-- [ ] **Step 4: 提交**
+- [ ] **Step 5: 提交**
 
 ```bash
-git add Hole/Source/Hole/Public/DataTable/CombatParamsTable.h Scripts/create_datatables.py
-git commit -m "feat(combat-dmg): add clash input cooldown and red defense lead time params"
+git add Hole/Source/Hole/Public/DataTable/CombatParamsTable.h Hole/Source/Hole/Public/DataTable/CombatAnimConfigTable.h Scripts/create_datatables.py
+git commit -m "feat(combat-dmg): add hit-stop and blocked-reaction params and anim column"
 ```
 
 ---
@@ -230,7 +251,7 @@ git commit -m "feat(combat-dmg): add combat damage and marker anim notifies"
 
 **Interfaces:**
 - Consumes: Task 1 参数、Task 2 通知类。
-- Produces: `struct FPendingHitEvent`（每侧一槽）、`RegisterPendingHit(...)`、`ClearPendingHit(bool)`、`ApplyPendingHitNow(bool)`、`OnHitNotify(ABaseCharacter*, FName)`、`GetNotifyTime(UAnimMontage*, FName)`、`GetActionRef(...)`；`PlayCombatAnim` 统一绑定 `OnActionMontageEnded`；`OnActionMontageEnded` 增加待命中事件回落；`ApplyResolution`/`PlayResolutionAnimations` 改为注册+播行动（不再立即扣血/播受击）。
+- Produces: `struct FPendingHitEvent`（每侧一槽，含 `bDefenderBlocked`）、`RegisterPendingHit(...)`、`ClearPendingHit(bool)`、`ApplyPendingHitNow(bool)`、`OnHitNotify(ABaseCharacter*, FName)`、`GetNotifyTime(UAnimMontage*, FName)`、`GetActionRef(...)`；`PlayCombatAnim` 统一绑定 `OnActionMontageEnded`；`OnActionMontageEnded` 增加待命中事件回落；`ApplyResolution`/`PlayResolutionAnimations` 改为注册+播行动（不再立即扣血/播受击）。
 
 - [ ] **Step 1: 头文件增加结构体与方法声明**
 
@@ -249,6 +270,7 @@ struct FPendingHitEvent
 	FAnimRef DefenderReaction;
 	FAnimRef DefenderFollowUp;
 	UAnimMontage* FallbackMontage = nullptr;
+	bool bDefenderBlocked = false;   // 本攻击被格挡（含红防反击成功）：命中时攻击者播 BlockedReaction + 停帧
 	bool bActive = false;
 };
 ```
@@ -262,7 +284,11 @@ struct FPendingHitEvent
 	/** 注册待命中事件（bPlayerAttacker=true 表示攻击者为玩家） */
 	void RegisterPendingHit(bool bPlayerAttacker, FName EventName, ABaseCharacter* Target, float Amount,
 		AActor* Causer, const FAnimRef& HitReaction, ABaseCharacter* Defender,
-		const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage);
+		const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage,
+		bool bDefenderBlocked = false);
+
+	/** 停帧：暂停玩家/敌人活动 Montage，Duration 后恢复；Duration<=0 跳过 */
+	void StartHitStop(float Duration);
 
 	/** 清理单侧待命中事件（含其防御反应定时器） */
 	void ClearPendingHit(bool bPlayerAttacker);
@@ -285,6 +311,7 @@ struct FPendingHitEvent
 ```cpp
 	FPendingHitEvent PlayerPendingHit;
 	FPendingHitEvent EnemyPendingHit;
+	FTimerHandle HitStopTimer;
 ```
 
 - [ ] **Step 2: cpp 增加 include**
@@ -345,7 +372,8 @@ float UBattleComponent::GetNotifyTime(UAnimMontage* Montage, FName EventName) co
 
 void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName, ABaseCharacter* Target, float Amount,
 	AActor* Causer, const FAnimRef& HitReaction, ABaseCharacter* Defender,
-	const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage)
+	const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage,
+	bool bDefenderBlocked)
 {
 	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
 	ClearPendingHit(bPlayerAttacker);
@@ -359,6 +387,7 @@ void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName,
 	Hit.DefenderReaction = DefenderReaction;
 	Hit.DefenderFollowUp = DefenderFollowUp;
 	Hit.FallbackMontage = FallbackMontage;
+	Hit.bDefenderBlocked = bDefenderBlocked;
 }
 
 void UBattleComponent::ClearPendingHit(bool bPlayerAttacker)
@@ -384,6 +413,7 @@ void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
 	const FAnimRef HitReaction = Hit.HitReaction;
 	const float Amount = Hit.Amount;
 	AActor* Causer = Hit.Causer;
+	const bool bBlocked = Hit.bDefenderBlocked;
 	ClearPendingHit(bPlayerAttacker);
 
 	if (Target && Amount > 0.0f)
@@ -393,6 +423,26 @@ void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
 		{
 			PlayCombatAnim(Target, HitReaction);
 		}
+	}
+
+	// 被格挡：攻击者立即混入 BlockedReaction + 停帧
+	if (bBlocked && Causer)
+	{
+		if (ABaseCharacter* Attacker = Cast<ABaseCharacter>(Causer))
+		{
+			if (!Attacker->IsDead())
+			{
+				const bool bAttackerPlayer = (Attacker == PlayerRole.Get());
+				if (const FCombatAnimRow* Row = GetCombatAnimRow(bAttackerPlayer))
+				{
+					PlayCombatAnim(Attacker, Row->BlockedReaction);
+				}
+			}
+		}
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		StartHitStop(P.HitStopDuration);
 	}
 }
 
@@ -409,6 +459,48 @@ void UBattleComponent::OnHitNotify(ABaseCharacter* Attacker, FName EventName)
 		return;
 	}
 	ApplyPendingHitNow(bPlayerAttacker);
+}
+```
+
+- [ ] **Step 3b: 实现 StartHitStop（暂停/恢复双方 Montage）**
+
+在 `OnHitNotify` 实现后插入：
+
+```cpp
+void UBattleComponent::StartHitStop(float Duration)
+{
+	UWorld* World = GetWorld();
+	if (Duration <= 0.0f || !World)
+	{
+		return;
+	}
+	TArray<UAnimInstance*> PausedInstances;
+	if (PlayerRole.IsValid())
+	{
+		if (UAnimInstance* AI = PlayerRole->GetMesh()->GetAnimInstance())
+		{
+			AI->Montage_Pause();
+			PausedInstances.Add(AI);
+		}
+	}
+	if (BossEnemy.IsValid())
+	{
+		if (UAnimInstance* AI = BossEnemy->GetMesh()->GetAnimInstance())
+		{
+			AI->Montage_Pause();
+			PausedInstances.Add(AI);
+		}
+	}
+	World->GetTimerManager().SetTimer(HitStopTimer, [PausedInstances]()
+	{
+		for (UAnimInstance* AI : PausedInstances)
+		{
+			if (AI)
+			{
+				AI->Montage_Resume();
+			}
+		}
+	}, Duration, false);
 }
 ```
 
@@ -530,7 +622,7 @@ void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResoluti
 
 	RegisterPendingHit(bPlayerAttacker, EventName, Target, Amount, Attacker, HitReaction,
 		nullptr, FAnimRef(), FAnimRef(),
-		ActionRef ? ActionRef->Montage.LoadSynchronous() : nullptr);
+		ActionRef ? ActionRef->Montage.LoadSynchronous() : nullptr, false);
 }
 ```
 
@@ -618,7 +710,7 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 	FAnimRef DefenderFollowUp = bCounterSucceeds ? DefenderRow->GoldCounter : DefenderRow->Hurt;
 	RegisterPendingHit(bAttackerPlayer, FName(TEXT("BlueAttackHit")), Defender, IncomingAmount, Attacker,
 		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
-		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr);
+		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
 	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
 
 	if (bCounterSucceeds)
@@ -627,7 +719,7 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 		const FAnimRef& GoldCounterRef = DefenderRow->GoldCounter;
 		RegisterPendingHit(!bAttackerPlayer, FName(TEXT("GoldCounterHit")), Attacker, GoldAmount, Defender,
 			AttackerRow->Hurt, nullptr, FAnimRef(), FAnimRef(),
-			GoldCounterRef.Montage.IsNull() ? nullptr : GoldCounterRef.Montage.LoadSynchronous());
+			GoldCounterRef.Montage.IsNull() ? nullptr : GoldCounterRef.Montage.LoadSynchronous(), false);
 	}
 }
 
@@ -752,7 +844,7 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 
 	// 注册敌方前摇待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
 	RegisterPendingHit(false, FName(TEXT("ClashTelegraphHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
-		FAnimRef(), nullptr, FAnimRef(), FAnimRef(), TelegraphMontage);
+		FAnimRef(), nullptr, FAnimRef(), FAnimRef(), TelegraphMontage, false);
 
 	const float BlockWindow = GetBlockWindow();
 	const float DodgeWindow = GetDodgeWindow();
@@ -790,15 +882,35 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 	}
 ```
 
-在 `case EClashResult::BlockSuccess:` 中，`PlayBlockSuccessChain();` 前插入金色反击待命中注册：
+在 `case EClashResult::BlockSuccess:` 中，`PlayBlockSuccessChain();` 前插入被格挡反馈与金色反击待命中注册：
 
 ```cpp
+		// 被格挡反馈：敌方立即混入 BlockedReaction + 停帧
+		if (const FCombatAnimRow* EnemyRow = GetCombatAnimRow(false))
+		{
+			PlayCombatAnim(BossEnemy.Get(), EnemyRow->BlockedReaction);
+		}
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		StartHitStop(P.HitStopDuration);
 		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
 		{
 			RegisterPendingHit(true, FName(TEXT("GoldCounterHit")), BossEnemy.Get(), GetPlayerGoldDamage(),
 				PlayerRole.Get(), Row->Hurt, nullptr, FAnimRef(), FAnimRef(),
-				Row->GoldCounter.Montage.IsNull() ? nullptr : Row->GoldCounter.Montage.LoadSynchronous());
+				Row->GoldCounter.Montage.IsNull() ? nullptr : Row->GoldCounter.Montage.LoadSynchronous(), false);
 		}
+```
+
+- [ ] **Step 3b: DodgeSuccess 增加停帧**
+
+在 `case EClashResult::DodgeSuccess:` 中，闪避 Buff 施加之后、`DodgeSuccess` 动画播放之前插入：
+
+```cpp
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		StartHitStop(P.HitStopDuration);
 ```
 
 - [ ] **Step 4: OnClashImpact 增加回落消费**
@@ -910,7 +1022,7 @@ git commit -m "feat(combat-dmg): anchor clash windows to telegraph hit notify wi
 
 **Interfaces:**
 - Consumes: Task 3-5。
-- Produces: 战斗结束/重试时清理待命中事件与防御定时器；`FinishBattle` 的死亡/胜利动画时机不变（由命中时刻的 `ApplyDamageTo` 触发）。
+- Produces: 战斗结束/重试时清理待命中事件、防御定时器与停帧定时器；`FinishBattle` 的死亡/胜利动画时机不变（由命中时刻的 `ApplyDamageTo` 触发）。
 
 - [ ] **Step 1: SheathePlayerWeapon 增加待命中事件清理**
 
@@ -918,6 +1030,10 @@ git commit -m "feat(combat-dmg): anchor clash windows to telegraph hit notify wi
 
 ```cpp
 		ClearPendingHits();
+		if (GetWorld())
+		{
+			GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
+		}
 ```
 
 - [ ] **Step 2: ResetForRetry 增加待命中事件清理**
@@ -927,6 +1043,10 @@ git commit -m "feat(combat-dmg): anchor clash windows to telegraph hit notify wi
 ```cpp
 	ClearPendingHits();
 	LastClashInputTime = -1.0f;
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
+	}
 ```
 
 - [ ] **Step 3: 编译**
@@ -948,10 +1068,10 @@ git commit -m "fix(combat-dmg): clear pending hit events and defender timers on 
 **Files:**
 - Modify: `DataTable_Spec.md`、`GDD_Outline.md`、`AGENTS.md`、`DevLog.md`
 
-- [ ] **Step 1: DataTable_Spec.md**：§3.2 列定义与 §3.3 行数据新增 `ClashInputCooldown`（0.15）、`RedDefenseLeadTime`（0.3）；版本升 v0.10 → v0.11，修订记录加一行；`关联策划案` 同步 GDD 版本。
-- [ ] **Step 2: GDD_Outline.md**：§5.2.5 补充"命中通知驱动伤害、格挡/闪避窗口 = [命中通知时间 − 窗口, 命中通知时间]、输入冷却 `ClashInputCooldown`"；版本升 v0.10 → v0.11，修订记录加一行。
-- [ ] **Step 3: AGENTS.md**：战斗动画约定追加"伤害延迟到 `UAnimNotify_CombatDamage` 命中帧；待命中事件槽先到先得；碰撞窗口以 `ClashTelegraphHit` 为锚；输入冷却"；版本引用同步。
-- [ ] **Step 4: DevLog.md**：合并一条 2026-08-06 记录（伤害绑定动画通知、窗口锚点、输入冷却、蓝红预排）。
+- [ ] **Step 1: DataTable_Spec.md**：§3.2 列定义与 §3.3 行数据新增 `ClashInputCooldown`（0.15）、`RedDefenseLeadTime`（0.3）、`HitStopDuration`（0.12）；§15 列定义与行数据新增 `BlockedReaction`；版本升 v0.10 → v0.11，修订记录加一行；`关联策划案` 同步 GDD 版本。
+- [ ] **Step 2: GDD_Outline.md**：§5.2.5 补充"命中通知驱动伤害、格挡/闪避窗口 = [命中通知时间 − 窗口, 命中通知时间]、输入冷却 `ClashInputCooldown`、格挡/闪避/红防反击成功停帧、被格挡动画 `BlockedReaction`"；版本升 v0.10 → v0.11，修订记录加一行。
+- [ ] **Step 3: AGENTS.md**：战斗动画约定追加"伤害延迟到 `UAnimNotify_CombatDamage` 命中帧；待命中事件槽先到先得；碰撞窗口以 `ClashTelegraphHit` 为锚；输入冷却；停帧 `HitStopDuration`；被格挡动画 `BlockedReaction`"；版本引用同步。
+- [ ] **Step 4: DevLog.md**：合并一条 2026-08-06 记录（伤害绑定动画通知、窗口锚点、输入冷却、蓝红预排、停帧与被格挡动画）。
 - [ ] **Step 5: 提交**
 
 ```bash
@@ -970,6 +1090,7 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
   - 玩家/敌人 `WhiteAttack`/`BlueAttack`/`GoldCounter` Montage：挥击帧挂 `AnimNotify_CombatDamage`，`EventName` 分别为 `WhiteAttackHit`/`BlueAttackHit`/`GoldCounterHit`。
   - 敌方 `ClashTelegraphBlue`/`ClashTelegraphWhite`：攻击判定帧挂 `AnimNotify_CombatDamage`，`EventName = ClashTelegraphHit`。
   - 红防 Montage：举剑防御帧挂 `AnimNotify_CombatMarker`，`MarkerName = GuardReady`。
+  - `DT_CombatAnimConfig` 的 `drifter`/`satan` 行补充 `BlockedReaction` 列（被格挡动画资产）。
 - [ ] **Step 3: PIE 验证清单**
 
 | 验证点 | 操作 | 期望 |
@@ -982,6 +1103,8 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 | 蓄力打断 | 蓝攻 vs 蓄力 | `BlueAttackHit` 帧扣血并播 `ChargeInterrupted` |
 | 碰撞窗口 | 蓝/白碰撞 | 敌方前摇命中前按各自窗口（格挡 0.25s / 闪避 0.35s）判定成功；更早按不算 |
 | 输入冷却 | 碰撞中连按 | 冷却内第二次输入被忽略（日志） |
+| 停帧 | 格挡/闪避成功或红防反击成功 | 命中瞬间双方动作暂停 `HitStopDuration` 后恢复 |
+| 被格挡动画 | 敌方蓝攻被红防/格挡 | 攻击者立即从当前攻击动画混入 `BlockedReaction` |
 | 回落 | 未挂通知的占位动画 | 播完/影响计时器结算 + 警告日志 |
 | 死亡时机 | 致命一击 | 死亡/结算在命中帧触发 |
 
@@ -991,7 +1114,7 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 
 ## 计划自检记录
 
-- 覆盖：设计文档全部条目（通知类、待命中事件槽、普通回合注册、蓝红预排、碰撞窗口、输入冷却、回落、参数、脚本、文档、编辑器/PIE）均有对应任务。
+- 覆盖：设计文档全部条目（通知类、待命中事件槽、普通回合注册、蓝红预排、碰撞窗口、输入冷却、停帧与被格挡动画、回落、参数、脚本、文档、编辑器/PIE）均有对应任务。
 - 无占位符：代码步骤给出完整代码或精确插入点；`RegisterBlueVsRedHit` 在 Task 3 以空实现占位并在 Task 4 补齐（已显式说明）。
-- 类型一致性：`RegisterPendingHit` / `ApplyPendingHitNow` / `OnHitNotify` / `GetNotifyTime` / `ScheduleDefenderReaction` 签名在任务间一致；`EventName` 常量（`BlueAttackHit`/`WhiteAttackHit`/`GoldCounterHit`/`ClashTelegraphHit`/`GuardReady`）全文一致。
+- 类型一致性：`RegisterPendingHit`（末参 `bDefenderBlocked`） / `ApplyPendingHitNow` / `OnHitNotify` / `GetNotifyTime` / `ScheduleDefenderReaction` / `StartHitStop` 签名在任务间一致；`EventName` 常量（`BlueAttackHit`/`WhiteAttackHit`/`GoldCounterHit`/`ClashTelegraphHit`/`GuardReady`）全文一致。
 - 风险：回合推进与动画解耦，命中通知若被下一动作打断由回落保证伤害不丢；PIE 验证后如需"等动画播完再推进"另行迭代。

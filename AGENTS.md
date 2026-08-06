@@ -110,6 +110,7 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - Clash attack random sections (2026-08-06): `ClashAttackBlueSections`/`ClashAttackWhiteSections` are pipe-separated section names; when non-empty, `StartClash` picks one at random for the clash attack montage, otherwise it falls back to `ClashAttack*.SectionName`.
 - Animation playback rights (2026-08-06): the resolution layer suppresses action animations for the countered/interrupted side (`IsActionSuppressed`: WhiteAttack vs BlueAttack, RedDefense vs WhiteAttack, Charge vs BlueAttack); hit-reaction priority is Death > BlockedReaction > ChargeInterrupted > Charge (resist) > Hurt; a 2-stack charge auto-blue plays as BlueAttack.
 - Hit reactions always interrupt the target's current montage (`Montage_Stop` before playing the reaction in `ApplyPendingHitNow`); pending-hit `HitReaction` comes from the TARGET's anim row, never the attacker's.
+- Blue-vs-red turn gating (2026-08-06): `bAwaitingDefenderChain` suspends `EndTurnAndAdvance` until the RedDefense → GoldCounter chain's final montage ends, so a fast next action cannot cancel the pre-scheduled red defense.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

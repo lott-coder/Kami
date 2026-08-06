@@ -120,7 +120,7 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
   - 蓄力 vs 蓝攻：蓄力不播（蓝攻播，蓄力方命中帧播 `ChargeInterrupted`）；
   - 蓝攻 vs 红防：走 `RegisterBlueVsRedHit` 专用路径，蓝攻照播 + 红防预排。
 - **命中反应优先级（同一命中帧）**：死亡 > 被格挡 `BlockedReaction` > 蓄力打断 `ChargeInterrupted` > 蓄力抵抗 `Charge` > 普通受击 `Hurt`。
-- **打断原则**：新播 Montage 按 UE 默认混合过渡打断旧动画；"行动→反应"链用 `PlayAnimThenReaction` 顺序播放；同侧同一时刻一个行动链 + 一个待接反应；回合推进与动画解耦，下一回合行动打断上一回合残留动画（已知取舍）。
+- **打断原则**：新播 Montage 按 UE 默认混合过渡打断旧动画；"行动→反应"链用 `PlayAnimThenReaction` 顺序播放；同侧同一时刻一个行动链 + 一个待接反应；**蓝 vs 红结算会等待红防→金色反击链播完再推进回合**（`bAwaitingDefenderChain`，防止下一回合注册清掉预排），其余场景回合推进与动画解耦（下一回合行动打断上一回合残留动画，已知取舍）。
 - **满蓄力 vs 红防自动发动强化蓝攻**：按蓝攻事件/动画处理（不再作为蓄力）。
 ```
 

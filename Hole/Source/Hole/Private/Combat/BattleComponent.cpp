@@ -764,9 +764,12 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	switch (Result)
 	{
 	case EClashResult::BlockSuccess:
+	{
 		Incoming = 0.0f;
 		// 被格挡反馈：敌方立即混入 BlockedReaction + 停帧
-		if (const FCombatAnimRow* EnemyRow = GetCombatAnimRow(false))
+		const FCombatAnimRow* EnemyRow = GetCombatAnimRow(false);
+		const FCombatAnimRow* PlayerRow = GetCombatAnimRow(true);
+		if (EnemyRow)
 		{
 			PlayCombatAnim(BossEnemy.Get(), EnemyRow->BlockedReaction);
 		}
@@ -776,14 +779,15 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 			const FCombatParamsRow& P = Params ? *Params : Defaults;
 			StartHitStop(P.HitStopDuration);
 		}
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		if (EnemyRow && PlayerRow)
 		{
 			RegisterPendingHit(true, FName(TEXT("GoldCounterHit")), BossEnemy.Get(), GetPlayerGoldDamage(),
-				PlayerRole.Get(), Row->Hurt, nullptr, FAnimRef(), FAnimRef(),
-				Row->GoldCounter.Montage.IsNull() ? nullptr : Row->GoldCounter.Montage.LoadSynchronous(), false);
+				PlayerRole.Get(), EnemyRow->Hurt, nullptr, FAnimRef(), FAnimRef(),
+				PlayerRow->GoldCounter.Montage.IsNull() ? nullptr : PlayerRow->GoldCounter.Montage.LoadSynchronous(), false);
 		}
 		PlayBlockSuccessChain();
 		break;
+	}
 	case EClashResult::DodgeSuccess:
 		Incoming = 0.0f;
 		if (UAttributeComponent* PA = GetPlayerAttr())
@@ -1382,6 +1386,14 @@ void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
 		ApplyDamageTo(Target, Amount, Causer);
 		if (!Target->IsDead() && !HitReaction.Montage.IsNull())
 		{
+			// 命中反应强制打断当前动作（如被防动画 BlockedReaction）
+			if (UAnimInstance* AnimInstance = Target->GetMesh()->GetAnimInstance())
+			{
+				if (UAnimMontage* Active = AnimInstance->GetCurrentActiveMontage())
+				{
+					AnimInstance->Montage_Stop(0.1f, Active);
+				}
+			}
 			PlayCombatAnim(Target, HitReaction);
 		}
 	}

@@ -855,6 +855,7 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 ```
 
 > 原 `const float BlockWindow = ...` 与 `ClashAttackTime` 计时行被本块取代；`OnBattleStateChanged.Broadcast()` 保留在函数末尾。
+> 注（2026-08-06 追加，提交 `44125f7`）：`Telegraph` 播放前按 `ClashAttackBlueSections`/`ClashAttackWhiteSections`（竖线分隔）随机选一段 Section，空则用 `ClashAttack*.SectionName`。
 
 - [ ] **Step 3: ResolveClash 改为"决定结果与金额，不立即扣血"**
 
@@ -1089,6 +1090,7 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 - [ ] **Step 2: 挂通知**：
   - 玩家/敌人 `WhiteAttack`/`BlueAttack`/`GoldCounter` Montage：挥击帧挂 `AnimNotify_CombatDamage`，`EventName` 分别为 `WhiteAttackHit`/`BlueAttackHit`/`GoldCounterHit`。
   - 敌方 `ClashAttackBlue`/`ClashAttackWhite`：攻击判定帧挂 `AnimNotify_CombatDamage`，`EventName = ClashAttackHit`。
+  - `DT_CombatAnimConfig` 的 `ClashAttackBlueSections`/`ClashAttackWhiteSections`：如需多段变体，填竖线分隔的 Section 名（如 `A|B|C`）；留空则用 `ClashAttack*.SectionName`。
   - 红防 Montage：举剑防御帧挂 `AnimNotify_CombatMarker`，`MarkerName = GuardReady`。
   - `DT_CombatAnimConfig` 的 `drifter`/`satan` 行补充 `BlockedReaction` 列（被格挡动画资产）。
 - [ ] **Step 3: PIE 验证清单**

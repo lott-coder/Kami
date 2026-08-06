@@ -8,8 +8,8 @@
 - **Engine:** Unreal Engine 5.6, project root `d:\UE5\UE_project\Kami`, UE project in the `Hole/` subdirectory
 - **Game:** Hole — a roguelike semi-turn-based RPG with red/blue/white three-color counters + real-time parry/dodge + time loop
 - **Key documents:**
-  - `GDD_Outline.md` — game design document (v0.11, 19 chapters); the reference baseline for design and implementation
-  - `DataTable_Spec.md` — data table specification (v0.11, 13 tables); the basis for C++ USTRUCT definitions
+  - `GDD_Outline.md` — game design document (v0.12, 19 chapters); the reference baseline for design and implementation
+  - `DataTable_Spec.md` — data table specification (v0.12, 13 tables); the basis for C++ USTRUCT definitions
   - `DevLog.md` — development log (timeline + key decisions + FAQ)
 - **Version control:** Git (branch master), remote managed via GitHub MCP; generated directories (`Binaries/`, `Intermediate/`, `DerivedDataCache/`, `Saved/`, etc.) are not tracked
 
@@ -107,6 +107,7 @@ DT_ConsumableConfig → inventory system → AddModifier on use
 - Player clash-ready state: `UBaseCharacterAnimInstance::bClashReady` + `SetClashReady(bool)`, set by `UBattleComponent` in `StartClash` and cleared in `ResolveClash`/`SheathePlayerWeapon`; ABP switches Idle → ClashReady stance (same mirror pattern as `bWeaponDrawn`).
 - Entry montage reads the table `Entry` first; `UBattleComponent::PlayerEntryMontage`/`PlayerEntrySectionName` remain BP fallbacks. `SheathePlayerWeapon` stops all montages and unbinds the block-success chain delegate.
 - Damage is applied at animation hit frames (2026-08-06): attack montages carry `UAnimNotify_CombatDamage` (EventName: WhiteAttackHit/BlueAttackHit/GoldCounterHit/ClashAttackHit); `UBattleComponent` registers `FPendingHitEvent` per side at resolution and consumes it first-wins via notify or fallback (montage end / clash impact timer). Clash block/dodge windows are anchored to `ClashHitTime` (from the clash attack notify); `ClashInputCooldown` blocks input spam. Block/dodge/red-counter success triggers `StartHitStop` (`HitStopDuration`); a blocked attacker immediately blends into `BlockedReaction`. Red-defense pre-play: `RedDefenseStartDelay = BlueAttackHitTime - GuardReadyTime` (GuardReady marker on the RedDefense montage; fallback `RedDefenseLeadTime`).
+- Clash attack random sections (2026-08-06): `ClashAttackBlueSections`/`ClashAttackWhiteSections` are pipe-separated section names; when non-empty, `StartClash` picks one at random for the clash attack montage, otherwise it falls back to `ClashAttack*.SectionName`.
 
 ### Iteration rules
 - New attribute: add a column to the DT USTRUCT → add a constant to the AttributeNames namespace → load into BaseAttributes during initialization (no Subsystem interface change, no entity header change)

@@ -51,8 +51,9 @@
 6. 反馈：格挡/闪避/红防反击成功触发 `StartHitStop`（暂停双方 Montage 后恢复）；被格挡方立即混入 `BlockedReaction`。
 7. 文档：GDD v0.11、DataTable_Spec v0.10、AGENTS.md 同步。
 8. 命名修订：`ClashTelegraphBlue/White` → `ClashAttackBlue/White`（碰撞攻击）；命中事件 → `ClashAttackHit`；计时参数 → `ClashAttackTime`；DataTable_Spec v0.11。
+9. 随机 Section：`ClashAttack*Sections`（竖线分隔）配置碰撞攻击可选 Section，`StartClash` 随机选一段播放，空则回落到 `ClashAttack*.SectionName`；GDD v0.12 / DataTable_Spec v0.12。
 
-**结果/解决方案：** 编译通过（提交 `f069d0a`、`647fba0`、`296f39f`、`9e73e4a`、`d9c5ad1`）。待编辑器：给攻击/碰撞攻击 Montage 挂命中通知、红防挂 `GuardReady` 标记、填 `BlockedReaction` 资产；PIE 验证 12 项清单（见实现计划 Task 8）。
+**结果/解决方案：** 编译通过（提交 `f069d0a`、`647fba0`、`296f39f`、`9e73e4a`、`d9c5ad1`、`44125f7`）。待编辑器：给攻击/碰撞攻击 Montage 挂命中通知、红防挂 `GuardReady` 标记、填 `BlockedReaction` 资产与 `ClashAttack*Sections`；PIE 验证 12 项清单（见实现计划 Task 8）。
 
 **经验教训：** "先注册、后由动画事件消费"让伤害帧与表现天然同步；双槽先到先得保证不重复结算；停帧用 Montage_Pause/Resume 而非全局时间膨胀，避免计时器被冻结。
 

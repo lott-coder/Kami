@@ -38,6 +38,23 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-06 | 程序 ⚡
+
+**事项：** 伤害结算绑定动画命中通知落地——新增 `UAnimNotify_CombatDamage`/`UAnimNotify_CombatMarker`，`UBattleComponent` 以待命中事件槽（`FPendingHitEvent`）延迟结算；碰撞窗口以命中通知为锚并加入输入冷却；停帧与被格挡动画接入。
+
+**处理过程：**
+1. 参数/表列：`FCombatParamsRow` 新增 `ClashInputCooldown`（0.15）、`RedDefenseLeadTime`（0.3）、`HitStopDuration`（0.12）；`FCombatAnimRow` 新增 `BlockedReaction`；脚本同步。
+2. 通知类：`AnimNotify_CombatDamage`（命中帧回调 `OnHitNotify`）、`AnimNotify_CombatMarker`（`GuardReady` 等无伤害标记）。
+3. 待命中事件：结算只注册不扣血；命中通知/蒙太奇播完回落二选一消费（先到先得），`ApplyPendingHitNow` 统一扣血+受击+被格挡反馈；`PlayCombatAnim` 统一绑定 `OnActionMontageEnded` 保证回落可达。
+4. 蓝 vs 红：`RegisterBlueVsRedHit` 注册蓝攻命中事件与金色反击事件；红防按 `BlueAttackHitTime - GuardReadyTime` 预排启动。
+5. 碰撞：`StartClash` 以 `ClashTelegraphHit` 通知时间为锚（缺失回落 `ClashTelegraphTime`）；格挡/闪避各自窗口判定；`ClashInputCooldown` 防连按；`ResolveClash` 只决定结果与金额，伤害由通知/影响计时器触发。
+6. 反馈：格挡/闪避/红防反击成功触发 `StartHitStop`（暂停双方 Montage 后恢复）；被格挡方立即混入 `BlockedReaction`。
+7. 文档：GDD v0.11、DataTable_Spec v0.10、AGENTS.md 同步。
+
+**结果/解决方案：** 编译通过（提交 `f069d0a`、`647fba0`、`296f39f`、`9e73e4a`）。待编辑器：给攻击/前摇 Montage 挂命中通知、红防挂 `GuardReady` 标记、填 `BlockedReaction` 资产；PIE 验证 12 项清单（见实现计划 Task 8）。
+
+**经验教训：** "先注册、后由动画事件消费"让伤害帧与表现天然同步；双槽先到先得保证不重复结算；停帧用 Montage_Pause/Resume 而非全局时间膨胀，避免计时器被冻结。
+
 ### 2026-08-06 | 策划 ⚡ + 程序
 
 **事项：** 金色反击动画顺序定案——红防克蓝攻时，红防与蓝攻动画同时播放，玩家不受伤；红防播完接金色反击，敌方蓝攻播完接受击；并澄清"0 蓄力打出蓝攻"观感问题。

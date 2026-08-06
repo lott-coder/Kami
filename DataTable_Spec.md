@@ -1,8 +1,8 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.9
+> **版本：** v0.10
 > **日期：** 2026-08-05
-> **关联策划案：** GDD_Outline.md v0.10
+> **关联策划案：** GDD_Outline.md v0.11
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -131,6 +131,9 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | `BlockWindowSeconds` | `float` | 0.25 | GDD §5.2.7 | 格挡判定窗口（秒），[PLAYTEST] |
 | `DodgeWindowSeconds` | `float` | 0.35 | GDD §5.2.7 | 闪避判定窗口（秒），[PLAYTEST] |
 | `DodgeFailDamageScale` | `float` | 1.2 | GDD §5.2.7 | 闪避失败额外伤害倍率 |
+| `ClashInputCooldown` | `float` | 0.15 | GDD §5.2.5 | 格挡/闪避输入冷却（秒），防连按，[PLAYTEST] |
+| `RedDefenseLeadTime` | `float` | 0.3 | GDD §5.2.3 | 红防举剑标记缺失时的回落提前量（秒），[PLAYTEST] |
+| `HitStopDuration` | `float` | 0.12 | GDD §5.2.5 | 格挡/闪避/红防反击成功停帧时长（秒），0 关闭，[PLAYTEST] |
 | `CritDamageMultiplier` | `float` | 1.5 | GDD §5.2.7 | 蓝攻暴击伤害倍率，[PLAYTEST] |
 | `DodgeBuffDamageScale` | `float` | 1.2 | GDD §5.2.5 | 闪避成功后下回合伤害倍率，[PLAYTEST] |
 | `DodgeBuffTurns` | `int32` | 1 | GDD §5.2.5 | 闪避Buff持续回合数 |
@@ -1110,6 +1113,7 @@ enum class EConsumableType : uint8
 | `WhiteAttack` | `FAnimRef` | 白色攻击 |
 | `Charge` | `FAnimRef` | 蓄力姿态（循环） |
 | `ChargeInterrupted` | `FAnimRef` | 蓄力被打断；空 = 回落 `Hurt` |
+| `BlockedReaction` | `FAnimRef` | 被格挡动画（含红防反击成功）；攻击者从当前攻击动画立即混入 |
 | `Hurt` | `FAnimRef` | 受击（含格挡失败/闪避失败回落） |
 | `BlockSuccess` | `FAnimRef` | 格挡成功弹反动作；播完后衔接 `GoldCounter` |
 | `BlockFail` | `FAnimRef` | 格挡失败；空 = 回落 `Hurt` |
@@ -1227,3 +1231,4 @@ DT_CombatParams (单例，无外键)
 > | v0.7 | 2026-08-04 | 新增主角默认武器 `dale_sword`（漂泊者短剑，单手剑系，MeshAsset=SM_Sword_B）；`drifter.DefaultWeaponID` 落库；C++ 新增 `UWeaponVisualComponent` 背上挂载与 `UInventoryComponent::OnWeaponChanged` 委托 |
 > | v0.8 | 2026-08-05 | 战斗系统 v1 规则落地说明：蓝攻需 ≥1 层蓄力（0 层基础值保留为倍率基数），同步 GDD v0.8 |
 > | v0.9 | 2026-08-05 | 新增 13 号表 `DT_CombatAnimConfig`（`FCombatAnimRow` + `FAnimRef`，一行一实体，19 个动作列）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`；同步 GDD v0.9 |
+> | v0.10 | 2026-08-06 | 参数表新增 `ClashInputCooldown`/`RedDefenseLeadTime`/`HitStopDuration`；13 号表新增 `BlockedReaction` 列（被格挡动画）；同步 GDD v0.11 |

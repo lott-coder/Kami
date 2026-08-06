@@ -678,21 +678,32 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	SetPhase(EBattlePhase::Clash);
 
 	// 动画：敌方碰撞前摇 + 玩家进入准备姿态（Idle 切换）
+	UAnimMontage* TelegraphMontage = nullptr;
 	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 	{
 		const FAnimRef& Telegraph = (ClashType == EClashType::BlueClash)
 			? Row->ClashTelegraphBlue
 			: Row->ClashTelegraphWhite;
+		TelegraphMontage = Telegraph.Montage.IsNull() ? nullptr : Telegraph.Montage.LoadSynchronous();
 		PlayCombatAnim(BossEnemy.Get(), Telegraph);
 	}
 	SetPlayerClashReady(true);
 
+	// 命中时间锚点：优先取前摇 Montage 的 ClashTelegraphHit 通知时间，缺失回落 ClashTelegraphTime
+	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashTelegraphHit")));
+	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashTelegraphTime;
+	LastClashInputTime = -1.0f;
+
+	// 注册敌方前摇待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
+	RegisterPendingHit(false, FName(TEXT("ClashTelegraphHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
+		FAnimRef(), nullptr, FAnimRef(), FAnimRef(), TelegraphMontage, false);
+
 	const float BlockWindow = GetBlockWindow();
 	const float DodgeWindow = GetDodgeWindow();
-	const float OpenDelay = FMath::Max(0.0f, ClashTelegraphTime - FMath::Max(BlockWindow, DodgeWindow));
+	const float OpenDelay = FMath::Max(0.0f, ClashHitTime - FMath::Max(BlockWindow, DodgeWindow));
 
 	GetWorld()->GetTimerManager().SetTimer(ClashOpenTimer, this, &UBattleComponent::OpenClashWindow, OpenDelay, false);
-	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashTelegraphTime, false);
+	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashHitTime, false);
 
 	OnBattleStateChanged.Broadcast();
 }
@@ -716,6 +727,12 @@ void UBattleComponent::OnClashImpact()
 		Result = EClashResult::BlockFail;
 	}
 	ResolveClash(Result);
+
+	// 前摇无 ClashTelegraphHit 通知：由影响计时器回落结算（若通知已消费则跳过）
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
+	{
+		ApplyPendingHitNow(false);
+	}
 }
 
 void UBattleComponent::ResolveClash(EClashResult Result)
@@ -734,9 +751,22 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	{
 	case EClashResult::BlockSuccess:
 		Incoming = 0.0f;
-		if (BossEnemy.IsValid())
+		// 被格挡反馈：敌方立即混入 BlockedReaction + 停帧
+		if (const FCombatAnimRow* EnemyRow = GetCombatAnimRow(false))
 		{
-			ApplyDamageTo(BossEnemy.Get(), GetPlayerGoldDamage(), PlayerRole.Get());
+			PlayCombatAnim(BossEnemy.Get(), EnemyRow->BlockedReaction);
+		}
+		{
+			const FCombatParamsRow Defaults;
+			const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+			const FCombatParamsRow& P = Params ? *Params : Defaults;
+			StartHitStop(P.HitStopDuration);
+		}
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			RegisterPendingHit(true, FName(TEXT("GoldCounterHit")), BossEnemy.Get(), GetPlayerGoldDamage(),
+				PlayerRole.Get(), Row->Hurt, nullptr, FAnimRef(), FAnimRef(),
+				Row->GoldCounter.Montage.IsNull() ? nullptr : Row->GoldCounter.Montage.LoadSynchronous(), false);
 		}
 		PlayBlockSuccessChain();
 		break;
@@ -754,6 +784,12 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 				P.DodgeBuffDamageScale,
 				P.DodgeBuffTurns,
 				FName(TEXT("DodgeBuff")));
+		}
+		{
+			const FCombatParamsRow Defaults;
+			const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+			const FCombatParamsRow& P = Params ? *Params : Defaults;
+			StartHitStop(P.HitStopDuration);
 		}
 		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
 		{
@@ -777,8 +813,14 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 		break;
 	}
 
-	if (Incoming > 0.0f)
+	// 伤害延迟到 ClashTelegraphHit 通知/回落触发；金额写回待命中事件
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
 	{
+		EnemyPendingHit.Amount = Incoming;
+	}
+	else if (Incoming > 0.0f)
+	{
+		// 通知已消费（或槽已被覆盖）：直接结算，保证伤害不丢
 		ApplyDamageTo(PlayerRole.Get(), Incoming, BossEnemy.Get());
 	}
 
@@ -804,12 +846,21 @@ void UBattleComponent::OnBlockPressed()
 	{
 		return;
 	}
-	if (bClashWindowOpen)
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	const float Cooldown = GetClashInputCooldown();
+	if (LastClashInputTime >= 0.0f && Now - LastClashInputTime < Cooldown)
+	{
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnBlockPressed - 输入冷却中，忽略"));
+		return;
+	}
+	LastClashInputTime = Now;
+
+	if (Now >= ClashHitTime - GetBlockWindow())
 	{
 		ResolveClash(EClashResult::BlockSuccess);
 		return;
 	}
-	// 窗口外按下：先记录失败结果，窗口内再按可覆盖
+	// 窗口外提前按下：先记录失败结果，窗口内再按可覆盖
 	PendingClashResult = EClashResult::BlockFail;
 }
 
@@ -819,11 +870,21 @@ void UBattleComponent::OnDodgePressed()
 	{
 		return;
 	}
-	if (bClashWindowOpen)
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	const float Cooldown = GetClashInputCooldown();
+	if (LastClashInputTime >= 0.0f && Now - LastClashInputTime < Cooldown)
+	{
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnDodgePressed - 输入冷却中，忽略"));
+		return;
+	}
+	LastClashInputTime = Now;
+
+	if (Now >= ClashHitTime - GetDodgeWindow())
 	{
 		ResolveClash(EClashResult::DodgeSuccess);
 		return;
 	}
+	// 窗口外提前按下：先记录失败结果，窗口内再按可覆盖
 	PendingClashResult = EClashResult::DodgeFail;
 }
 
@@ -1901,6 +1962,14 @@ float UBattleComponent::GetDodgeWindow() const
 		return Attr->GetFinal(AttributeNames::DodgeWindow());
 	}
 	return 0.35f;
+}
+
+float UBattleComponent::GetClashInputCooldown() const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+	const FCombatParamsRow& P = Params ? *Params : Defaults;
+	return P.ClashInputCooldown;
 }
 
 UCombatFormulaSubsystem* UBattleComponent::GetCombatSubsystem() const

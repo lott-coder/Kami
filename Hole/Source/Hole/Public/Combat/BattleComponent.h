@@ -301,6 +301,7 @@ private:
 	int32 GetMaxChargeStacks(bool bPlayer) const;
 	float GetBlockWindow() const;
 	float GetDodgeWindow() const;
+	float GetClashInputCooldown() const;
 	UCombatFormulaSubsystem* GetCombatSubsystem() const;
 	UAttributeComponent* GetPlayerAttr() const;
 	UAttributeComponent* GetEnemyAttr() const;
@@ -350,6 +351,10 @@ private:
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;
 	float PendingOutgoingDamage = 0.0f;
+	/** 碰撞命中时间（来自敌方前摇 ClashTelegraphHit 通知；无通知 = ClashTelegraphTime） */
+	float ClashHitTime = 0.0f;
+	/** 上次格挡/闪避输入时间（秒），用于 ClashInputCooldown 防连按 */
+	float LastClashInputTime = -1.0f;
 
 	FVector PlayerStartLocation;
 	FRotator PlayerStartActorRotation;

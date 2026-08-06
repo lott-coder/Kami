@@ -111,6 +111,17 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
   - 红防反击成功（蓝 vs 红）：`BlueAttackHit` 命中帧 → 攻击者播 `BlockedReaction` + 停帧 → 红防链继续 → `GoldCounterHit` 扣血+受击。
   - 闪避成功：停帧 + `DodgeSuccess`，不播被格挡动画。
 - **混入方式**：对攻击者 `PlayAnimMontage(BlockedReaction)`，引擎自动把当前攻击 Montage 混合过渡到被格挡反应（无需额外代码）。
+
+### 动画优先级与打断原则（2026-08-06 定案）
+
+- **播放权由结算层决定**（`IsActionSuppressed`）：被克制/被打断的一侧不播行动动画——
+  - 白攻 vs 蓝攻：白攻不播，蓝攻播，白攻方命中帧受击；
+  - 红防 vs 白攻：红防不播，白攻播，红防方命中帧受击；
+  - 蓄力 vs 蓝攻：蓄力不播（蓝攻播，蓄力方命中帧播 `ChargeInterrupted`）；
+  - 蓝攻 vs 红防：走 `RegisterBlueVsRedHit` 专用路径，蓝攻照播 + 红防预排。
+- **命中反应优先级（同一命中帧）**：死亡 > 被格挡 `BlockedReaction` > 蓄力打断 `ChargeInterrupted` > 蓄力抵抗 `Charge` > 普通受击 `Hurt`。
+- **打断原则**：新播 Montage 按 UE 默认混合过渡打断旧动画；"行动→反应"链用 `PlayAnimThenReaction` 顺序播放；同侧同一时刻一个行动链 + 一个待接反应；回合推进与动画解耦，下一回合行动打断上一回合残留动画（已知取舍）。
+- **满蓄力 vs 红防自动发动强化蓝攻**：按蓝攻事件/动画处理（不再作为蓄力）。
 ```
 
 ### 格挡/闪避窗口（以命中通知为锚）

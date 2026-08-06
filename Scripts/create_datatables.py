@@ -81,6 +81,7 @@ COMBATPARAMS_HEADERS = [
     "BlueAttackDamageMax_0Charge", "ChargeDamageMultiplier_1", "ChargeDamageMultiplier_2",
     "MaxChargeStacks", "WhiteInterruptChargeDamageScale", "BlockWindowSeconds",
     "DodgeWindowSeconds", "DodgeFailDamageScale", "FirstStrikeDisableChargeTurns",
+    "ClashInputCooldown", "RedDefenseLeadTime", "HitStopDuration",
     "RunAwayHPThreshold", "PlayerDefaultHP", "Movement_BackwardSpeedScale",
     "CritDamageMultiplier", "DodgeBuffDamageScale", "DodgeBuffTurns",
     "FirstStrikeDamageScale", "GoldAttackDamageMin", "GoldAttackDamageMax",
@@ -93,6 +94,7 @@ combat_params = [
         "MaxChargeStacks": 2, "WhiteInterruptChargeDamageScale": 0.3,
         "BlockWindowSeconds": 0.25, "DodgeWindowSeconds": 0.35,
         "DodgeFailDamageScale": 1.2, "FirstStrikeDisableChargeTurns": 1,
+        "ClashInputCooldown": 0.15, "RedDefenseLeadTime": 0.3, "HitStopDuration": 0.12,
         "RunAwayHPThreshold": 0.3, "PlayerDefaultHP": 100.0,
         "Movement_BackwardSpeedScale": 0.6,
         "CritDamageMultiplier": 1.5, "DodgeBuffDamageScale": 1.2, "DodgeBuffTurns": 1,
@@ -568,7 +570,7 @@ economy = [
 # ---------------------------------------------------------------------------
 ANIM_COLUMNS = [
     "Entry", "Sheathe", "RedDefense", "GoldCounter", "BlueAttack", "WhiteAttack",
-    "Charge", "ChargeInterrupted", "Hurt", "BlockSuccess", "BlockFail",
+    "Charge", "ChargeInterrupted", "BlockedReaction", "Hurt", "BlockSuccess", "BlockFail",
     "DodgeSuccess", "DodgeFail", "Death", "Victory", "Skill",
     "ClashReady", "ClashTelegraphBlue", "ClashTelegraphWhite",
 ]

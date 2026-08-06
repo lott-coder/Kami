@@ -69,6 +69,9 @@ struct HOLE_API FCombatAnimRow : public FTableRowBase
 	FAnimRef ChargeInterrupted;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
+	FAnimRef BlockedReaction;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
 	FAnimRef Hurt;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")

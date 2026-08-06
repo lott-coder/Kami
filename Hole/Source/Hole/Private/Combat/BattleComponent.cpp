@@ -1275,6 +1275,10 @@ void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName,
 void UBattleComponent::ClearPendingHit(bool bPlayerAttacker)
 {
 	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(bPlayerAttacker ? PlayerDefenderTimer : EnemyDefenderTimer);
+	}
 	Hit = FPendingHitEvent();
 }
 
@@ -1466,7 +1470,80 @@ void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResoluti
 
 void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds)
 {
-	// Task 4 补齐：注册蓝攻命中事件（伤害 + 防御反应预排）与金色反击注册
+	ABaseCharacter* Attacker = bAttackerPlayer ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
+	ABaseCharacter* Defender = bAttackerPlayer ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
+	const FCombatAnimRow* AttackerRow = GetCombatAnimRow(bAttackerPlayer);
+	const FCombatAnimRow* DefenderRow = GetCombatAnimRow(!bAttackerPlayer);
+	if (!Attacker || !Defender || !AttackerRow || !DefenderRow)
+	{
+		return;
+	}
+
+	const FAnimRef* BlueRef = GetActionRef(*AttackerRow, EBattleAction::BlueAttack);
+	if (BlueRef)
+	{
+		PlayCombatAnim(Attacker, *BlueRef);
+	}
+
+	FAnimRef DefenderFollowUp = bCounterSucceeds ? DefenderRow->GoldCounter : DefenderRow->Hurt;
+	RegisterPendingHit(bAttackerPlayer, FName(TEXT("BlueAttackHit")), Defender, IncomingAmount, Attacker,
+		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
+		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
+	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
+
+	if (bCounterSucceeds)
+	{
+		const float GoldAmount = bAttackerPlayer ? GetEnemyGoldDamage() : GetPlayerGoldDamage();
+		const FAnimRef& GoldCounterRef = DefenderRow->GoldCounter;
+		RegisterPendingHit(!bAttackerPlayer, FName(TEXT("GoldCounterHit")), Attacker, GoldAmount, Defender,
+			AttackerRow->Hurt, nullptr, FAnimRef(), FAnimRef(),
+			GoldCounterRef.Montage.IsNull() ? nullptr : GoldCounterRef.Montage.LoadSynchronous(), false);
+	}
+}
+
+void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
+{
+	if (!Hit.Defender || Hit.DefenderReaction.Montage.IsNull())
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const bool bPlayerDefender = (Hit.Defender == PlayerRole.Get());
+	FTimerHandle& Timer = bPlayerDefender ? PlayerDefenderTimer : EnemyDefenderTimer;
+	World->GetTimerManager().ClearTimer(Timer);
+
+	const float HitTime = GetNotifyTime(Hit.FallbackMontage, FName(TEXT("BlueAttackHit")));
+	const float GuardReadyTime = GetNotifyTime(Hit.DefenderReaction.Montage.LoadSynchronous(), FName(TEXT("GuardReady")));
+	float Delay = 0.0f;
+	if (HitTime > 0.0f && GuardReadyTime >= 0.0f)
+	{
+		Delay = FMath::Max(0.0f, HitTime - GuardReadyTime);
+	}
+	else if (HitTime > 0.0f)
+	{
+		const FCombatParamsRow Defaults;
+		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+		const FCombatParamsRow& P = Params ? *Params : Defaults;
+		Delay = FMath::Max(0.0f, HitTime - P.RedDefenseLeadTime);
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防无 GuardReady 标记，使用 RedDefenseLeadTime 回落"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 蓝攻无 BlueAttackHit 通知，红防立即启动"));
+	}
+
+	World->GetTimerManager().SetTimer(Timer, [this, Defender = Hit.Defender,
+		Reaction = Hit.DefenderReaction, FollowUp = Hit.DefenderFollowUp]()
+	{
+		if (Phase != EBattlePhase::Ended)
+		{
+			PlayAnimThenReaction(Defender, Reaction, FollowUp);
+		}
+	}, Delay, false);
 }
 
 void UBattleComponent::SetPlayerClashReady(bool bReady)

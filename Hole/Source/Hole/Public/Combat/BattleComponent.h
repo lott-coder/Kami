@@ -277,6 +277,9 @@ private:
 	/** 扫描 Montage 中指定 EventName 通知/标记的时间（秒）；找不到返回 -1 */
 	float GetNotifyTime(UAnimMontage* Montage, FName EventName) const;
 
+	/** 蓝 vs 红：按提前量（蓝攻命中时间 - 红防 GuardReady 时间）预排红防 → 接续动画 */
+	void ScheduleDefenderReaction(const FPendingHitEvent& Hit);
+
 	/** 停帧：暂停玩家/敌人活动 Montage，Duration 后恢复；Duration<=0 跳过 */
 	void StartHitStop(float Duration);
 
@@ -341,6 +344,8 @@ private:
 	FPendingHitEvent PlayerPendingHit;
 	FPendingHitEvent EnemyPendingHit;
 	FTimerHandle HitStopTimer;
+	FTimerHandle PlayerDefenderTimer;
+	FTimerHandle EnemyDefenderTimer;
 	EClashType ActiveClashType = EClashType::None;
 	EClashResult PendingClashResult = EClashResult::None;
 	float PendingIncomingDamage = 0.0f;

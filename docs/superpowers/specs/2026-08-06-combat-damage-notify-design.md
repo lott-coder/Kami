@@ -11,8 +11,8 @@
 ## 已确认决策
 
 1. **伤害触发采用方案 A（AnimNotify 命中通知）**——回合制游戏的主流做法，命中帧由动画资产定义。
-2. **未挂通知回落**：动作 Montage 播完时结算并打警告日志；碰撞前摇沿用 `ClashTelegraphTime`（0.8s）计时器。
-3. **通知命名**：`EventName` 用动作语义（`WhiteAttackHit` / `BlueAttackHit` / `GoldCounterHit` / `ClashTelegraphHit`），玩家/敌人可复用；注册表按"攻击者 + EventName"区分。
+2. **未挂通知回落**：动作 Montage 播完时结算并打警告日志；碰撞攻击沿用 `ClashAttackTime`（0.8s）计时器。
+3. **通知命名**：`EventName` 用动作语义（`WhiteAttackHit` / `BlueAttackHit` / `GoldCounterHit` / `ClashAttackHit`），玩家/敌人可复用；注册表按"攻击者 + EventName"区分。
 4. **格挡/闪避**：输入在敌方攻击开始后即可按下；各自窗口 = `[命中通知时间 - 窗口时长, 命中通知时间]`；输入冷却 `ClashInputCooldown` 防连按。
 5. **蓝 vs 红命中反应（2026-08-06 晚间修订）**：红防动画**提前**于蓝攻命中帧启动，使红防动画的"举剑防御"（`GuardReady` 标记帧）与 `BlueAttackHit` 命中通知帧对齐；红防播完接金色反击（或 2 层正面承受时接受击）。
 6. **命中反馈（2026-08-06 追加）**：格挡成功（含红防反击成功）与闪避成功触发停帧（`HitStopDuration`，默认 0.12s，参数化）；被格挡的攻击者（含红防反击成功）立即从当前攻击动画混入 `BlockedReaction`；闪避成功不触发被格挡动画。
@@ -52,7 +52,7 @@ struct FPendingHitEvent
 UPROPERTY(Transient)
 FPendingHitEvent PlayerPendingHit;  // 攻击者=玩家（命中事件归属玩家蓝攻/白攻/金色反击）
 UPROPERTY(Transient)
-FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌方蓝攻/白攻/碰撞前摇）
+FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌方蓝攻/白攻/碰撞攻击）
 ```
 
 ### 流程
@@ -80,7 +80,7 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
 | 玩家/敌人 白攻 | `WhiteAttack` | `WhiteAttackHit` | 对方 |
 | 玩家/敌人 蓝攻 | `BlueAttack` | `BlueAttackHit` | 对方 |
 | 玩家/敌人 金色反击 | `GoldCounter` | `GoldCounterHit` | 对方 |
-| 敌人碰撞前摇（蓝/白） | `ClashTelegraphBlue/White` | `ClashTelegraphHit` | 玩家（按格挡/闪避结果） |
+| 敌人碰撞攻击（蓝/白） | `ClashAttackBlue/White` | `ClashAttackHit` | 玩家（按格挡/闪避结果） |
 | 格挡成功弹反 | `BlockSuccess` | 无（纯动作，伤害走 GoldCounter） | — |
 | 红防（蓝 vs 红防御反应） | `RedDefense` | `GuardReady`（标记帧，不造成伤害） | — |
 
@@ -115,19 +115,19 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
 ### 格挡/闪避窗口（以命中通知为锚）
 
 ```
-敌方攻击开始（StartClash，播 ClashTelegraph*）
+敌方攻击开始（StartClash，播 ClashAttackBlue/White）
   ├─ 输入允许按下（E/Shift），带 ClashInputCooldown 防连按
   ├─ 判定窗口（各自独立）：
   │    格挡：[HitTime - BlockWindowSeconds, HitTime]
   │    闪避：[HitTime - DodgeWindowSeconds, HitTime]
   │    窗口内按下 → ResolveClash(成功)
   │    窗口外提前按下 → 记录该键失败（可被窗口内另一键覆盖，沿用现有 PendingClashResult）
-  └─ HitTime = 敌方前摇 Montage 中 ClashTelegraphHit 通知的时间
-           （未挂通知 → HitTime = ClashTelegraphTime）
+  └─ HitTime = 敌方碰撞攻击 Montage 中 ClashAttackHit 通知的时间
+           （未挂通知 → HitTime = ClashAttackTime）
 ```
 
 - `GetHitNotifyTime(UAnimMontage*, FName)`：扫描 Montage 的 Notifies，返回匹配通知时间（秒）；找不到返回 `-1`。
-- 伤害触发：`ClashTelegraphHit` 通知触发时按结果结算——格挡/闪避成功 → 0 伤害（闪避成功加 Buff，格挡成功注册金色反击伤害给 GoldCounterHit）；失败 → 全额或 ×1.2。
+- 伤害触发：`ClashAttackHit` 通知触发时按结果结算——格挡/闪避成功 → 0 伤害（闪避成功加 Buff，格挡成功注册金色反击伤害给 GoldCounterHit）；失败 → 全额或 ×1.2。
 - 回落：通知缺失时沿用现有 `ClashImpactTimer`（HitTime 后按未按键=格挡失败处理）。
 - 输入冷却：`OnBlockPressed/OnDodgePressed` 先检查 `ClashInputCooldown`（距上次输入不足则忽略），避免连按；`ResolveClash` 后 `bClashResolved` 继续拦截后续输入。
 
@@ -141,7 +141,7 @@ class HOLE_API UAnimNotify_CombatDamage : public UAnimNotify
 {
 	GENERATED_BODY()
 
-	/** 与注册槽匹配的事件名，如 WhiteAttackHit / GoldCounterHit / ClashTelegraphHit */
+	/** 与注册槽匹配的事件名，如 WhiteAttackHit / GoldCounterHit / ClashAttackHit */
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName EventName;
 
@@ -181,7 +181,7 @@ v1 仅用于红防 Montage 的 `GuardReady` 标记；后续可扩展 VFX/音效�
 | `Hole/Source/Hole/Public/DataTable/CombatAnimConfigTable.h` | 修改：`FCombatAnimRow` 新增 `BlockedReaction` 列 |
 | `Scripts/create_datatables.py` | 修改：参数表新增列与默认值（不运行重建） |
 | `DataTable_Spec.md` / `GDD_Outline.md` / `AGENTS.md` / `DevLog.md` | 修改：参数、规则、约定同步 |
-| 编辑器资产 | 用户手动：给白攻/蓝攻/金色反击/敌方前摇 Montage 挂 `AnimNotify_CombatDamage` 并填 EventName |
+| 编辑器资产 | 用户手动：给白攻/蓝攻/金色反击/敌方碰撞攻击 Montage 挂 `AnimNotify_CombatDamage` 并填 EventName |
 
 ## PIE 验证清单
 
@@ -190,7 +190,7 @@ v1 仅用于红防 Montage 的 `GuardReady` 标记；后续可扩展 VFX/音效�
 | 命中帧扣血 | 白攻打中（无克制） | 伤害在白攻命中通知帧才扣，HP 与受击动画同步 |
 | 受击同步 | 任意命中 | 目标受击动画与扣血同时出现（日志时间戳一致） |
 | 金色反击 | 红防 vs 蓝攻 | 红防提前启动，`GuardReady` 举剑帧与 `BlueAttackHit` 帧对齐（日志时间戳验证）→ 红防结束接金色反击 → `GoldCounterHit` 帧敌方扣血+受击 |
-| 格挡窗口 | 蓝/白碰撞 | 敌方前摇命中前 0.25s 内按 E 成功；更早按 E 不算成功 |
+| 格挡窗口 | 蓝/白碰撞 | 敌方碰撞攻击命中前 0.25s 内按 E 成功；更早按 E 不算成功 |
 | 闪避窗口 | 蓝/白碰撞 | 命中前 0.35s 内按 Shift 成功；窗口外提前按不算 |
 | 输入冷却 | 碰撞中快速连按 | 冷却时间内第二次输入被忽略（日志） |
 | 停帧 | 格挡/闪避成功或红防反击成功 | 命中瞬间双方动作暂停 `HitStopDuration` 后恢复 |

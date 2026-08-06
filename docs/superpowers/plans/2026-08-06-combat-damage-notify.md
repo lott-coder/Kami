@@ -4,7 +4,7 @@
 
 **Goal:** 把所有伤害结算绑定到动画命中通知：攻击 Montage 挂 `UAnimNotify_CombatDamage`，回合结算只注册待命中事件，命中帧才扣血、播受击/防御反应并处理死亡；格挡/闪避窗口以命中通知为锚点并加入输入冷却。
 
-**Architecture:** 沿用三层架构：伤害公式仍在 `UCombatFormulaSubsystem`；`UBattleComponent` 持有玩家/敌人两侧待命中事件槽（`FPendingHitEvent`：伤害 + 防御反应），通知回调 `OnHitNotify` 消费槽；蓝 vs 红时按"蓝攻命中时间 − 红防 GuardReady 标记时间"预排红防动画；碰撞窗口从敌方前摇 Montage 的 `ClashTelegraphHit` 通知时间推导。
+**Architecture:** 沿用三层架构：伤害公式仍在 `UCombatFormulaSubsystem`；`UBattleComponent` 持有玩家/敌人两侧待命中事件槽（`FPendingHitEvent`：伤害 + 防御反应），通知回调 `OnHitNotify` 消费槽；蓝 vs 红时按"蓝攻命中时间 − 红防 GuardReady 标记时间"预排红防动画；碰撞窗口从敌方碰撞攻击 Montage 的 `ClashAttackHit` 通知时间推导。
 
 **Tech Stack:** Unreal Engine 5.6 / C++（Hole 模块）、UE AnimNotify、Python 脚本（`Scripts/create_datatables.py`）。
 
@@ -21,7 +21,7 @@
 - **三层架构：** USTRUCT 纯数据；公式在 Subsystem；播放/注册/消费在 `UBattleComponent`。
 - **伤害只结算一次：** 待命中事件槽由"命中通知"或"回落路径"二选一消费（先到先得），禁止双重结算。
 - **回合推进保持解耦（v1）：** 不阻塞 `EndTurnAndAdvance`；命中通知若被下一动作打断，回落在 Montage 结束（含被打断）时结算，保证伤害不丢。PIE 验证后再决定是否改为"等动画播完再推进"。
-- **回落约定：** 动作 Montage 无命中通知 → 播完（含打断）结算 + 警告日志；碰撞前摇无 `ClashTelegraphHit` → 沿用 `ClashTelegraphTime` 计时器。
+- **回落约定：** 动作 Montage 无命中通知 → 播完（含打断）结算 + 警告日志；碰撞攻击无 `ClashAttackHit` → 沿用 `ClashAttackTime` 计时器。
 - **通知类目录约定：** `Animation/AnimNotifies/Combat/`；不按 Montage 命名。
 - **编辑器资产操作由用户手动完成**；不运行 `create_datatables.py` 重建命令。
 - **测试方式：** 无自动化测试框架；每个任务以"编译通过 + PIE 验证清单"为闭环。
@@ -37,7 +37,7 @@
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatDamage.h` + `Private/...cpp` | 命中通知（EventName → BattleComponent::OnHitNotify） | 新建（Task 2） |
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatMarker.h` + `Private/...cpp` | 无伤害标记（GuardReady） | 新建（Task 2） |
 | `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 待命中事件槽、注册/消费/回落、蓝红预排、碰撞窗口重做、输入冷却、停帧与被格挡动画 | 修改（Task 3-6） |
-| 编辑器资产 | 给攻击/前摇/红防 Montage 挂通知 | 用户手动（Task 8） |
+| 编辑器资产 | 给攻击/碰撞攻击/红防 Montage 挂通知 | 用户手动（Task 8） |
 | `DataTable_Spec.md` / `GDD_Outline.md` / `AGENTS.md` / `DevLog.md` | 参数、规则、约定同步 | 修改（Task 7） |
 
 ---
@@ -134,7 +134,7 @@ git commit -m "feat(combat-dmg): add hit-stop and blocked-reaction params and an
 #include "AnimNotify_CombatDamage.generated.h"
 
 /**
- * 战斗命中通知：挂在攻击/前摇 Montage 的挥击帧。
+ * 战斗命中通知：挂在攻击/碰撞攻击 Montage 的挥击帧。
  * 触发时找到玩家的 UBattleComponent 并调用 OnHitNotify(攻击者, EventName)。
  */
 UCLASS()
@@ -143,7 +143,7 @@ class HOLE_API UAnimNotify_CombatDamage : public UAnimNotify
 	GENERATED_BODY()
 
 public:
-	/** 与待命中事件槽匹配的事件名（WhiteAttackHit / BlueAttackHit / GoldCounterHit / ClashTelegraphHit） */
+	/** 与待命中事件槽匹配的事件名（WhiteAttackHit / BlueAttackHit / GoldCounterHit / ClashAttackHit） */
 	UPROPERTY(EditAnywhere, Category = "Combat")
 	FName EventName;
 
@@ -807,43 +807,43 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 
 **Interfaces:**
 - Consumes: Task 3 待命中事件槽、Task 1 `ClashInputCooldown`、现有 `BlockWindowSeconds`/`DodgeWindowSeconds`。
-- Produces: `ClashHitTime`、`LastClashInputTime`；`StartClash` 注册 `ClashTelegraphHit` 待命中事件；`ResolveClash` 只决定结果与金额、不立即扣血；`OnBlockPressed`/`OnDodgePressed` 每键独立窗口 + 冷却。
+- Produces: `ClashHitTime`、`LastClashInputTime`；`StartClash` 注册 `ClashAttackHit` 待命中事件；`ResolveClash` 只决定结果与金额、不立即扣血；`OnBlockPressed`/`OnDodgePressed` 每键独立窗口 + 冷却。
 
 - [ ] **Step 1: 头文件增加状态**
 
 在私有状态区（`PendingOutgoingDamage` 附近）加：
 
 ```cpp
-	/** 碰撞命中时间（来自敌方前摇 ClashTelegraphHit 通知；无通知 = ClashTelegraphTime） */
+	/** 碰撞命中时间（来自敌方碰撞攻击 ClashAttackHit 通知；无通知 = ClashAttackTime） */
 	float ClashHitTime = 0.0f;
 	/** 上次格挡/闪避输入时间（秒），用于 ClashInputCooldown 防连按 */
 	float LastClashInputTime = -1.0f;
 ```
 
-- [ ] **Step 2: StartClash 注册敌方前摇命中事件并锚定 HitTime**
+- [ ] **Step 2: StartClash 注册敌方碰撞攻击命中事件并锚定 HitTime**
 
 在 `StartClash` 的 `SetPhase(EBattlePhase::Clash);` 之后、现有动画块位置，将动画/计时块替换为：
 
 ```cpp
-	// 动画：敌方碰撞前摇 + 玩家进入准备姿态（Idle 切换）
+	// 动画：敌方碰撞攻击 + 玩家进入准备姿态（Idle 切换）
 	UAnimMontage* TelegraphMontage = nullptr;
 	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 	{
 		const FAnimRef& Telegraph = (ClashType == EClashType::BlueClash)
-			? Row->ClashTelegraphBlue
-			: Row->ClashTelegraphWhite;
+			? Row->ClashAttackBlue
+			: Row->ClashAttackWhite;
 		TelegraphMontage = Telegraph.Montage.IsNull() ? nullptr : Telegraph.Montage.LoadSynchronous();
 		PlayCombatAnim(BossEnemy.Get(), Telegraph);
 	}
 	SetPlayerClashReady(true);
 
-	// 命中时间锚点：优先取前摇 Montage 的 ClashTelegraphHit 通知时间，缺失回落 ClashTelegraphTime
-	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashTelegraphHit")));
-	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashTelegraphTime;
+	// 命中时间锚点：优先取碰撞攻击 Montage 的 ClashAttackHit 通知时间，缺失回落 ClashAttackTime
+	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashAttackHit")));
+	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashAttackTime;
 	LastClashInputTime = -1.0f;
 
-	// 注册敌方前摇待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
-	RegisterPendingHit(false, FName(TEXT("ClashTelegraphHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
+	// 注册敌方碰撞攻击待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
+	RegisterPendingHit(false, FName(TEXT("ClashAttackHit")), PlayerRole.Get(), 0.0f, BossEnemy.Get(),
 		FAnimRef(), nullptr, FAnimRef(), FAnimRef(), TelegraphMontage, false);
 
 	const float BlockWindow = GetBlockWindow();
@@ -854,7 +854,7 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashHitTime, false);
 ```
 
-> 原 `const float BlockWindow = ...` 与 `ClashTelegraphTime` 计时行被本块取代；`OnBattleStateChanged.Broadcast()` 保留在函数末尾。
+> 原 `const float BlockWindow = ...` 与 `ClashAttackTime` 计时行被本块取代；`OnBattleStateChanged.Broadcast()` 保留在函数末尾。
 
 - [ ] **Step 3: ResolveClash 改为"决定结果与金额，不立即扣血"**
 
@@ -870,8 +870,8 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 替换为：
 
 ```cpp
-	// 伤害延迟到 ClashTelegraphHit 通知/回落触发；金额写回待命中事件
-	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
+	// 伤害延迟到 ClashAttackHit 通知/回落触发；金额写回待命中事件
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashAttackHit")))
 	{
 		EnemyPendingHit.Amount = Incoming;
 	}
@@ -918,8 +918,8 @@ git commit -m "feat(combat-dmg): schedule red defense to align guard-ready with 
 在 `OnClashImpact` 的 `ResolveClash(Result);` 后追加：
 
 ```cpp
-	// 前摇无 ClashTelegraphHit 通知：由影响计时器回落结算（若通知已消费则跳过）
-	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashTelegraphHit")))
+	// 碰撞攻击无 ClashAttackHit 通知：由影响计时器回落结算（若通知已消费则跳过）
+	if (EnemyPendingHit.bActive && EnemyPendingHit.EventName == FName(TEXT("ClashAttackHit")))
 	{
 		ApplyPendingHitNow(false);
 	}
@@ -1070,7 +1070,7 @@ git commit -m "fix(combat-dmg): clear pending hit events and defender timers on 
 
 - [ ] **Step 1: DataTable_Spec.md**：§3.2 列定义与 §3.3 行数据新增 `ClashInputCooldown`（0.15）、`RedDefenseLeadTime`（0.3）、`HitStopDuration`（0.12）；§15 列定义与行数据新增 `BlockedReaction`；版本升 v0.10 → v0.11，修订记录加一行；`关联策划案` 同步 GDD 版本。
 - [ ] **Step 2: GDD_Outline.md**：§5.2.5 补充"命中通知驱动伤害、格挡/闪避窗口 = [命中通知时间 − 窗口, 命中通知时间]、输入冷却 `ClashInputCooldown`、格挡/闪避/红防反击成功停帧、被格挡动画 `BlockedReaction`"；版本升 v0.10 → v0.11，修订记录加一行。
-- [ ] **Step 3: AGENTS.md**：战斗动画约定追加"伤害延迟到 `UAnimNotify_CombatDamage` 命中帧；待命中事件槽先到先得；碰撞窗口以 `ClashTelegraphHit` 为锚；输入冷却；停帧 `HitStopDuration`；被格挡动画 `BlockedReaction`"；版本引用同步。
+- [ ] **Step 3: AGENTS.md**：战斗动画约定追加"伤害延迟到 `UAnimNotify_CombatDamage` 命中帧；待命中事件槽先到先得；碰撞窗口以 `ClashAttackHit` 为锚；输入冷却；停帧 `HitStopDuration`；被格挡动画 `BlockedReaction`"；版本引用同步。
 - [ ] **Step 4: DevLog.md**：合并一条 2026-08-06 记录（伤害绑定动画通知、窗口锚点、输入冷却、蓝红预排、停帧与被格挡动画）。
 - [ ] **Step 5: 提交**
 
@@ -1083,12 +1083,12 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 
 ### Task 8: 编辑器通知摆放与 PIE 验证（用户手动）
 
-**Files（编辑器内，不入 git）：** 玩家/敌人攻击与前摇 Montage、红防 Montage。
+**Files（编辑器内，不入 git）：** 玩家/敌人攻击与碰撞攻击 Montage、红防 Montage。
 
 - [ ] **Step 1: 重启编辑器** 加载新 DLL。
 - [ ] **Step 2: 挂通知**：
   - 玩家/敌人 `WhiteAttack`/`BlueAttack`/`GoldCounter` Montage：挥击帧挂 `AnimNotify_CombatDamage`，`EventName` 分别为 `WhiteAttackHit`/`BlueAttackHit`/`GoldCounterHit`。
-  - 敌方 `ClashTelegraphBlue`/`ClashTelegraphWhite`：攻击判定帧挂 `AnimNotify_CombatDamage`，`EventName = ClashTelegraphHit`。
+  - 敌方 `ClashAttackBlue`/`ClashAttackWhite`：攻击判定帧挂 `AnimNotify_CombatDamage`，`EventName = ClashAttackHit`。
   - 红防 Montage：举剑防御帧挂 `AnimNotify_CombatMarker`，`MarkerName = GuardReady`。
   - `DT_CombatAnimConfig` 的 `drifter`/`satan` 行补充 `BlockedReaction` 列（被格挡动画资产）。
 - [ ] **Step 3: PIE 验证清单**
@@ -1101,7 +1101,7 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 | 2 层正面承受 | 敌方 2 层蓝攻 vs 红防 | `BlueAttackHit` 帧扣血，红防结束接受击 |
 | 蓄力抵抗 | 白攻 vs 蓄力 | 微量伤害在命中帧扣，抵抗方保持蓄力姿态 |
 | 蓄力打断 | 蓝攻 vs 蓄力 | `BlueAttackHit` 帧扣血并播 `ChargeInterrupted` |
-| 碰撞窗口 | 蓝/白碰撞 | 敌方前摇命中前按各自窗口（格挡 0.25s / 闪避 0.35s）判定成功；更早按不算 |
+| 碰撞窗口 | 蓝/白碰撞 | 敌方碰撞攻击命中前按各自窗口（格挡 0.25s / 闪避 0.35s）判定成功；更早按不算 |
 | 输入冷却 | 碰撞中连按 | 冷却内第二次输入被忽略（日志） |
 | 停帧 | 格挡/闪避成功或红防反击成功 | 命中瞬间双方动作暂停 `HitStopDuration` 后恢复 |
 | 被格挡动画 | 敌方蓝攻被红防/格挡 | 攻击者立即从当前攻击动画混入 `BlockedReaction` |
@@ -1116,5 +1116,5 @@ git commit -m "docs(combat-dmg): sync damage-notify rules, clash windows and new
 
 - 覆盖：设计文档全部条目（通知类、待命中事件槽、普通回合注册、蓝红预排、碰撞窗口、输入冷却、停帧与被格挡动画、回落、参数、脚本、文档、编辑器/PIE）均有对应任务。
 - 无占位符：代码步骤给出完整代码或精确插入点；`RegisterBlueVsRedHit` 在 Task 3 以空实现占位并在 Task 4 补齐（已显式说明）。
-- 类型一致性：`RegisterPendingHit`（末参 `bDefenderBlocked`） / `ApplyPendingHitNow` / `OnHitNotify` / `GetNotifyTime` / `ScheduleDefenderReaction` / `StartHitStop` 签名在任务间一致；`EventName` 常量（`BlueAttackHit`/`WhiteAttackHit`/`GoldCounterHit`/`ClashTelegraphHit`/`GuardReady`）全文一致。
+- 类型一致性：`RegisterPendingHit`（末参 `bDefenderBlocked`） / `ApplyPendingHitNow` / `OnHitNotify` / `GetNotifyTime` / `ScheduleDefenderReaction` / `StartHitStop` 签名在任务间一致；`EventName` 常量（`BlueAttackHit`/`WhiteAttackHit`/`GoldCounterHit`/`ClashAttackHit`/`GuardReady`）全文一致。
 - 风险：回合推进与动画解耦，命中通知若被下一动作打断由回落保证伤害不丢；PIE 验证后如需"等动画播完再推进"另行迭代。

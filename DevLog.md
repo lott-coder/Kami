@@ -47,11 +47,12 @@
 2. 通知类：`AnimNotify_CombatDamage`（命中帧回调 `OnHitNotify`）、`AnimNotify_CombatMarker`（`GuardReady` 等无伤害标记）。
 3. 待命中事件：结算只注册不扣血；命中通知/蒙太奇播完回落二选一消费（先到先得），`ApplyPendingHitNow` 统一扣血+受击+被格挡反馈；`PlayCombatAnim` 统一绑定 `OnActionMontageEnded` 保证回落可达。
 4. 蓝 vs 红：`RegisterBlueVsRedHit` 注册蓝攻命中事件与金色反击事件；红防按 `BlueAttackHitTime - GuardReadyTime` 预排启动。
-5. 碰撞：`StartClash` 以 `ClashTelegraphHit` 通知时间为锚（缺失回落 `ClashTelegraphTime`）；格挡/闪避各自窗口判定；`ClashInputCooldown` 防连按；`ResolveClash` 只决定结果与金额，伤害由通知/影响计时器触发。
+5. 碰撞：`StartClash` 以 `ClashAttackHit` 通知时间为锚（缺失回落 `ClashAttackTime`）；格挡/闪避各自窗口判定；`ClashInputCooldown` 防连按；`ResolveClash` 只决定结果与金额，伤害由通知/影响计时器触发。
 6. 反馈：格挡/闪避/红防反击成功触发 `StartHitStop`（暂停双方 Montage 后恢复）；被格挡方立即混入 `BlockedReaction`。
 7. 文档：GDD v0.11、DataTable_Spec v0.10、AGENTS.md 同步。
+8. 命名修订：`ClashTelegraphBlue/White` → `ClashAttackBlue/White`（碰撞攻击）；命中事件 → `ClashAttackHit`；计时参数 → `ClashAttackTime`；DataTable_Spec v0.11。
 
-**结果/解决方案：** 编译通过（提交 `f069d0a`、`647fba0`、`296f39f`、`9e73e4a`）。待编辑器：给攻击/前摇 Montage 挂命中通知、红防挂 `GuardReady` 标记、填 `BlockedReaction` 资产；PIE 验证 12 项清单（见实现计划 Task 8）。
+**结果/解决方案：** 编译通过（提交 `f069d0a`、`647fba0`、`296f39f`、`9e73e4a`、`d9c5ad1`）。待编辑器：给攻击/碰撞攻击 Montage 挂命中通知、红防挂 `GuardReady` 标记、填 `BlockedReaction` 资产；PIE 验证 12 项清单（见实现计划 Task 8）。
 
 **经验教训：** "先注册、后由动画事件消费"让伤害帧与表现天然同步；双槽先到先得保证不重复结算；停帧用 Montage_Pause/Resume 而非全局时间膨胀，避免计时器被冻结。
 
@@ -90,7 +91,7 @@
 **处理过程：**
 1. 动画表定案（用户确认）：收刀动画留空、敌人动画先占位、蓝攻不分蓄力层级共用一条；玩家增加同色碰撞准备姿态（`ClashReady`，碰撞期间 Idle 切换，结束后回退）；敌人增加金色反击（红防成功触发）；格挡成功后先播 `BlockSuccess` 弹反、播完再接 `GoldCounter`。
 2. DataTable_Spec v0.9 新增 13 号表 `DT_CombatAnimConfig`：一行一个实体（v1：`drifter`/`satan`），19 个 `FAnimRef` 动作列（Montage 软引用 + Section + PlayRate + BlendOutTime）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`。设计说明落 `docs/superpowers/specs/2026-08-05-combat-anim-design.md`，实现计划落 `docs/superpowers/plans/2026-08-05-combat-animations.md`。
-3. C++：新增 `FAnimRef`/`FCombatAnimRow`；`UCombatFormulaSubsystem::GetCombatAnimRow()` 读表；`UBaseCharacterAnimInstance` 暴露 `bClashReady`/`SetClashReady`；`UBattleComponent` 新增播放辅助（`GetCombatAnimRow/PlayCombatAnim/PlayActionAnim/PlayResolutionAnimations`），普通回合按"受击 > 金色反击 > 蓄力被打断 > 行动动画"编排，碰撞阶段播敌方前摇 + 玩家准备姿态，结算后复位；格挡成功连播用 `OnMontageEnded` 回调；入场 Montage 优先读表 `Entry`（BP 字段回退）；收刀时 `StopAllMontages` 并复位连播/准备状态；结算时败方播 `Death`、胜方播 `Victory`。
+3. C++：新增 `FAnimRef`/`FCombatAnimRow`；`UCombatFormulaSubsystem::GetCombatAnimRow()` 读表；`UBaseCharacterAnimInstance` 暴露 `bClashReady`/`SetClashReady`；`UBattleComponent` 新增播放辅助（`GetCombatAnimRow/PlayCombatAnim/PlayActionAnim/PlayResolutionAnimations`），普通回合按"受击 > 金色反击 > 蓄力被打断 > 行动动画"编排，碰撞阶段播敌方碰撞攻击 + 玩家准备姿态，结算后复位；格挡成功连播用 `OnMontageEnded` 回调；入场 Montage 优先读表 `Entry`（BP 字段回退）；收刀时 `StopAllMontages` 并复位连播/准备状态；结算时败方播 `Death`、胜方播 `Victory`。
 4. 三个数据表脚本（create/verify/export）同步 13 号表（不运行重建，避免覆盖手动编辑）。
 5. 编译通过（7 次提交：`7b327aa..06cae5d`）。
 

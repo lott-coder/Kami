@@ -1,6 +1,6 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.10
+> **版本：** v0.11
 > **日期：** 2026-08-05
 > **关联策划案：** GDD_Outline.md v0.11
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
@@ -1123,8 +1123,8 @@ enum class EConsumableType : uint8
 | `Victory` | `FAnimRef` | 胜利姿态；可空 |
 | `Skill` | `FAnimRef` | 技能动作；v1 预留留空 |
 | `ClashReady` | `FAnimRef` | 玩家同色碰撞准备姿态（状态型循环；碰撞期间切换 Idle，结束后回退） |
-| `ClashTelegraphBlue` | `FAnimRef` | 蓝 vs 蓝碰撞前摇（敌方攻击提示） |
-| `ClashTelegraphWhite` | `FAnimRef` | 白 vs 白碰撞前摇（敌方攻击提示） |
+| `ClashAttackBlue` | `FAnimRef` | 蓝 vs 蓝碰撞攻击（敌方攻击提示） |
+| `ClashAttackWhite` | `FAnimRef` | 白 vs 白碰撞攻击（敌方攻击提示） |
 
 > **回落约定（运行时逻辑，不属于 USTRUCT）：** `BlockFail`/`DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；格挡成功时先播 `BlockSuccess`（弹反），播完再播 `GoldCounter`（金色反击）；红 vs 红、双蓄力等"无事发生"回合不播动作。
 
@@ -1232,3 +1232,4 @@ DT_CombatParams (单例，无外键)
 > | v0.8 | 2026-08-05 | 战斗系统 v1 规则落地说明：蓝攻需 ≥1 层蓄力（0 层基础值保留为倍率基数），同步 GDD v0.8 |
 > | v0.9 | 2026-08-05 | 新增 13 号表 `DT_CombatAnimConfig`（`FCombatAnimRow` + `FAnimRef`，一行一实体，19 个动作列）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`；同步 GDD v0.9 |
 > | v0.10 | 2026-08-06 | 参数表新增 `ClashInputCooldown`/`RedDefenseLeadTime`/`HitStopDuration`；13 号表新增 `BlockedReaction` 列（被格挡动画）；同步 GDD v0.11 |
+> | v0.11 | 2026-08-06 | 命名修订：`ClashTelegraphBlue/White` → `ClashAttackBlue/White`（碰撞攻击）；命中事件 `ClashTelegraphHit` → `ClashAttackHit`；计时参数 `ClashTelegraphTime` → `ClashAttackTime` |

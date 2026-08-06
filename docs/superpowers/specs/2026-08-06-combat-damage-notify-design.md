@@ -14,15 +14,15 @@
 2. **未挂通知回落**：动作 Montage 播完时结算并打警告日志；碰撞前摇沿用 `ClashTelegraphTime`（0.8s）计时器。
 3. **通知命名**：`EventName` 用动作语义（`WhiteAttackHit` / `BlueAttackHit` / `GoldCounterHit` / `ClashTelegraphHit`），玩家/敌人可复用；注册表按"攻击者 + EventName"区分。
 4. **格挡/闪避**：输入在敌方攻击开始后即可按下；各自窗口 = `[命中通知时间 - 窗口时长, 命中通知时间]`；输入冷却 `ClashInputCooldown` 防连按。
-5. **蓝 vs 红命中反应（2026-08-06 修订）**：红防动画不再与蓝攻同播，改为蓝攻 `BlueAttackHit` 通知触发时才播放；红防播完接金色反击（或 2 层正面承受时接受击）。
+5. **蓝 vs 红命中反应（2026-08-06 晚间修订）**：红防动画**提前**于蓝攻命中帧启动，使红防动画的"举剑防御"（`GuardReady` 标记帧）与 `BlueAttackHit` 命中通知帧对齐；红防播完接金色反击（或 2 层正面承受时接受击）。
 
-> **决策变更记录：** 上一版"红防与蓝攻动画同时播放"（2026-08-06 早间定案）被本版取代——防御反应跟随攻击命中帧，观感更"即时反应"。
+> **决策变更记录：** 本时序经两轮修订：①"红防与蓝攻同播"（早间）→ ②"蓝攻命中通知触发时才播红防"（午后）→ ③"红防提前启动，举剑防御帧与命中帧对齐"（晚间，当前）。版本②的"通知触发才播"会让防御动作看起来慢半拍，版本③由防御动画自身的举剑帧决定提前量。
 
 ## 架构与数据流
 
 ### 三层职责
 
-- **USTRUCT 纯数据**：`FCombatParamsRow` 新增 `ClashInputCooldown`（默认 0.15s）；`FAnimRef` 不新增命中时间列（命中帧在资产里，不双份维护）。
+- **USTRUCT 纯数据**：`FCombatParamsRow` 新增 `ClashInputCooldown`（默认 0.15s）与 `RedDefenseLeadTime`（默认 0.3s，红防举剑标记缺失时的回落提前量）；`FAnimRef` 不新增命中时间列（命中帧在资产里，不双份维护）。
 - **Subsystem**：伤害公式仍在 `UCombatFormulaSubsystem`；窗口时长继续读属性最终值（`GetBlockWindow`/`GetDodgeWindow`，支持装备/技能修正）。
 - **UBattleComponent（运行时）**：持有两侧待命中伤害槽、输入冷却状态、窗口计时与命中回调入口。
 
@@ -59,13 +59,13 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
 结算（ResolveNormalTurn/ResolveExtraTurn/ResolveClash）
   → 算出伤害值（公式不变）
   → 注册待命中事件（不扣血；含可选防御反应）
-  → 播放攻击 Montage（含命中通知）
+  → 播放攻击 Montage（含命中通知）；若含防御反应，按提前量预排防御动画
           │
           ├─ AnimNotify_CombatDamage 触发（命中帧）
           │    → OnHitNotify(攻击者, EventName)
           │    → 查对应侧槽：
           │        · 有伤害 → ApplyDamageTo → 播放 HitReaction → 死亡/结算
-          │        · 有 Defender → 播放 DefenderReaction → 播完接 DefenderFollowUp
+          │        · 有 Defender → DefenderReaction 已按提前量播放中 → 播完接 DefenderFollowUp
           │
           └─ 回落：Montage 播完仍未被通知消费 → 播完结算 + 警告日志
 ```
@@ -79,19 +79,24 @@ FPendingHitEvent EnemyPendingHit;   // 攻击者=敌人（命中事件归属敌�
 | 玩家/敌人 金色反击 | `GoldCounter` | `GoldCounterHit` | 对方 |
 | 敌人碰撞前摇（蓝/白） | `ClashTelegraphBlue/White` | `ClashTelegraphHit` | 玩家（按格挡/闪避结果） |
 | 格挡成功弹反 | `BlockSuccess` | 无（纯动作，伤害走 GoldCounter） | — |
+| 红防（蓝 vs 红防御反应） | `RedDefense` | `GuardReady`（标记帧，不造成伤害） | — |
 
 > 蓄力抵抗白攻：注册伤害时 `HitReaction = Charge`（保持蓄力姿态，不播受击）；蓝攻打断蓄力：`HitReaction = ChargeInterrupted`。
-> **蓝 vs 红：** `BlueAttackHit` 命中事件同时携带防御反应——Defender 播 `RedDefense`，播完接 `GoldCounter`（红防克蓝攻）；若为 2 层强化蓝攻正面承受，Defender 播 `RedDefense` 后接 `Hurt`，且同一通知按蓝攻伤害扣血。
+> **蓝 vs 红：** `BlueAttackHit` 命中事件同时携带防御反应——Defender 的 `RedDefense` 按提前量预排启动（`GuardReady` 帧与 `BlueAttackHit` 帧对齐），播完接 `GoldCounter`（红防克蓝攻）；若为 2 层强化蓝攻正面承受，Defender 播 `RedDefense` 后接 `Hurt`，且 `BlueAttackHit` 同一通知按蓝攻伤害扣血。
 
 ### 蓝 vs 红命中反应时序
 
 ```
 蓝攻开始（玩家或敌方）
-  → BlueAttackHit 通知（蓝攻命中帧）
-      ├─ Defender 播 RedDefense（不再与蓝攻同播，改为通知触发）
-      ├─ RedDefense 播完 → GoldCounter（红防克蓝攻）或 Hurt（2 层正面承受）
-      └─ 蓝攻自身有伤害（2 层正面承受）→ 同一通知扣血
-  → GoldCounterHit 通知（金色反击命中帧）→ 对方扣血 + 受击
+  ├─ 预排：Defender 的 RedDefense 在 (BlueAttackHitTime - GuardReadyTime) 启动
+  ├─ 时间轴：
+  │     [RedDefense 启动] ──→ [GuardReady 标记帧 = BlueAttackHit 帧] ──→ [RedDefense 播完]
+  │                                  │
+  │                                  └─ 2 层正面承受：同一帧按蓝攻伤害扣血
+  ├─ RedDefense 播完 → GoldCounter（红防克蓝攻）或 Hurt（2 层正面承受）
+  └─ GoldCounterHit 通知（金色反击命中帧）→ 对方扣血 + 受击
+
+> **提前量计算：** `RedDefenseStartDelay = BlueAttackHitTime - GuardReadyTime`（取非负值，通过 Timer 启动，<=0 立即播放）。`BlueAttackHitTime` 扫描蓝攻 Montage 的 `BlueAttackHit` 通知；`GuardReadyTime` 扫描红防 Montage 的 `GuardReady` 标记。红防无标记时回落 `RedDefenseLeadTime`（默认 0.3s，入 `FCombatParamsRow`）；蓝攻无命中通知时回落"红防立即启动"并打警告。
 ```
 
 ### 格挡/闪避窗口（以命中通知为锚）
@@ -134,13 +139,32 @@ class HOLE_API UAnimNotify_CombatDamage : public UAnimNotify
 
 `Notify` 实现：取 `MeshComp->GetOwner()` 为攻击者 → 找到玩家的 `UBattleComponent`（按 Tag `Player` + `FindComponentByClass`）→ 调用 `OnHitNotify(攻击者, EventName)`。
 
+### 标记通知 `UAnimNotify_CombatMarker`（新增）
+
+用途：标注动画内**无伤害**的关键帧，供预排计算扫描，不触发战斗逻辑（`Notify` 为空实现或仅日志）。
+
+```cpp
+UCLASS()
+class HOLE_API UAnimNotify_CombatMarker : public UAnimNotify
+{
+	GENERATED_BODY()
+
+	/** 标记名，如 GuardReady（红防举剑防御帧） */
+	UPROPERTY(EditAnywhere, Category = "Combat")
+	FName MarkerName;
+};
+```
+
+v1 仅用于红防 Montage 的 `GuardReady` 标记；后续可扩展 VFX/音效等时间锚点。
+
 ## 文件改动
 
 | 文件 | 动作 |
 |---|---|
 | `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatDamage.h` + `Private/.../AnimNotify_CombatDamage.cpp` | 新建：命中通知 |
+| `Hole/Source/Hole/Public/Animation/AnimNotifies/Combat/AnimNotify_CombatMarker.h` + `Private/.../AnimNotify_CombatMarker.cpp` | 新建：无伤害标记（GuardReady） |
 | `Hole/Source/Hole/Public/Combat/BattleComponent.h` + `Private/Combat/BattleComponent.cpp` | 修改：待命中伤害槽、OnHitNotify、窗口重做（HitTime 锚定 + 每键独立窗口）、输入冷却、Montage 播完回落 |
-| `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h` | 修改：新增 `ClashInputCooldown` |
+| `Hole/Source/Hole/Public/DataTable/CombatParamsTable.h` | 修改：新增 `ClashInputCooldown`、`RedDefenseLeadTime` |
 | `Scripts/create_datatables.py` | 修改：参数表新增列与默认值（不运行重建） |
 | `DataTable_Spec.md` / `GDD_Outline.md` / `AGENTS.md` / `DevLog.md` | 修改：参数、规则、约定同步 |
 | 编辑器资产 | 用户手动：给白攻/蓝攻/金色反击/敌方前摇 Montage 挂 `AnimNotify_CombatDamage` 并填 EventName |
@@ -151,7 +175,7 @@ class HOLE_API UAnimNotify_CombatDamage : public UAnimNotify
 |---|---|---|
 | 命中帧扣血 | 白攻打中（无克制） | 伤害在白攻命中通知帧才扣，HP 与受击动画同步 |
 | 受击同步 | 任意命中 | 目标受击动画与扣血同时出现（日志时间戳一致） |
-| 金色反击 | 红防 vs 蓝攻 | 蓝攻命中通知帧才播红防 → 红防结束接金色反击 → 金色反击命中帧敌方扣血+受击 |
+| 金色反击 | 红防 vs 蓝攻 | 红防提前启动，`GuardReady` 举剑帧与 `BlueAttackHit` 帧对齐（日志时间戳验证）→ 红防结束接金色反击 → `GoldCounterHit` 帧敌方扣血+受击 |
 | 格挡窗口 | 蓝/白碰撞 | 敌方前摇命中前 0.25s 内按 E 成功；更早按 E 不算成功 |
 | 闪避窗口 | 蓝/白碰撞 | 命中前 0.35s 内按 Shift 成功；窗口外提前按不算 |
 | 输入冷却 | 碰撞中快速连按 | 冷却时间内第二次输入被忽略（日志） |

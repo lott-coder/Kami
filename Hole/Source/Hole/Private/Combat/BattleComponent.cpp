@@ -197,7 +197,7 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		const FTurnResolution Resolution = ResolveExtraTurn(true, Action);
 		bPlayerExtraTurnPending = false;
 		ApplyResolution(Resolution);
-		if (!bClashStarted)
+		if (!bClashStarted && !bAwaitingDefenderChain)
 		{
 			EndTurnAndAdvance();
 		}
@@ -206,7 +206,7 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 
 	const FTurnResolution Resolution = ResolveNormalTurn(Action, EnemyChosenAction);
 	ApplyResolution(Resolution);
-	if (!bClashStarted)
+	if (!bClashStarted && !bAwaitingDefenderChain)
 	{
 		EndTurnAndAdvance();
 	}
@@ -631,7 +631,7 @@ void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActo
 
 void UBattleComponent::EndTurnAndAdvance()
 {
-	if (Phase == EBattlePhase::Ended)
+	if (Phase == EBattlePhase::Ended || bAwaitingDefenderChain)
 	{
 		return;
 	}
@@ -658,7 +658,7 @@ void UBattleComponent::EndTurnAndAdvance()
 		SetPhase(EBattlePhase::Resolving);
 		const FTurnResolution Resolution = ResolveExtraTurn(false, EnemyChosenAction);
 		ApplyResolution(Resolution);
-		if (!bClashStarted)
+		if (!bClashStarted && !bAwaitingDefenderChain)
 		{
 			EndTurnAndAdvance();
 		}
@@ -1627,6 +1627,15 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
 		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
 	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
+
+	// 蓝 vs 红：回合推进挂起，等红防→接续（金色反击/受击）链播完再推进
+	if (!DefenderRow->RedDefense.Montage.IsNull())
+	{
+		bAwaitingDefenderChain = true;
+		AwaitingChainFinalMontage = DefenderFollowUp.Montage.IsNull()
+			? DefenderRow->RedDefense.Montage.LoadSynchronous()
+			: DefenderFollowUp.Montage.LoadSynchronous();
+	}
 }
 
 void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
@@ -1822,6 +1831,14 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 	{
 		ApplyPendingHitNow(false);
 	}
+
+	// 蓝 vs 红：红防→接续链播完（最终蒙太奇结束）后推进回合
+	if (bAwaitingDefenderChain && Montage == AwaitingChainFinalMontage)
+	{
+		bAwaitingDefenderChain = false;
+		AwaitingChainFinalMontage = nullptr;
+		EndTurnAndAdvance();
+	}
 }
 
 void UBattleComponent::PlayDeathAnimations(bool bPlayerWon)
@@ -1845,6 +1862,8 @@ void UBattleComponent::SheathePlayerWeapon()
 		// 停止全部 Montage（入场/动作/碰撞残留），避免通知回调再次拔刀或连播反击
 		ClearPendingReactions();
 		ClearPendingHits();
+		bAwaitingDefenderChain = false;
+		AwaitingChainFinalMontage = nullptr;
 		if (GetWorld())
 		{
 			GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
@@ -1959,6 +1978,8 @@ void UBattleComponent::ResetForRetry()
 	bClashWindowOpen = false;
 	PendingClashResult = EClashResult::None;
 	ClearPendingHits();
+	bAwaitingDefenderChain = false;
+	AwaitingChainFinalMontage = nullptr;
 	LastClashInputTime = -1.0f;
 	if (GetWorld())
 	{

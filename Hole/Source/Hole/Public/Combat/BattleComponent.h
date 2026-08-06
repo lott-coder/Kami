@@ -347,6 +347,9 @@ private:
 	FAnimRef EnemyPendingReactionRef;
 	FPendingHitEvent PlayerPendingHit;
 	FPendingHitEvent EnemyPendingHit;
+	/** 蓝 vs 红：等待红防→金色反击链播完再推进回合 */
+	bool bAwaitingDefenderChain = false;
+	UAnimMontage* AwaitingChainFinalMontage = nullptr;
 	FTimerHandle HitStopTimer;
 	FTimerHandle PlayerDefenderTimer;
 	FTimerHandle EnemyDefenderTimer;

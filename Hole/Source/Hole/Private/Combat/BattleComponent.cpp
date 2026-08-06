@@ -431,11 +431,10 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			PlayerChargeStacks = 0;
 			break;
 		case EBattleAction::BlueAttack:
-			// 同色碰撞
+			// 同色碰撞：不直接结算双方伤害，仅进入抵挡环节（敌方伤害待格挡/闪避判定）
 			R.bClash = true;
 			R.ClashType = EClashType::BlueClash;
 			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
-			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
 			PlayerChargeStacks = 0;
 			EnemyChargeStacks = 0;
 			break;
@@ -470,11 +469,10 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			EnemyChargeStacks = 0;
 			break;
 		case EBattleAction::WhiteAttack:
-			// 同色碰撞
+			// 同色碰撞：不直接结算双方伤害，仅进入抵挡环节（敌方伤害待格挡/闪避判定）
 			R.bClash = true;
 			R.ClashType = EClashType::WhiteClash;
 			R.PlayerDamageTaken = GetEnemyWhiteDamage();
-			R.EnemyDamageTaken = GetPlayerWhiteDamage();
 			break;
 		case EBattleAction::Charge:
 			// 蓄力抵抗白攻：微量伤害 + 额外回合，不打断蓄力
@@ -591,7 +589,7 @@ void UBattleComponent::ApplyResolution(const FTurnResolution& Resolution)
 		PendingIncomingDamage = Resolution.PlayerDamageTaken;
 		PendingOutgoingDamage = Resolution.EnemyDamageTaken;
 
-		// 同色碰撞：玩家这刀先命中敌人，敌人这刀由实时防御决定
+		// 同色碰撞：不直接结算伤害，仅进入抵挡环节（敌方伤害由格挡/闪避判定）
 		if (Resolution.EnemyDamageTaken > 0.0f)
 		{
 			ApplyDamageTo(BossEnemy.Get(), Resolution.EnemyDamageTaken, PlayerRole.Get());

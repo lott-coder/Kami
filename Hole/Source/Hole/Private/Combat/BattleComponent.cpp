@@ -358,12 +358,14 @@ void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 void UBattleComponent::StartPlayerExtraTurn()
 {
 	bPlayerChoseAction = false;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartPlayerExtraTurn - 玩家额外回合触发"));
 	SetPhase(EBattlePhase::ActionSelect);
 	OnBattleStateChanged.Broadcast();
 }
 
 void UBattleComponent::StartEnemyExtraTurn()
 {
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartEnemyExtraTurn - 敌人额外回合触发"));
 	ChooseEnemyAction(true);
 	SetPhase(EBattlePhase::Resolving);
 	OnBattleStateChanged.Broadcast();
@@ -1255,7 +1257,15 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	// 玩家侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
 	if (Resolution.PlayerDamageTaken > 0.0f)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		if (Resolution.bPlayerExtraTurn)
+		{
+			// 蓄力抵抗白攻：不打断蓄力、不播受击，保持蓄力姿态
+			if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+			{
+				PlayCombatAnim(PlayerRole.Get(), Row->Charge);
+			}
+		}
+		else if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
 		{
 			if (Row->Hurt.Montage.IsNull())
 			{
@@ -1290,7 +1300,15 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	// 敌人侧：受击 > 金色反击 > 蓄力被打断 > 行动动画
 	if (Resolution.EnemyDamageTaken > 0.0f)
 	{
-		if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+		if (Resolution.bEnemyExtraTurn)
+		{
+			// 蓄力抵抗白攻：不打断蓄力、不播受击，保持蓄力姿态
+			if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
+			{
+				PlayCombatAnim(BossEnemy.Get(), Row->Charge);
+			}
+		}
+		else if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 		{
 			if (Row->Hurt.Montage.IsNull())
 			{

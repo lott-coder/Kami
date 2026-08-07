@@ -39,7 +39,9 @@
 
 UBattleComponent::UBattleComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	// 停帧需要组件 Tick 用 DeltaTime 累积固定时长；平时不启动
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
 
 	static ConstructorHelpers::FClassFinder<UCombatHUDWidget> HUDClass(TEXT("/Game/UI/HUD/WBP_CombatHUD"));
 	if (HUDClass.Succeeded())
@@ -96,7 +98,9 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EndDelayTimer);
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
+		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
 	}
+	EndHitStop();
 	UnbindCombatInput();
 	RemoveCombatMapping();
 	if (ResultHUD.IsValid())
@@ -106,6 +110,20 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void UBattleComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	if (!bHitStopActive)
+	{
+		return;
+	}
+	HitStopRemaining -= DeltaTime;
+	if (HitStopRemaining <= 0.0f)
+	{
+		EndHitStop();
+	}
 }
 
 // ==================== 公开接口 ====================
@@ -149,6 +167,7 @@ void UBattleComponent::EndBattle()
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
+		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
@@ -161,31 +180,31 @@ void UBattleComponent::EndBattle()
 	OnBattleStateChanged.Broadcast();
 }
 
-void UBattleComponent::PlayerChooseAction(EBattleAction Action)
+bool UBattleComponent::PlayerChooseAction(EBattleAction Action)
 {
 	if (Phase != EBattlePhase::ActionSelect || bPlayerChoseAction)
 	{
-		return;
+		return false;
 	}
 	if (Action == EBattleAction::Skill)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 技能系统未实装"));
-		return;
+		return false;
 	}
 	if (Action == EBattleAction::BlueAttack && PlayerChargeStacks <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓝攻需要至少 1 层蓄力"));
-		return;
+		return false;
 	}
 	if (Action == EBattleAction::Charge && PlayerChargeStacks >= GetMaxChargeStacks(true))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓄力已达上限"));
-		return;
+		return false;
 	}
 	if (bPlayerExtraTurnPending && Action != EBattleAction::BlueAttack && Action != EBattleAction::Charge)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 额外回合只能蓝攻或蓄力"));
-		return;
+		return false;
 	}
 
 	bPlayerChoseAction = true;
@@ -201,7 +220,7 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		{
 			TryAdvanceTurnIfGateDone();
 		}
-		return;
+		return true;
 	}
 
 	const FTurnResolution Resolution = ResolveNormalTurn(Action, EnemyChosenAction);
@@ -210,6 +229,7 @@ void UBattleComponent::PlayerChooseAction(EBattleAction Action)
 	{
 		TryAdvanceTurnIfGateDone();
 	}
+	return true;
 }
 
 void UBattleComponent::SetEnemyForcedAction(EBattleAction Action, bool bEnabled)
@@ -275,6 +295,9 @@ void UBattleComponent::HandleIntroFinished()
 void UBattleComponent::EnterBattle()
 {
 	PositionBattleActors();
+	// 先制攻击效果：开场拥有一层蓄力（默认敌方先制 → 敌方 1 层、我方 0 层）
+	PlayerChargeStacks = bEnemyFirstStrike ? 0 : 1;
+	EnemyChargeStacks = bEnemyFirstStrike ? 1 : 0;
 	LockPlayer();
 	AddCombatMapping();
 	SetupCombatInput();
@@ -330,7 +353,7 @@ void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 
 	if (EnemyAI.IsValid())
 	{
-		EnemyChosenAction = EnemyAI->ChooseAction(RoundNumber, PlayerLastAction, bExtraTurn, EnemyChargeStacks);
+		EnemyChosenAction = EnemyAI->ChooseAction(RoundNumber, PlayerLastAction, bExtraTurn, EnemyChargeStacks, PlayerChargeStacks);
 	}
 	else
 	{
@@ -347,8 +370,11 @@ void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 		}
 		else
 		{
-			// 蓝攻需 ≥1 层蓄力；蓄力满上限后不能再蓄力
-			Options.Add(EBattleAction::RedDefense);
+			// 蓝攻需 ≥1 层蓄力；蓄力满上限后不能再蓄力；玩家 0 层蓄力时禁用红防
+			if (PlayerChargeStacks > 0)
+			{
+				Options.Add(EBattleAction::RedDefense);
+			}
 			Options.Add(EBattleAction::WhiteAttack);
 			if (EnemyChargeStacks > 0) Options.Add(EBattleAction::BlueAttack);
 			if (EnemyChargeStacks < MaxStacks) Options.Add(EBattleAction::Charge);
@@ -390,15 +416,8 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			// 红 vs 红：本回合跳过
 			break;
 		case EBattleAction::BlueAttack:
-			// 红防克蓝攻 → 金色反击；敌方 2 层蓄力出蓝刀时红防正面承受强化蓝攻
-			if (EnemyChargeStacks >= 2)
-			{
-				R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
-			}
-			else
-			{
-				R.EnemyDamageTaken = GetPlayerGoldDamage();
-			}
+			// 红防克蓝攻 → 金色反击；2 层蓝攻同样不破防（只有蓄力对红防的自动强化蓝攻例外）
+			R.EnemyDamageTaken = GetPlayerGoldDamage();
 			EnemyChargeStacks = 0;
 			break;
 		case EBattleAction::WhiteAttack:
@@ -448,7 +467,7 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			PlayerChargeStacks = 0;
 			break;
 		case EBattleAction::Charge:
-			// 蓝攻打断蓄力，全额伤害
+			// 蓝攻打断蓄力，全额伤害（攻击方的蓄力奖励由末尾"正常造成伤害 +1 层"统一处理）
 			R.EnemyDamageTaken = GetPlayerBlueDamage(PlayerChargeStacks);
 			R.bEnemyChargeInterrupted = true;
 			PlayerChargeStacks = 0;
@@ -479,10 +498,20 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			R.PlayerDamageTaken = GetEnemyWhiteDamage();
 			break;
 		case EBattleAction::Charge:
-			// 蓄力抵抗白攻：微量伤害 + 额外回合，不打断蓄力
-			R.EnemyDamageTaken = GetPlayerWhiteDamage() * GetChargeResistScale();
+			// 白攻 vs 蓄力：白攻从不打断蓄力，蓄力方始终保持蓄力姿态、不播受击动画；
+			// 0 层蓄力 → 抵抗（0.3 白伤 + 1 层 + 额外回合）；
+			// 1 层蓄力 → 全额白伤 + 1 层（到 2 层），无额外回合
+			R.bEnemyChargeResisted = true;
+			if (EnemyChargeStacks == 0)
+			{
+				R.EnemyDamageTaken = GetPlayerWhiteDamage() * GetChargeResistScale();
+				R.bEnemyExtraTurn = true;
+			}
+			else
+			{
+				R.EnemyDamageTaken = GetPlayerWhiteDamage();
+			}
 			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
-			R.bEnemyExtraTurn = true;
 			break;
 		default:
 			break;
@@ -509,17 +538,27 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 			break;
 		}
 		case EBattleAction::BlueAttack:
-			// 蓄力被蓝攻打断，玩家吃全额蓝攻
+			// 蓄力被蓝攻打断，玩家吃全额蓝攻（敌方的蓄力奖励由末尾统一处理）
 			R.PlayerDamageTaken = GetEnemyBlueDamage(EnemyChargeStacks);
 			R.bPlayerChargeInterrupted = true;
 			PlayerChargeStacks = 0;
 			EnemyChargeStacks = 0;
 			break;
 		case EBattleAction::WhiteAttack:
-			// 蓄力抵抗白攻：微量伤害 + 额外回合
-			R.PlayerDamageTaken = GetEnemyWhiteDamage() * GetChargeResistScale();
+			// 白攻 vs 蓄力（镜像）：白攻从不打断蓄力，蓄力方始终保持蓄力姿态、不播受击动画；
+			// 0 层蓄力 → 抵抗（0.3 白伤 + 1 层 + 额外回合）；
+			// 1 层蓄力 → 全额白伤 + 1 层（到 2 层），无额外回合
+			R.bPlayerChargeResisted = true;
+			if (PlayerChargeStacks == 0)
+			{
+				R.PlayerDamageTaken = GetEnemyWhiteDamage() * GetChargeResistScale();
+				R.bPlayerExtraTurn = true;
+			}
+			else
+			{
+				R.PlayerDamageTaken = GetEnemyWhiteDamage();
+			}
 			PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
-			R.bPlayerExtraTurn = true;
 			break;
 		case EBattleAction::Charge:
 			// 双方蓄力：都 +1 层，无事发生
@@ -544,6 +583,22 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 	{
 		EnemyChargeStacks = 0;
 	}
+	// 统一蓄力奖励：正常对敌方造成伤害 → 自身 +1 层（白攻 vs 蓄力除外，蓄力方抵抗不算攻击方奖励）。
+	// 同色碰撞不在此结算：R.PlayerDamageTaken 只是待判定伤害，尚未真正造成，
+	// 蓄力奖励完全由 ResolveClash 的格挡/闪避结果决定，避免"敌方造成伤害奖励"与"格挡/闪避失败奖励"叠加。
+	if (!R.bClash)
+	{
+		const bool bPlayerWhiteVsCharge = (PlayerAction == EBattleAction::WhiteAttack && EnemyAction == EBattleAction::Charge);
+		const bool bEnemyWhiteVsCharge = (EnemyAction == EBattleAction::WhiteAttack && PlayerAction == EBattleAction::Charge);
+		if (R.EnemyDamageTaken > 0.0f && !bPlayerWhiteVsCharge)
+		{
+			PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, MaxStacks);
+		}
+		if (R.PlayerDamageTaken > 0.0f && !bEnemyWhiteVsCharge)
+		{
+			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
+		}
+	}
 
 	return R;
 }
@@ -551,6 +606,9 @@ FTurnResolution UBattleComponent::ResolveNormalTurn(EBattleAction PlayerAction, 
 FTurnResolution UBattleComponent::ResolveExtraTurn(bool bPlayerTurn, EBattleAction Action)
 {
 	FTurnResolution R;
+	// 额外回合只结算获得额外回合的一方，另一方不行动
+	R.bPlayerOnlyAction = bPlayerTurn;
+	R.bEnemyOnlyAction = !bPlayerTurn;
 
 	if (Action == EBattleAction::BlueAttack)
 	{
@@ -577,6 +635,16 @@ FTurnResolution UBattleComponent::ResolveExtraTurn(bool bPlayerTurn, EBattleActi
 		{
 			EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, MaxStacks);
 		}
+	}
+
+	// 统一蓄力奖励：额外回合蓝刀命中同样视为"正常造成伤害 → 自身 +1 层"
+	if (R.EnemyDamageTaken > 0.0f)
+	{
+		PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, GetMaxChargeStacks(true));
+	}
+	if (R.PlayerDamageTaken > 0.0f)
+	{
+		EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, GetMaxChargeStacks(false));
 	}
 
 	return R;
@@ -794,6 +862,8 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	case EClashResult::BlockSuccess:
 	{
 		Incoming = 0.0f;
+		// 格挡成功：玩家直接获得 1 层蓄力
+		PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, GetMaxChargeStacks(true));
 		// 被格挡反馈：敌方立即混入 BlockedReaction + 停帧
 		const FCombatAnimRow* EnemyRow = GetCombatAnimRow(false);
 		const FCombatAnimRow* PlayerRow = GetCombatAnimRow(true);
@@ -818,6 +888,8 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	}
 	case EClashResult::DodgeSuccess:
 		Incoming = 0.0f;
+		// 闪避成功：玩家直接获得 1 层蓄力
+		PlayerChargeStacks = FMath::Min(PlayerChargeStacks + 1, GetMaxChargeStacks(true));
 		if (UAttributeComponent* PA = GetPlayerAttr())
 		{
 			UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
@@ -844,6 +916,8 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 		break;
 	case EClashResult::DodgeFail:
 	{
+		// 闪避失败：敌方获得 1 层蓄力
+		EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, GetMaxChargeStacks(false));
 		UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
 		const FCombatParamsRow Defaults;
 		const FCombatParamsRow* Params = Subsystem ? Subsystem->GetCombatParams() : nullptr;
@@ -854,6 +928,8 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	}
 	case EClashResult::BlockFail:
 	default:
+		// 格挡失败：敌方获得 1 层蓄力
+		EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, GetMaxChargeStacks(false));
 		// 全额伤害
 		PlayClashFailReaction(EClashResult::BlockFail);
 		break;
@@ -1295,6 +1371,62 @@ void UBattleComponent::PlayCombatAnim(ABaseCharacter* Character, const FAnimRef&
 	}
 }
 
+void UBattleComponent::PlayChargeResistPose(ABaseCharacter* Character, const FAnimRef& AnimRef, bool bBlockGate)
+{
+	if (!Character || AnimRef.Montage.IsNull())
+	{
+		return;
+	}
+	UAnimMontage* Montage = AnimRef.Montage.LoadSynchronous();
+	if (!Montage)
+	{
+		return;
+	}
+
+	UAnimInstance* AnimInstance = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	const bool bAlreadyActive = AnimInstance && AnimInstance->Montage_IsActive(Montage);
+	if (!bAlreadyActive)
+	{
+		// 蓄力姿态未在播放（例如动作动画缺失/已自然结束）才重播；已在播放则直接延续，避免白刀命中时重播
+		PlayCombatAnim(Character, AnimRef);
+		AnimInstance = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr;
+	}
+
+	// 有额外回合时：循环蓄力姿态不会自然结束，计入回合闸门并在当前循环播完后主动停止，
+	// 由 OnActionMontageEnded 正常推进到额外回合（额外回合动画不得打断蓄力）。
+	if (bBlockGate && bTurnGateOpen && Montage->bLoop && AnimInstance && AnimInstance->Montage_IsActive(Montage))
+	{
+		GatedMontages.Add(Montage);
+		float PlayLength = Montage->GetPlayLength() / FMath::Max(0.01f, AnimRef.PlayRate);
+		if (bAlreadyActive)
+		{
+			// 姿态从本回合开始时就在播：只等当前循环播完，不再整段重播
+			const float Position = AnimInstance->Montage_GetPosition(Montage);
+			PlayLength = FMath::Max(0.01f, (Montage->GetPlayLength() - Position) / FMath::Max(0.01f, AnimRef.PlayRate));
+		}
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayChargeResistPose - %s 蓄力抵抗计入回合闸门，%.2fs 后结束"),
+			*GetNameSafe(Character), PlayLength);
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(ChargePoseTimer);
+			World->GetTimerManager().SetTimer(ChargePoseTimer, [this, Character, Montage]()
+			{
+				if (Phase == EBattlePhase::Ended || !Character)
+				{
+					return;
+				}
+				if (UAnimInstance* AI = Character->GetMesh() ? Character->GetMesh()->GetAnimInstance() : nullptr)
+				{
+					if (AI->Montage_IsActive(Montage))
+					{
+						AI->Montage_Stop(Montage->BlendOut.GetBlendTime(), Montage);
+					}
+				}
+			}, PlayLength, false);
+		}
+	}
+}
+
 void UBattleComponent::PlayActionAnim(bool bPlayer, EBattleAction Action)
 {
 	const FCombatAnimRow* Row = GetCombatAnimRow(bPlayer);
@@ -1426,15 +1558,37 @@ void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
 		ApplyDamageTo(Target, Amount, Causer);
 		if (!Target->IsDead() && !HitReaction.Montage.IsNull())
 		{
-			// 命中反应强制打断当前动作（如被防动画 BlockedReaction）
+			UAnimMontage* HitMontage = HitReaction.Montage.LoadSynchronous();
+
+			// 命中反应强制打断当前动作（如被防动画 BlockedReaction）；
+			// 但蓄力抵抗的反应与当前蓄力姿态是同一蒙太奇，不能打断重播，否则白刀命中时会看到蓄力重播一次
 			if (UAnimInstance* AnimInstance = Target->GetMesh()->GetAnimInstance())
 			{
 				if (UAnimMontage* Active = AnimInstance->GetCurrentActiveMontage())
 				{
-					AnimInstance->Montage_Stop(0.1f, Active);
+					if (Active != HitMontage)
+					{
+						AnimInstance->Montage_Stop(0.1f, Active);
+					}
 				}
 			}
-			PlayCombatAnim(Target, HitReaction);
+
+			// 蓄力抵抗（白攻 vs 蓄力）：受击方保持蓄力姿态，不打断不重播；
+			// 有额外回合时姿态计入回合闸门，完整播完当前循环后才进入额外回合
+			const bool bTargetIsPlayer = (Target == PlayerRole.Get());
+			const bool bTargetHasExtraTurn = bTargetIsPlayer ? bPlayerExtraTurnPending : bEnemyExtraTurnPending;
+			const FCombatAnimRow* TargetRow = GetCombatAnimRow(bTargetIsPlayer);
+			const bool bResistChargePose = TargetRow
+				&& !TargetRow->Charge.Montage.IsNull()
+				&& HitMontage && HitMontage == TargetRow->Charge.Montage.LoadSynchronous();
+			if (bResistChargePose)
+			{
+				PlayChargeResistPose(Target, HitReaction, bTargetHasExtraTurn);
+			}
+			else
+			{
+				PlayCombatAnim(Target, HitReaction);
+			}
 		}
 	}
 
@@ -1481,42 +1635,66 @@ void UBattleComponent::StartHitStop(float Duration)
 	{
 		return;
 	}
-	TArray<UAnimInstance*> PausedInstances;
-	TArray<UAnimMontage*> PausedMontages;
-	if (PlayerRole.IsValid())
+
+	if (!bHitStopActive)
 	{
-		if (UAnimInstance* AI = PlayerRole->GetMesh()->GetAnimInstance())
+		if (PlayerRole.IsValid())
 		{
-			if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+			if (UAnimInstance* AI = PlayerRole->GetMesh()->GetAnimInstance())
 			{
-				AI->Montage_Pause(Active);
-				PausedInstances.Add(AI);
-				PausedMontages.Add(Active);
+				if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+				{
+					AI->Montage_Pause(Active);
+					HitStopInstances.Add(AI);
+					HitStopMontages.Add(Active);
+				}
+			}
+		}
+		if (BossEnemy.IsValid())
+		{
+			if (UAnimInstance* AI = BossEnemy->GetMesh()->GetAnimInstance())
+			{
+				if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
+				{
+					AI->Montage_Pause(Active);
+					HitStopInstances.Add(AI);
+					HitStopMontages.Add(Active);
+				}
+			}
+		}
+		bHitStopActive = true;
+		SetComponentTickEnabled(true);
+	}
+
+	// 固定时长：以帧 DeltaTime 累积倒计时；重叠触发时保留更长的剩余时间
+	HitStopRemaining = FMath::Max(HitStopRemaining, Duration);
+}
+
+void UBattleComponent::EndHitStop()
+{
+	if (!bHitStopActive && HitStopInstances.Num() == 0)
+	{
+		return;
+	}
+	bHitStopActive = false;
+	HitStopRemaining = 0.0f;
+	for (int32 i = 0; i < HitStopInstances.Num() && i < HitStopMontages.Num(); ++i)
+	{
+		if (UAnimInstance* AI = HitStopInstances[i].Get())
+		{
+			if (UAnimMontage* Montage = HitStopMontages[i])
+			{
+				// 停帧期间 Montage 可能已被受击/打断停止：仅恢复仍在播放的
+				if (AI->Montage_IsActive(Montage))
+				{
+					AI->Montage_Resume(Montage);
+				}
 			}
 		}
 	}
-	if (BossEnemy.IsValid())
-	{
-		if (UAnimInstance* AI = BossEnemy->GetMesh()->GetAnimInstance())
-		{
-			if (UAnimMontage* Active = AI->GetCurrentActiveMontage())
-			{
-				AI->Montage_Pause(Active);
-				PausedInstances.Add(AI);
-				PausedMontages.Add(Active);
-			}
-		}
-	}
-	World->GetTimerManager().SetTimer(HitStopTimer, [PausedInstances, PausedMontages]()
-	{
-		for (int32 i = 0; i < PausedInstances.Num() && i < PausedMontages.Num(); ++i)
-		{
-			if (PausedInstances[i] && PausedMontages[i])
-			{
-				PausedInstances[i]->Montage_Resume(PausedMontages[i]);
-			}
-		}
-	}, Duration, false);
+	HitStopInstances.Reset();
+	HitStopMontages.Reset();
+	SetComponentTickEnabled(false);
 }
 
 void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolution)
@@ -1528,6 +1706,21 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 
 	const EBattleAction PlayerAction = PlayerLastAction;
 	const EBattleAction EnemyAction = EnemyChosenAction;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayResolutionAnimations - PlayerAction=%d EnemyAction=%d PlayerDmg=%.1f EnemyDmg=%.1f PlayerStacks=%d EnemyStacks=%d"),
+		(int32)PlayerAction, (int32)EnemyAction, Resolution.PlayerDamageTaken, Resolution.EnemyDamageTaken,
+		PlayerChargeStacks, EnemyChargeStacks);
+
+	// 额外回合：只有获得额外回合的一方行动；另一方保留的 LastAction 是上一回合的旧值，不能播
+	if (Resolution.bPlayerOnlyAction)
+	{
+		RegisterSideHit(true, Resolution);
+		return;
+	}
+	if (Resolution.bEnemyOnlyAction)
+	{
+		RegisterSideHit(false, Resolution);
+		return;
+	}
 
 	// 蓝 vs 红（含红防反击/2 层正面承受）：专用注册路径
 	if (PlayerAction == EBattleAction::RedDefense && EnemyAction == EBattleAction::BlueAttack)
@@ -1568,9 +1761,13 @@ bool UBattleComponent::IsActionSuppressed(bool bPlayerSide, EBattleAction OtherA
 void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution)
 {
 	const EBattleAction AttackerAction = bPlayerAttacker ? PlayerLastAction : EnemyChosenAction;
-	const EBattleAction OtherAction = bPlayerAttacker ? EnemyChosenAction : PlayerLastAction;
+	// 额外回合中另一方没有行动：OtherAction 视为 None，避免旧行动误触发克制/打断判定
+	const bool bSingleSideResolution = Resolution.bPlayerOnlyAction || Resolution.bEnemyOnlyAction;
+	const EBattleAction OtherAction = bSingleSideResolution
+		? EBattleAction::None
+		: (bPlayerAttacker ? EnemyChosenAction : PlayerLastAction);
 	const bool bTargetInterrupted = bPlayerAttacker ? Resolution.bEnemyChargeInterrupted : Resolution.bPlayerChargeInterrupted;
-	const bool bTargetResist = bPlayerAttacker ? Resolution.bEnemyExtraTurn : Resolution.bPlayerExtraTurn;
+	const bool bTargetResist = bPlayerAttacker ? Resolution.bEnemyChargeResisted : Resolution.bPlayerChargeResisted;
 	const float Amount = bPlayerAttacker ? Resolution.EnemyDamageTaken : Resolution.PlayerDamageTaken;
 
 	// 结算层播放权：被克制/被打断的侧不播行动动画（白攻被蓝攻克、红防被白攻克、蓄力被蓝攻打断）
@@ -1596,7 +1793,33 @@ void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResoluti
 	}
 
 	const FAnimRef* ActionRef = GetActionRef(*AttackerRow, EffectiveAction);
-	if (ActionRef)
+	const FAnimRef* ChargeRef = GetActionRef(*AttackerRow, EBattleAction::Charge);
+	const bool bAutoEnhancedCharge = (AttackerAction == EBattleAction::Charge && Amount > 0.0f
+		&& ChargeRef && !ChargeRef->Montage.IsNull()
+		&& ActionRef && !ActionRef->Montage.IsNull());
+	if (bAutoEnhancedCharge)
+	{
+		// 满蓄力自动强化蓝攻：先完整播放蓄力动画，播完立即接蓝攻（蓝攻不打断蓄力）
+		UAnimMontage* ChargeMontage = ChargeRef->Montage.LoadSynchronous();
+		if (ChargeMontage && ChargeMontage->bLoop)
+		{
+			// 循环蓄力姿态：播完一个循环时长后立即接蓝攻，避免永远等不到 Montage 结束
+			PlayCombatAnim(Attacker, *ChargeRef);
+			FTimerHandle ChainTimer;
+			GetWorld()->GetTimerManager().SetTimer(ChainTimer, [this, Attacker, ActionRef = *ActionRef]()
+			{
+				if (Phase != EBattlePhase::Ended && Attacker)
+				{
+					PlayCombatAnim(Attacker, ActionRef);
+				}
+			}, ChargeMontage->GetPlayLength(), false);
+		}
+		else
+		{
+			PlayAnimThenReaction(Attacker, *ChargeRef, *ActionRef);
+		}
+	}
+	else if (ActionRef)
 	{
 		PlayCombatAnim(Attacker, *ActionRef);
 	}
@@ -1636,6 +1859,9 @@ void UBattleComponent::RegisterSideHit(bool bPlayerAttacker, const FTurnResoluti
 
 void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float IncomingAmount, bool bCounterSucceeds)
 {
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::RegisterBlueVsRedHit - bAttackerPlayer=%d Incoming=%.1f Counter=%d"),
+		bAttackerPlayer ? 1 : 0, IncomingAmount, bCounterSucceeds ? 1 : 0);
+
 	ABaseCharacter* Attacker = bAttackerPlayer ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
 	ABaseCharacter* Defender = bAttackerPlayer ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
 	const FCombatAnimRow* AttackerRow = GetCombatAnimRow(bAttackerPlayer);
@@ -1786,10 +2012,7 @@ void UBattleComponent::PlayAnimThenReaction(ABaseCharacter* Character, const FAn
 	*bPending = true;
 	*PendingMontage = ActionMontage;
 	*PendingRef = ReactionRef;
-	if (UAnimInstance* AnimInstance = Character->GetMesh()->GetAnimInstance())
-	{
-		AnimInstance->OnMontageEnded.AddDynamic(this, &UBattleComponent::OnActionMontageEnded);
-	}
+	// OnMontageEnded 由 PlayCombatAnim 统一绑定（先移除再添加，避免重复绑定 ensure）
 	PlayCombatAnim(Character, ActionRef);
 }
 
@@ -1830,6 +2053,20 @@ void UBattleComponent::ClearPendingReactions()
 	ClearPendingReactionSide(false);
 }
 
+bool UBattleComponent::IsMontageActiveOnCombatants(UAnimMontage* Montage) const
+{
+	if (!Montage)
+	{
+		return false;
+	}
+	auto IsActiveOn = [Montage](const ABaseCharacter* Character)
+	{
+		return Character && Character->GetMesh() && Character->GetMesh()->GetAnimInstance()
+			&& Character->GetMesh()->GetAnimInstance()->Montage_IsActive(Montage);
+	};
+	return IsActiveOn(PlayerRole.Get()) || IsActiveOn(BossEnemy.Get());
+}
+
 void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
 	if (bPlayerReactionPending && Montage == PlayerPendingActionMontage)
@@ -1851,8 +2088,10 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 		}
 	}
 
-	// 通用回合闸门：结束的蒙太奇移出播出链
-	if (bTurnGateOpen)
+	// 通用回合闸门：结束的蒙太奇移出播出链。
+	// 蓄力抵抗会"停止旧实例 + 重播同一蒙太奇资产"，旧实例的结束回调带同一资产指针，
+	// 不能把新实例仍在播放的闸门条目删掉，因此先确认该蒙太奇已无活动实例。
+	if (bTurnGateOpen && !IsMontageActiveOnCombatants(Montage))
 	{
 		GatedMontages.Remove(Montage);
 	}
@@ -1894,10 +2133,7 @@ void UBattleComponent::SheathePlayerWeapon()
 		ClearPendingHits();
 		bTurnGateOpen = false;
 		GatedMontages.Reset();
-		if (GetWorld())
-		{
-			GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
-		}
+		EndHitStop();
 		if (UAnimInstance* AnimInstance = PlayerRole->GetMesh()->GetAnimInstance())
 		{
 			AnimInstance->StopAllMontages(0.0f);
@@ -1927,6 +2163,7 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
+		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
@@ -2010,11 +2247,12 @@ void UBattleComponent::ResetForRetry()
 	ClearPendingHits();
 	bTurnGateOpen = false;
 	GatedMontages.Reset();
-	LastClashInputTime = -1.0f;
 	if (GetWorld())
 	{
-		GetWorld()->GetTimerManager().ClearTimer(HitStopTimer);
+		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
 	}
+	LastClashInputTime = -1.0f;
+	EndHitStop();
 }
 
 float UBattleComponent::GetPlayerWhiteDamage() const

@@ -7,6 +7,8 @@
 #include "Components/Button.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "Engine/World.h"
+#include "UObject/Class.h"
 
 void UCombatHUDWidget::NativeConstruct()
 {
@@ -44,6 +46,16 @@ void UCombatHUDWidget::NativeConstruct()
 	}
 
 	BindHoverEffects();
+	HideEnemyActionHint();
+}
+
+void UCombatHUDWidget::NativeDestruct()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EnemyHintTimer);
+	}
+	Super::NativeDestruct();
 }
 
 void UCombatHUDWidget::BindToBattle(UBattleComponent* InBattle)
@@ -58,6 +70,24 @@ void UCombatHUDWidget::BindToBattle(UBattleComponent* InBattle)
 
 void UCombatHUDWidget::HandleBattleStateChanged()
 {
+	if (Battle.IsValid())
+	{
+		const EBattlePhase CurrentPhase = Battle->GetBattlePhase();
+		const bool bRoundAdvanced = Battle->GetRoundNumber() != EnemyHintRound;
+
+		// 敌方额外回合：进入 Resolving 时展示敌方该回合行动
+		if (CurrentPhase == EBattlePhase::Resolving && LastSeenPhase != EBattlePhase::Resolving)
+		{
+			ShowEnemyActionHint();
+		}
+		else if (bRoundAdvanced
+			|| CurrentPhase == EBattlePhase::Ended
+			|| (Battle->IsPlayerExtraTurn() && !Battle->HasPlayerChosenAction()))
+		{
+			HideEnemyActionHint();
+		}
+		LastSeenPhase = CurrentPhase;
+	}
 	RefreshAll();
 }
 
@@ -118,27 +148,105 @@ void UCombatHUDWidget::SetChoiceButtonsEnabled(bool bRed, bool bBlue, bool bWhit
 
 void UCombatHUDWidget::OnRedDefenseClicked()
 {
-	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::RedDefense);
+	ChooseAction(EBattleAction::RedDefense);
 }
 
 void UCombatHUDWidget::OnBlueAttackClicked()
 {
-	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::BlueAttack);
+	ChooseAction(EBattleAction::BlueAttack);
 }
 
 void UCombatHUDWidget::OnWhiteAttackClicked()
 {
-	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::WhiteAttack);
+	ChooseAction(EBattleAction::WhiteAttack);
 }
 
 void UCombatHUDWidget::OnChargeClicked()
 {
-	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::Charge);
+	ChooseAction(EBattleAction::Charge);
 }
 
 void UCombatHUDWidget::OnSkillClicked()
 {
-	if (Battle.IsValid()) Battle->PlayerChooseAction(EBattleAction::Skill);
+	ChooseAction(EBattleAction::Skill);
+}
+
+void UCombatHUDWidget::ChooseAction(EBattleAction Action)
+{
+	if (!Battle.IsValid())
+	{
+		return;
+	}
+	// 必须在调用前记录是否额外回合：PlayerChooseAction 内部会清除额外回合标记；
+	// 只显示敌方出招——玩家额外回合敌方不出招，不显示提示；普通回合展示敌方出招
+	const bool bWasExtraTurn = Battle->IsPlayerExtraTurn();
+	if (Battle->PlayerChooseAction(Action))
+	{
+		if (bWasExtraTurn)
+		{
+			// 玩家额外回合敌方不出招：不显示任何提示
+			HideEnemyActionHint();
+		}
+		else
+		{
+			ShowEnemyActionHint();
+		}
+	}
+}
+
+void UCombatHUDWidget::ShowEnemyActionHint()
+{
+	if (!Battle.IsValid() || !EnemyActionHintText)
+	{
+		return;
+	}
+
+	const EBattleAction EnemyAction = Battle->GetEnemyChosenAction();
+	if (EnemyAction == EBattleAction::None)
+	{
+		HideEnemyActionHint();
+		return;
+	}
+
+	SetHintText(FText::Format(
+		FText::FromString(TEXT("敌方出招：{0}")),
+		StaticEnum<EBattleAction>()->GetDisplayNameTextByValue(static_cast<int64>(EnemyAction))));
+}
+
+void UCombatHUDWidget::SetHintText(const FText& Text)
+{
+	if (!EnemyActionHintText)
+	{
+		return;
+	}
+	EnemyActionHintText->SetText(Text);
+	EnemyActionHintText->SetVisibility(ESlateVisibility::Visible);
+	EnemyHintRound = Battle.IsValid() ? Battle->GetRoundNumber() : -1;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EnemyHintTimer);
+		if (EnemyHintDuration > 0.0f)
+		{
+			World->GetTimerManager().SetTimer(EnemyHintTimer, this, &UCombatHUDWidget::OnEnemyHintTimeout, EnemyHintDuration, false);
+		}
+	}
+}
+
+void UCombatHUDWidget::OnEnemyHintTimeout()
+{
+	HideEnemyActionHint();
+}
+
+void UCombatHUDWidget::HideEnemyActionHint()
+{
+	if (EnemyActionHintText)
+	{
+		EnemyActionHintText->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EnemyHintTimer);
+	}
 }
 
 void UCombatHUDWidget::BindHoverEffects()

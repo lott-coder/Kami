@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "TimerManager.h"
 #include "Blueprint/UserWidget.h"
 #include "Combat/BattleTypes.h"
 #include "CombatHUDWidget.generated.h"
@@ -26,6 +27,7 @@ class HOLE_API UCombatHUDWidget : public UUserWidget
 
 public:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	UFUNCTION(BlueprintCallable, Category = "CombatHUD")
 	void BindToBattle(UBattleComponent* InBattle);
@@ -36,6 +38,10 @@ public:
 	/** 鼠标悬停按钮时的缩放倍率（1.0 = 关闭 C++ 悬停效果，可改用 BP 动画） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatHUD")
 	float HoverScale = 1.1f;
+
+	/** 敌方出招提示的显示时长（秒），<=0 表示一直显示到回合切换 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatHUD")
+	float EnemyHintDuration = 3.0f;
 
 protected:
 	// ---- BindWidget：名称必须与 WBP_CombatHUD 中的控件名完全一致 ----
@@ -60,6 +66,10 @@ protected:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> EnemyChargeText;
+
+	/** 敌方出招提示文字（WBP 中可选，缺失时该功能静默跳过） */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> EnemyActionHintText;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> RedDefenseButton;
@@ -125,9 +135,20 @@ private:
 	UFUNCTION()
 	void HandleBattleStateChanged();
 
+	void ShowEnemyActionHint();
+	void SetHintText(const FText& Text);
+	void HideEnemyActionHint();
+	void ChooseAction(EBattleAction Action);
+
+	UFUNCTION()
+	void OnEnemyHintTimeout();
+
 	void RefreshAll();
 	void BindHoverEffects();
 	void ApplyHoverScale(UButton* Button, bool bHovered);
 
 	TWeakObjectPtr<UBattleComponent> Battle;
+	FTimerHandle EnemyHintTimer;
+	int32 EnemyHintRound = -1;
+	EBattlePhase LastSeenPhase = EBattlePhase::Idle;
 };

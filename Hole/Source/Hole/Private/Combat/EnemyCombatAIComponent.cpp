@@ -9,7 +9,7 @@ UEnemyCombatAIComponent::UEnemyCombatAIComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAction LastPlayerAction, bool bExtraTurn, int32 ChargeStacks) const
+EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAction LastPlayerAction, bool bExtraTurn, int32 ChargeStacks, int32 PlayerChargeStacks) const
 {
 	const int32 MaxStacks = GetMaxChargeStacks();
 
@@ -24,9 +24,13 @@ EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAc
 			: EBattleAction::RedDefense;
 	}
 
-	// 蓝攻需 ≥1 层蓄力；蓄力满上限后不能再蓄力
+	// 蓝攻需 ≥1 层蓄力；蓄力满上限后不能再蓄力；
+	// 玩家 0 层蓄力时禁用红防（红防只克制蓝攻，玩家本回合不可能出蓝攻）
 	TArray<EBattleAction> Options;
-	Options.Add(EBattleAction::RedDefense);
+	if (PlayerChargeStacks > 0)
+	{
+		Options.Add(EBattleAction::RedDefense);
+	}
 	Options.Add(EBattleAction::WhiteAttack);
 	if (ChargeStacks > 0) Options.Add(EBattleAction::BlueAttack);
 	if (ChargeStacks < MaxStacks) Options.Add(EBattleAction::Charge);

@@ -86,6 +86,21 @@ struct HOLE_API FTurnResolution
 	UPROPERTY(BlueprintReadOnly, Category = "Battle")
 	bool bEnemyExtraTurn = false;
 
+	/** 蓄力抵抗白攻：蓄力方以蓄力姿态承受 0.3 倍白攻（不打断蓄力），与是否触发额外回合解耦 */
+	UPROPERTY(BlueprintReadOnly, Category = "Battle")
+	bool bEnemyChargeResisted = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Battle")
+	bool bPlayerChargeResisted = false;
+
+	/** 额外回合结算标记：本回合只有玩家行动，敌方不播任何行动动画（ResolveExtraTurn 设置） */
+	UPROPERTY(BlueprintReadOnly, Category = "Battle")
+	bool bPlayerOnlyAction = false;
+
+	/** 额外回合结算标记：本回合只有敌方行动，玩家不播任何行动动画（ResolveExtraTurn 设置） */
+	UPROPERTY(BlueprintReadOnly, Category = "Battle")
+	bool bEnemyOnlyAction = false;
+
 	/** 是否进入同色实时对抗 */
 	UPROPERTY(BlueprintReadOnly, Category = "Battle")
 	bool bClash = false;

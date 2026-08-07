@@ -62,6 +62,7 @@ public:
 
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	// ==================== 配置 ====================
 
@@ -95,6 +96,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	float ClashAttackTime = 0.8f;
 
+	/** 先制攻击效果：开场拥有一层蓄力；默认敌方先制（敌方 1 层、我方 0 层），Satan 等 Boss 适用 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	bool bEnemyFirstStrike = true;
+
 	/** 失败横幅停留时间（秒）后回到 Boss 触发点 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	float DefeatRestartDelay = 2.0f;
@@ -115,9 +120,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Battle")
 	void EndBattle();
 
-	/** 玩家选择行动（HUD 按钮 / 战斗输入回调统一入口） */
+	/** 玩家选择行动（HUD 按钮 / 战斗输入回调统一入口）；返回是否接受该选择 */
 	UFUNCTION(BlueprintCallable, Category = "Battle")
-	void PlayerChooseAction(EBattleAction Action);
+	bool PlayerChooseAction(EBattleAction Action);
 
 	/** 调试：强制敌人下一回合固定行动 */
 	UFUNCTION(BlueprintCallable, Category = "Battle|Debug")
@@ -156,7 +161,13 @@ public:
 	EBattleAction GetPlayerLastAction() const { return PlayerLastAction; }
 
 	UFUNCTION(BlueprintPure, Category = "Battle")
+	EBattleAction GetEnemyChosenAction() const { return EnemyChosenAction; }
+
+	UFUNCTION(BlueprintPure, Category = "Battle")
 	bool IsPlayerExtraTurn() const { return bPlayerExtraTurnPending; }
+
+	UFUNCTION(BlueprintPure, Category = "Battle")
+	bool HasPlayerChosenAction() const { return bPlayerChoseAction; }
 
 	/** 命中通知回调（由 UAnimNotify_CombatDamage 调用；事件驱动，战斗组件外部入口） */
 	void OnHitNotify(ABaseCharacter* Attacker, FName EventName);
@@ -225,6 +236,9 @@ private:
 	/** 通用播放：空引用直接跳过；播放时输出日志便于 PIE 验证 */
 	void PlayCombatAnim(ABaseCharacter* Character, const FAnimRef& AnimRef);
 
+	/** 蓄力抵抗姿态（循环动画）：已在播放则延续不重播；bBlockGate=true 时计入回合闸门并在当前循环播完后主动停止，防止额外回合动画打断 */
+	void PlayChargeResistPose(ABaseCharacter* Character, const FAnimRef& AnimRef, bool bBlockGate);
+
 	/** 按行动播放下一个动作动画（红防/蓝攻/白攻/蓄力） */
 	void PlayActionAnim(bool bPlayer, EBattleAction Action);
 
@@ -245,6 +259,9 @@ private:
 
 	/** 清理玩家/敌人两侧待接反应 */
 	void ClearPendingReactions();
+
+	/** 该蒙太奇是否仍在玩家/敌人任意一方的动画实例上活动（避免旧实例结束回调误删新实例的闸门条目） */
+	bool IsMontageActiveOnCombatants(UAnimMontage* Montage) const;
 
 	/** 格挡/闪避失败：优先对应 Fail 动画，空则回落 Hurt */
 	void PlayClashFailReaction(EClashResult Result);
@@ -282,6 +299,7 @@ private:
 
 	/** 停帧：暂停玩家/敌人活动 Montage，Duration 后恢复；Duration<=0 跳过 */
 	void StartHitStop(float Duration);
+	void EndHitStop();
 
 	/** 普通回合：按攻击方注册命中事件并播放行动动画 */
 	void RegisterSideHit(bool bPlayerAttacker, const FTurnResolution& Resolution);
@@ -353,7 +371,10 @@ private:
 	/** 通用回合闸门：本结算的动画完整播出链（行动+命中反应）播完才推进回合 */
 	bool bTurnGateOpen = false;
 	TSet<UAnimMontage*> GatedMontages;
-	FTimerHandle HitStopTimer;
+	bool bHitStopActive = false;
+	float HitStopRemaining = 0.0f;
+	TArray<TWeakObjectPtr<UAnimInstance>> HitStopInstances;
+	TArray<UAnimMontage*> HitStopMontages;
 	FTimerHandle PlayerDefenderTimer;
 	FTimerHandle EnemyDefenderTimer;
 	EClashType ActiveClashType = EClashType::None;
@@ -381,6 +402,7 @@ private:
 	FTimerHandle ClashImpactTimer;
 	FTimerHandle EndDelayTimer;
 	FTimerHandle EntryDelayTimer;
+	FTimerHandle ChargePoseTimer;
 
 	bool bCombatInputBound = false;
 	bool bCombatMappingAdded = false;

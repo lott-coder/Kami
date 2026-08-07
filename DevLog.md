@@ -38,6 +38,72 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-07 | 程序 ⚡
+
+**事项：** 战斗规则 v1.1 定案——①红防 vs 蓝攻：直接选出的蓝攻（含 2 层）一律被金色反击、不破防，仅"蓄力对红防蓄满自动发动强化蓝攻"保留破防例外；②先制攻击效果改为开场拥有一层蓄力（Satan 等 Boss 默认敌方先制，开局 0:1，避免 0:0 无三方博弈）；③白攻 vs 蓄力仅蓄力前 0 层时触发额外回合（0:1 时白攻不再过于劣势）；④打断蓄力/金色反击/格挡闪避成功方获得 1 层蓄力，格挡闪避失败敌方获得 1 层蓄力。
+
+**处理过程：**
+1. 原 `ResolveNormalTurn` 红防×蓝攻分支对敌方 2 层蓝攻有 `EnemyChargeStacks >= 2` 破防检查，与"2 层蓝攻不破红防"规则冲突。
+2. 删除该检查：红防 vs 蓝攻统一 `R.EnemyDamageTaken = GetPlayerGoldDamage()`（玩家不受伤、敌方吃金色反击）；`PlayResolutionAnimations` 蓝 vs 红专用路径无需改动（`bCounterSucceeds` 恒为 true）。
+3. 蓄力对红防分支保持不变：1 层蓄力撞红防 → 蓄满自动发动强化蓝攻，红防正面承受。
+4. 先制攻击：`EnterBattle` 按 `bEnemyFirstStrike`（默认 true）设置开局层数——敌方先制=敌方 1 层/我方 0 层，玩家先制则反之；失败重开会重新应用。
+5. 白攻 vs 蓄力（2026-08-07 多次修订定案）：`FTurnResolution` 新增 `bEnemyChargeResisted`/`bPlayerChargeResisted` 与伤害/额外回合解耦——白攻从不打断蓄力，蓄力方无论 0/1 层都保持蓄力姿态、不播受击动画；蓄力前 0 层：吃 0.3 白伤 + 1 层、触发额外回合；蓄力前 1 层：吃**全额白伤** + 1 层（到 2 层）、无额外回合；`RegisterSideHit` 的抵抗反应按新标记，`PlayChargeResistPose` 增加 `bBlockGate` 参数（无额外回合时不阻塞闸门）。
+6. 蓄力奖励（2026-08-07 晚修订为统一规则）：任何正常对敌方造成伤害 → 自身 +1 层（上限 2），白攻 vs 蓄力除外（0.3 抵抗伤害不给予奖励）；蓝攻打断蓄力、金色反击、白克红、蓝克白、蓄力对红防自动强化蓝攻、额外回合蓝刀均走同一规则，在结算末尾统一 `FMath::Min(层数 + 1, Max)`；同色对抗中格挡/闪避成功玩家 +1 层、格挡/闪避失败敌方 +1 层（`ResolveClash` 保留）。
+7. EnemyAI 规则（2026-08-07）：`ChooseAction` 新增 `PlayerChargeStacks` 参数，玩家 0 层蓄力时敌方不选红防（红防只克制蓝攻）；`UBattleComponent` 兜底随机分支同步该规则。
+8. Bug 确认与修复（2026-08-07）：统一奖励误把同色碰撞的待判定伤害（`R.PlayerDamageTaken`）当作"已造成伤害"，敌方在结算矩阵先 +1 层，格挡/闪避失败时 `ResolveClash` 又 +1 层（叠加成 2 层），格挡/闪避成功时也错误 +1 层。修复：统一奖励块跳过 `R.bClash`，碰撞的蓄力奖励完全由格挡/闪避结果决定；非碰撞的"造成伤害 +1 层"均发生在招式清空之后，结算为 1 层。
+
+**结果/解决方案：** 编译通过（-NoUba）。PIE 待验证：开局敌方 1 层（0:1）；白攻 vs 0 层蓄力 → 0.3 抵抗 + 额外回合；白攻 vs 1 层蓄力 → 全额白伤、无额外回合，但始终保持蓄力姿态、不播受击动画；蓝攻打断蓄力后自身 1 层；白克红/蓝克白/金色反击/强化蓝攻/额外回合蓝刀命中后攻击方 1 层；白攻 vs 蓄力不给攻击方层数（按定案）；同色碰撞：格挡/闪避成功玩家 1 层（敌 0）、失败敌方 1 层（玩家 0），不再叠加；玩家 0 层蓄力时敌方 AI 不再选红防。
+
+**经验教训：** 克制矩阵的"层数特例"要明确限定来源（直接选招 vs 蓄力自动发动）与触发条件（蓄力前层数）；"抵抗"与"额外回合"是两个独立语义，应拆成独立标记，避免一个布尔值承担两种含义。
+
+### 2026-08-07 | Bug修复
+
+**事项：** 两个问题——①敌方蓄力抵抗我方白攻（白攻 vs 蓄力）时，敌方立刻进入额外回合动画，额外回合动画打断了仍在播放的蓄力姿态；应等蓄力动画完整播完再进入额外回合。②出现额外回合时另一方也"行动"一次：玩家额外回合敌方也会播一次行动动画，敌方额外回合玩家会自动再放一次白刀。
+
+**处理过程：**
+1. 定位：`ApplyResolution` 开启回合闸门后，白攻 Montage（非循环）计入 `GatedMontages`，而蓄力姿态是循环动画、按设计不阻塞闸门；白攻命中帧 `ApplyPendingHitNow` 重播蓄力抵抗姿态（`TargetRow->Charge`），白攻 Montage 播完即推进 `EndTurnAndAdvance` → 敌方额外回合，此时蓄力姿态仍在播放，被额外回合动画打断。
+2. 修复：新增 `PlayChargeResistPose`——蓄力抵抗姿态（循环）也计入回合闸门，并在一整个循环时长（`GetPlayLength()/PlayRate`）后用 `Montage_Stop` 主动结束，`OnActionMontageEnded` 再正常推进到额外回合；`ApplyPendingHitNow` 检测"目标方有额外回合 + 命中反应为目标蓄力姿态"时走该路径（玩家/敌方镜像对称）。
+3. 边界：战斗结束/重试/调试结束时清除 `ChargePoseTimer`；非循环蓄力姿态走原有自然结束路径，不设定时器。
+4. 定位②：`PlayResolutionAnimations` 始终用 `PlayerLastAction`/`EnemyChosenAction` 播双方动画，而额外回合结算时另一方保留的仍是上一回合的旧行动（如我方白刀），于是敌方额外回合时玩家会再播一次旧白刀；玩家额外回合时敌方旧行动也会播，且旧行动为红防时还会误入蓝 vs 红反击专用路径。
+5. 修复②：`FTurnResolution` 新增 `bPlayerOnlyAction`/`bEnemyOnlyAction`，`ResolveExtraTurn` 标记本回合只有一方行动；`PlayResolutionAnimations` 只注册行动方的命中/动画，另一方不播；`RegisterSideHit` 在单方结算时把 `OtherAction` 视为 `None`，避免旧行动误触发克制/打断判定（玩家/敌方镜像对称）。
+6. PIE 复现①仍被打断的补充定位：敌方蓄力动作与抵抗反应是同一 Montage 资产，命中帧"停旧实例 + 重播新实例"后，旧实例的 `OnMontageEnded` 回调带同一资产指针，把新实例刚计入的 `GatedMontages` 条目误删，闸门提前放行 → 额外回合再次打断蓄力。
+7. 修复①补：`OnActionMontageEnded` 移出闸门前先经 `IsMontageActiveOnCombatants` 确认该蒙太奇在玩家/敌人动画实例上已无活动实例，旧实例结束回调不再误删新实例的闸门条目。
+8. PIE 复现①白刀命中瞬间蓄力重播的补充定位：命中反应与当前蓄力姿态是同一 Montage，`ApplyPendingHitNow` 一律先停当前动作再播反应，等于把蓄力原地重播了一次。修复：当前活动 Montage 与反应 Montage 相同时不打断；`PlayChargeResistPose` 检测到姿态已在播放时直接延续，并只等当前循环的剩余时长，不再重播。
+
+**结果/解决方案：** 编译通过（-NoUba）。PIE 待验证：①白攻 vs 敌方蓄力 → 敌方蓄力姿态连续不重播，完整播完当前循环后（含 BlendOut）才进入额外回合动画；②玩家额外回合敌方不再播行动动画，敌方额外回合玩家不再自动放白刀，只有获得额外回合的一方出招。
+
+**经验教训：** 循环姿态（蓄力）默认不阻塞回合闸门，但"抵抗 + 额外回合"这类需要姿态播完才能接下一段动画的时序，必须显式把姿态计入闸门并用定时器主动收尾；额外回合是单方结算，动画编排必须只播行动方，另一方保留的 `LastAction` 是上一回合旧值，绝不能被当作本回合行动；只有明确说明可混入的动画才允许打断其它动画。
+
+### 2026-08-07 | 程序
+
+**事项：** 战斗 HUD 增加"敌方出招"提示——玩家点击行动按钮（回合开始）后显示敌方本回合所选行动，3 秒后自动隐藏。
+
+**处理过程：**
+1. `UBattleComponent::PlayerChooseAction` 改为返回 `bool`（非法选择返回 false），新增只读 `GetEnemyChosenAction()` 暴露敌方已选行动。
+2. `UCombatHUDWidget` 新增可选绑定 `EnemyActionHintText`（`BindWidgetOptional`）与 `EnemyHintDuration`（默认 3 秒）：5 个行动按钮回调在选招成功时显示"敌方出招：{行动名}"（行动名复用 `EBattleAction` 的 DisplayName），Widget 定时器 3 秒后隐藏；新回合/战斗结束/额外回合开始时提前隐藏，避免过期信息。
+3. 编译通过（-NoUba）。WBP_CombatHUD 的 `EnemyActionHintText` TextBlock 由用户手动补齐。
+4. PIE 复现额外回合仍显示旧提示的修复：点击回调原先在 `PlayerChooseAction` 返回后才检查 `IsPlayerExtraTurn()`，而额外回合分支内部已把标记清除，检查永远为 false → 把上一回合的敌方旧行动显示出来。修复：新增 `ChooseAction` 统一入口，在调用 `PlayerChooseAction` **之前**记录 `bWasExtraTurn`，额外回合选招成功时直接隐藏提示。
+5. PIE 复现触发额外回合的当回合提示消失的修复：`ShowEnemyActionHint` 与刷新逻辑在结算后看到 `bPlayerExtraTurnPending` 已置位就隐藏，把"当回合"误判为"额外回合选择阶段"。修复：`ShowEnemyActionHint` 不再检查额外回合标记（由 `ChooseAction` 调用前记录处理）；刷新逻辑改为 `IsPlayerExtraTurn() && !HasPlayerChosenAction()` 才清提示——触发回合结算中玩家已选招（保留提示），额外回合选择开始（未选招）才清除；`UBattleComponent` 新增只读 `HasPlayerChosenAction()`。
+6. 需求调整（2026-08-07，定案：只显示敌方出招）：敌方额外回合开始时（阶段进入 `Resolving`）显示"敌方出招：{敌方额外回合行动}"；玩家额外回合敌方不出招，不显示任何提示；统一复用 `EnemyActionHintText` 与 3 秒定时器（`SetHintText`）。
+
+**结果/解决方案：** C++ 已落地并编译通过；PIE 待验证：普通回合选招后提示出现、3 秒后消失；触发额外回合的当回合仍显示敌方提示（结算期间保留）；玩家额外回合选招时不显示任何提示；敌方额外回合开始时显示"敌方出招：X"。
+
+**经验教训：** 显示"敌方行动"应在玩家选招成功后读取已选定的 `EnemyChosenAction`，用选招返回值确认成功而非阶段判断，避免非法点击误显示；额外回合/新回合必须主动清除旧提示。注意 `PlayerChooseAction` 会在结算时清除额外回合标记，任何需要"调用前状态"的判断（如是否额外回合）都必须在调用前记录。
+
+### 2026-08-06 | Bug修复
+
+**事项：** 两个问题——①"满蓄力 vs 红防"自动强化蓝攻时，蓝攻动画直接播放打断/替代了蓄力动画，玩家观感为"红防被蓝攻打中且无反击"（实际敌方选择的是蓄力，1 层→2 层自动发动强化蓝攻）；②格挡成功链路中 `PlayAnimThenReaction` 重复绑定 `OnMontageEnded` 触发 ensure，且停帧用 Timer 恢复存在恢复失败/时长不固定的隐患。
+
+**处理过程：**
+1. 定位①：日志 `PlayResolutionAnimations - PlayerAction=1 EnemyAction=4 PlayerDmg=48.2` 证明敌方实际选的是蓄力（Charge=4）而非蓝攻；`RegisterSideHit` 把满蓄力按蓝攻处理时直接 `PlayCombatAnim(BlueAttack)`，未播蓄力动画。
+2. 修复①：`RegisterSideHit` 中满蓄力自动强化蓝攻改为 `PlayAnimThenReaction(Charge, BlueAttack)`——先完整播放蓄力动画，播完立即接蓝攻动画（蓝攻不打断蓄力）；伤害仍由蓝攻命中通知/播完结算，回合闸门自然覆盖蓄力→蓝攻链。
+3. 定位②：ensure 是 `PlayAnimThenReaction` 在 `PlayCombatAnim` 已绑定 `OnMontageEnded` 后再次 `AddDynamic` 造成重复绑定（`PlayBlockSuccessChain` 每次格挡成功必触发）。
+4. 修复②：删除 `PlayAnimThenReaction` 里的重复绑定，统一由 `PlayCombatAnim` 先移除再添加；停帧 `StartHitStop` 改为组件 Tick 用 `DeltaTime` 累积固定时长倒计时（重叠触发保留更长剩余时间），结束时仅恢复仍处于播放状态的 Montage（`Montage_IsActive` 校验），战斗结束/重试统一 `EndHitStop` 清理；触发时机保持"格挡/闪避生效（造成伤害判定）"时。
+
+**结果/解决方案：** 编译通过（-NoUba）。PIE 待验证：敌方 1 层蓄力 + 玩家红防 → 敌方完整播放蓄力动画后再播蓝攻，玩家正面承受，无金色反击；格挡成功链路不再弹 ensure，停帧 0.12s 固定。
+
+**经验教训：** 动画播放顺序必须与结算语义一致——"蓄满自动发动"要先呈现蓄力过程再接攻击；统一由 `PlayCombatAnim` 负责 `OnMontageEnded` 绑定，任何"先播 A 再接 B"的链都走 `PlayAnimThenReaction` 且不得重复绑定。
+
 ### 2026-08-06 | 程序 ⚡
 
 **事项：** 回合推进升级为"通用动画闸门"——每次结算的完整播出链（行动 + 命中反应）播完且无待命中/待接反应后才推进；红防 vs 蓝攻的"红防→金色反击"链从专用等待变为通用规则。

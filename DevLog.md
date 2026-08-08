@@ -38,6 +38,51 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-08 | 程序 ⚡
+
+**事项：** 双蒙太奇时间对齐统一采用"双向错峰"预排——两侧各自取 `max(0, 对方真实时间 − 自身真实时间)` 作为开始延时，而不是固定一侧先播、只延后另一侧；同时约定 `FTimerManager::SetTimer` 不接受 `Rate <= 0`（直接失效），非正延时必须立即执行。
+
+**处理过程：** 红防 vs 蓝攻对齐过程中，单向预排在"举剑帧晚于命中帧"的数据下无法重合，且 `Delay=0` 导致定时器永不触发、金色反击待命中挂起、回合卡死；改为双向错峰后所有数据组合均可对齐（红防先起手、蓝攻延后出刀）。
+
+**结果/解决方案：** 已写入 AGENTS.md 开发原则第 3 条；后续所有类似需求（蒙太奇/时间点对齐）统一按双向错峰实现，延后定时器在战斗结束/重试时清理。
+
+**经验教训：** 时间对齐问题先判断"谁先起手"，不要默认攻击方先播；0 延时定时器是隐藏陷阱（UE 会直接不调度）。
+
+### 2026-08-08 | Bug修复
+
+**事项：** 同色碰撞的格挡/闪避窗口失效——伤害出现前任意时刻点击格挡几乎都判定成功，窗口远超设定值（BlockWindowSeconds=0.25s）。
+
+**处理过程：**
+1. 定位①：`OnBlockPressed`/`OnDodgePressed` 用世界绝对时间 `Now` 与相对时间 `ClashHitTime` 比较（`Now >= ClashHitTime − 窗口`），条件几乎恒真——整个碰撞阶段都算窗口内。
+2. 定位②：`ClashHitTime` 直接取 `ClashAttackHit` 通知的绝对时间，未按随机 Section（1|2|3）起点/PlayRate 折算真实秒数，伤害与窗口锚点错位（与红防同类问题）。
+3. 修复：新增 `ClashStartTime`，输入判定改为 `Now − ClashStartTime >= ClashHitTime − 窗口`；`ClashHitTime` 改用 `GetNotifyRealTime`（扣除随机 Section 起点、按 PlayRate 折算，缺失回落 `ClashAttackTime`）；新增 `StartClash`/`OnBlockPressed`/`OnDodgePressed` 的 Elapsed/HitTime 日志。
+4. 需求补充（2026-08-08，定案：格挡动画只有一种）：不使用 `BlockFail` 动画——窗口外点击格挡 = 立即判定失败并播放格挡动画（`PlayBlockAnimNow`：红防姿态），不再等命中帧；失败后 `BlockFailLockoutSeconds`（默认 1s）内不可再次格挡（`LastBlockFailTime` 锁定优先于窗口判定）；命中帧立刻混入受击动画 `Hurt`；`FCombatParamsRow` 新增 `BlockFailLockoutSeconds`。
+5. 结构清理（2026-08-08）：`FCombatAnimRow` 删除 `BlockFail` 列、`BlockSuccess` 改名 `Block`（格挡动画只有一种）；`PlayBlockSuccessChain` 改用 `Row->Block`，`PlayClashFailReaction` 非闪避分支回落 `Hurt`；`DT_CombatAnimConfig` 资产已用编辑器脚本迁移（drifter.Block = 红防姿态 PlayRate 2.0，satan.Block 空），`DataTable_Spec` 13 号表同步。
+6. PIE 复现无输入也提前受击后定位：日志显示 `Section=1/2` 时 `ClashHitTime` 回落为全局 0.800（这两个 Section 没有 `ClashAttackHit` 通知），而 `Section=3` 为 2.058——0.8s 比攻击动画打击帧早，Hurt 提前播放。修复：所选 Section 缺少通知时改用**该 Section 的结束时间（真实秒数）**作为命中锚点，`ClashAttackTime` 仅作最后兜底。
+7. PIE 复现"接近窗口未命中 → 只有格挡动画、无受击/伤害/成功链"后定位（用户日志）：①`GetNotifyTime` 只取全 Montage 第一个 `ClashAttackHit`（属于 Section 0），其它 Section 的打击通知被误判缺失；②碰撞通知在影响定时器前触发并清掉待命中（Amount=0），随后格挡动画播完触发回合闸门，Phase 在命中前已从 Clash 变回 ActionSelect，`OnClashImpact` 直接 return → 结算被跳过。修复：`GetNotifyRealTime` 改为**在当前 Section 时间范围内匹配通知**（多个同名通知按段取）；`TryAdvanceTurnIfGateDone` 在 `Phase==Clash` 时禁止推进（由 `OnClashImpact` 结算后再推进）；`ClashHitTime<=0` 时强制用 `ClashAttackTime` 兜底（0 延时定时器永不触发）。
+8. 闸门拦截过粗导致碰撞后回合卡死：`ResolveClash` 结算后 Phase 仍是 Clash，`TryAdvanceTurnIfGateDone` 被 `Phase==Clash` 直接拦截，永远进不了下一回合。修复：拦截条件改为 `Phase==Clash && !bClashResolved`——未结算时禁止提前推进，`ResolveClash` 置 `bClashResolved=true` 后正常推进。
+
+**结果/解决方案：** 编译通过（-NoUba，12.8s）。PIE 待验证：接近窗口但未在窗口内点击 → 只播格挡动画，命中帧正常结算（受击动画+伤害）；无输入时 Hurt 与当前 Section 打击帧对齐；碰撞结算后正常进入下一回合（不再卡死）。
+
+**经验教训：** 相对时间比较必须统一基准（都用经过时间），绝对世界时间不能与相对时间混用；碰撞时间锚点同样遵循真实秒数换算原则。
+
+### 2026-08-08 | Bug修复
+
+**事项：** Player 红防面对敌方蓝攻时红防延迟触发，举剑帧（GuardReady）与蓝攻伤害点（BlueAttackHit）不重合。
+
+**处理过程：**
+1. 定位：`ScheduleDefenderReaction` 用两个通知的"绝对时间"直接相减作为预排延时，没有扣除 Montage 从 Section 起点播放的偏移，也没有按 `FAnimRef::PlayRate` 折算真实秒数；任一 Montage 的 PlayRate ≠ 1 或配置了起始 Section 时，红防就会提前/延后。
+2. 修复：新增 `GetNotifyRealTime(Montage, EventName, AnimRef)`——通知时间先减 Section 起点（`GetSectionStartAndEndTime`），再除以 PlayRate；`ScheduleDefenderReaction` 改为按真实提前量 `HitRealTime − GuardReadyRealTime` 预排红防（无 GuardReady 标记时用真实命中时间 − `RedDefenseLeadTime` 回落），并传入攻击方蓝攻 `FAnimRef` 以获取其 PlayRate/Section。
+3. 构建受阻一次：编辑器 Live Coding 激活导致 UBT 拒绝编译，关闭编辑器后重编通过。
+4. PIE 复现回合卡死（红防不播放）后加固：异常延时（非有限值或超出蓝攻动作时长）会导致红防永不播放 → 金色反击待命中挂起 → 回合闸门无法推进；`ScheduleDefenderReaction` 增加有限性检查与"钳制到蓝攻真实播放时长"的安全上限，并输出原始通知时间/Section 起点/PlayRate 的详细日志用于校准。
+5. 读用户日志定位最终根因：日志显示 `Delay=0.000` 且红防从未播放——`FTimerManager::SetTimer` 对 `Rate<=0` 直接 `Invalidate()`，定时器根本不会触发；此前"延时为正"时能播（只是晚），修成 0 后反而永不播放，金色反击待命中一直挂起 → 回合卡死。修复：`Delay<=0` 时改为立即调用红防链（不走定时器）。
+6. 数据校准（供策划调整）：蓝攻命中帧真实时间 `HitRealTime=0.242s`，红防举剑标记 `GuardReadyRealTime=0.383s`——即使立即启动红防，举剑帧仍比命中点晚约 0.14s；要完全重合需把 `MTG_Dale_RedDefence` 的 GuardReady 标记移到 ≤0.24s 处，或把玩家红防 PlayRate 调到约 1.6。另发现玩家红防 Montage 缺少名为 `RedDefence` 的 Section（日志 `JumpToSectionName RedDefence failed`），当前从开头起播。
+7. 需求澄清后改为**双向错峰预排**（2026-08-08）：红防开始 = `max(0, HitReal − GuardReal)`，蓝攻开始 = `max(0, GuardReal − HitReal)`——当 GuardReady 晚于命中帧时，红防立即起手、蓝攻延后出刀（新增 `BlueAttackDelayTimer`，正延时定时器可正常触发），举剑帧与命中帧在所有数据组合下都能重合；战斗结束/重试时清理该定时器。
+
+**结果/解决方案：** 编译通过（-NoUba，27.6s）。PIE 待验证：蓝 vs 红不再卡死；红防先起手、蓝攻延后 0.141s 出刀，举剑帧与命中帧重合；回合推进正常。
+
+**经验教训：** Montage 通知时间是"资产时间线"的绝对时间，实际播放起点受起始 Section 与 PlayRate 影响；任何跨 Montage 的对齐计算都必须统一换算成真实播放秒数，否则在不同动画配置下必然漂移。
+
 ### 2026-08-07 | 程序 ⚡
 
 **事项：** 战斗规则 v1.1 定案——①红防 vs 蓝攻：直接选出的蓝攻（含 2 层）一律被金色反击、不破防，仅"蓄力对红防蓄满自动发动强化蓝攻"保留破防例外；②先制攻击效果改为开场拥有一层蓄力（Satan 等 Boss 默认敌方先制，开局 0:1，避免 0:0 无三方博弈）；③白攻 vs 蓄力仅蓄力前 0 层时触发额外回合（0:1 时白攻不再过于劣势）；④打断蓄力/金色反击/格挡闪避成功方获得 1 层蓄力，格挡闪避失败敌方获得 1 层蓄力。

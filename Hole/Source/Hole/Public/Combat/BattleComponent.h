@@ -248,7 +248,7 @@ private:
 	/** 玩家进入/退出同色碰撞准备姿态 */
 	void SetPlayerClashReady(bool bReady);
 
-	/** 格挡成功：先播 BlockSuccess（弹反），播完回调接 GoldCounter */
+	/** 格挡成功：先播 Block（弹反），播完回调接 GoldCounter */
 	void PlayBlockSuccessChain();
 
 	/** 先播动作 Montage，播完（含被打断）再接反应动画；动作为空/缺失时直接播反应（玩家/敌人分槽） */
@@ -265,6 +265,9 @@ private:
 
 	/** 格挡/闪避失败：优先对应 Fail 动画，空则回落 Hurt */
 	void PlayClashFailReaction(EClashResult Result);
+
+	/** 提前按下格挡（窗口外）：立即播放格挡动画（红防姿态） */
+	void PlayBlockAnimNow();
 
 	/** 动作 Montage 播完回调：接待接反应动画 */
 	UFUNCTION()
@@ -294,8 +297,14 @@ private:
 	/** 扫描 Montage 中指定 EventName 通知/标记的时间（秒）；找不到返回 -1 */
 	float GetNotifyTime(UAnimMontage* Montage, FName EventName) const;
 
-	/** 蓝 vs 红：按提前量（蓝攻命中时间 - 红防 GuardReady 时间）预排红防 → 接续动画 */
-	void ScheduleDefenderReaction(const FPendingHitEvent& Hit);
+	/** 通知/标记相对 Montage 播放起点的真实秒数（扣除 Section 起点并按 PlayRate 折算）；找不到返回 -1 */
+	float GetNotifyRealTime(UAnimMontage* Montage, FName EventName, const FAnimRef& AnimRef) const;
+
+	/** Montage 指定 Section 的起点时间（秒）；无 Section 或未找到返回 0 */
+	float GetSectionStartTime(UAnimMontage* Montage, FName SectionName) const;
+
+	/** 蓝 vs 红：按真实提前量（蓝攻命中时间 - 红防 GuardReady 时间）预排红防 → 接续动画 */
+	void ScheduleDefenderReaction(const FPendingHitEvent& Hit, const FAnimRef& AttackRef);
 
 	/** 停帧：暂停玩家/敌人活动 Montage，Duration 后恢复；Duration<=0 跳过 */
 	void StartHitStop(float Duration);
@@ -326,6 +335,7 @@ private:
 	float GetBlockWindow() const;
 	float GetDodgeWindow() const;
 	float GetClashInputCooldown() const;
+	float GetBlockFailLockout() const;
 	UCombatFormulaSubsystem* GetCombatSubsystem() const;
 	UAttributeComponent* GetPlayerAttr() const;
 	UAttributeComponent* GetEnemyAttr() const;
@@ -383,8 +393,12 @@ private:
 	float PendingOutgoingDamage = 0.0f;
 	/** 碰撞命中时间（来自敌方 ClashAttackHit 通知；无通知 = ClashAttackTime） */
 	float ClashHitTime = 0.0f;
+	/** 碰撞开始时的世界时间（秒），输入判定用"当前世界时间 − 该值"与 ClashHitTime 比较 */
+	float ClashStartTime = 0.0f;
 	/** 上次格挡/闪避输入时间（秒），用于 ClashInputCooldown 防连按 */
 	float LastClashInputTime = -1.0f;
+	/** 上次格挡失败时间（相对碰撞开始，秒），用于 BlockFailLockoutSeconds 再次格挡锁定 */
+	float LastBlockFailTime = -1.0f;
 
 	FVector PlayerStartLocation;
 	FRotator PlayerStartActorRotation;
@@ -403,6 +417,7 @@ private:
 	FTimerHandle EndDelayTimer;
 	FTimerHandle EntryDelayTimer;
 	FTimerHandle ChargePoseTimer;
+	FTimerHandle BlueAttackDelayTimer;
 
 	bool bCombatInputBound = false;
 	bool bCombatMappingAdded = false;

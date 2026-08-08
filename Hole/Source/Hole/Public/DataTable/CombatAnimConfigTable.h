@@ -13,7 +13,7 @@ struct HOLE_API FAnimRef
 {
 	GENERATED_BODY()
 
-	/** Montage 软引用；空 = 不播放或按回落约定（BlockFail/DodgeFail/ChargeInterrupted 回落 Hurt） */
+	/** Montage 软引用；空 = 不播放或按回落约定（DodgeFail/ChargeInterrupted 回落 Hurt） */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AnimRef")
 	TSoftObjectPtr<UAnimMontage> Montage;
 
@@ -74,11 +74,9 @@ struct HOLE_API FCombatAnimRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
 	FAnimRef Hurt;
 
+	/** 格挡动作（成功/失败共用一种）；格挡成功时播完接 GoldCounter */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
-	FAnimRef BlockSuccess;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
-	FAnimRef BlockFail;
+	FAnimRef Block;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
 	FAnimRef DodgeSuccess;

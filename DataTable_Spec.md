@@ -1114,9 +1114,8 @@ enum class EConsumableType : uint8
 | `Charge` | `FAnimRef` | 蓄力姿态（循环） |
 | `ChargeInterrupted` | `FAnimRef` | 蓄力被打断；空 = 回落 `Hurt` |
 | `BlockedReaction` | `FAnimRef` | 被格挡动画（含红防反击成功）；攻击者从当前攻击动画立即混入 |
-| `Hurt` | `FAnimRef` | 受击（含格挡失败/闪避失败回落） |
-| `BlockSuccess` | `FAnimRef` | 格挡成功弹反动作；播完后衔接 `GoldCounter` |
-| `BlockFail` | `FAnimRef` | 格挡失败；空 = 回落 `Hurt` |
+| `Hurt` | `FAnimRef` | 受击（含闪避失败回落） |
+| `Block` | `FAnimRef` | 格挡动作（成功/失败共用一种）；格挡成功时播完衔接 `GoldCounter` |
 | `DodgeSuccess` | `FAnimRef` | 闪避成功 |
 | `DodgeFail` | `FAnimRef` | 闪避失败；空 = 回落 `Hurt` |
 | `Death` | `FAnimRef` | 倒地/失败 |
@@ -1128,7 +1127,7 @@ enum class EConsumableType : uint8
 | `ClashAttackWhite` | `FAnimRef` | 白 vs 白碰撞攻击（敌方攻击提示） |
 | `ClashAttackWhiteSections` | `FString` | 白碰撞攻击可选 Section（竖线分隔）；空 = 用 `ClashAttackWhite.SectionName`，非空则随机选一段 |
 
-> **回落约定（运行时逻辑，不属于 USTRUCT）：** `BlockFail`/`DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；格挡成功时先播 `BlockSuccess`（弹反），播完再播 `GoldCounter`（金色反击）；红 vs 红、双蓄力等"无事发生"回合不播动作。
+> **回落约定（运行时逻辑，不属于 USTRUCT）：** `DodgeFail`/`ChargeInterrupted` 留空时自动播放 `Hurt`；格挡动作只有 `Block` 一种（成功/失败共用），格挡成功时先播 `Block`（弹反），播完再播 `GoldCounter`（金色反击）；红 vs 红、双蓄力等"无事发生"回合不播动作。
 
 ### 15.4 行数据（v1）
 

@@ -73,6 +73,10 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float ClashInputCooldown = 0.15f;
 
+	/** 格挡失败后再次格挡的锁定时间（秒）；[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
+	float BlockFailLockoutSeconds = 1.0f;
+
 	/** 红防举剑标记（GuardReady）缺失时的回落提前量（秒），用于蓝 vs 红防御反应预排；[PLAYTEST] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float RedDefenseLeadTime = 0.3f;

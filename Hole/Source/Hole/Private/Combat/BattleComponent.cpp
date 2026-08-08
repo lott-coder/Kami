@@ -99,6 +99,7 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		GetWorld()->GetTimerManager().ClearTimer(EndDelayTimer);
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
+		GetWorld()->GetTimerManager().ClearTimer(BlueAttackDelayTimer);
 	}
 	EndHitStop();
 	UnbindCombatInput();
@@ -168,6 +169,7 @@ void UBattleComponent::EndBattle()
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
+		GetWorld()->GetTimerManager().ClearTimer(BlueAttackDelayTimer);
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
@@ -705,6 +707,13 @@ void UBattleComponent::TryAdvanceTurnIfGateDone()
 	{
 		return;
 	}
+	// 同色对抗阶段：未结算（bClashResolved=false）时禁止推进，
+	// 防止碰撞通知提前清掉待命中后，动画播完把 Phase 推出 Clash，导致命中结算被跳过；
+	// ResolveClash 结算完成后（bClashResolved=true）仍保持 Clash 阶段，由本函数正常推进到下一回合
+	if (Phase == EBattlePhase::Clash && !bClashResolved)
+	{
+		return;
+	}
 	if (GatedMontages.Num() > 0)
 	{
 		return;
@@ -768,6 +777,7 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	bClashResolved = false;
 	bClashWindowOpen = false;
 	PendingClashResult = EClashResult::None;
+	LastBlockFailTime = -1.0f;
 
 	SetPhase(EBattlePhase::Clash);
 	bTurnGateOpen = true;
@@ -775,9 +785,10 @@ void UBattleComponent::StartClash(EClashType ClashType)
 
 	// 动画：敌方碰撞攻击 + 玩家进入准备姿态（Idle 切换）
 	UAnimMontage* TelegraphMontage = nullptr;
+	FAnimRef Telegraph;
 	if (const FCombatAnimRow* Row = GetCombatAnimRow(false))
 	{
-		FAnimRef Telegraph = (ClashType == EClashType::BlueClash)
+		Telegraph = (ClashType == EClashType::BlueClash)
 			? Row->ClashAttackBlue
 			: Row->ClashAttackWhite;
 		// 随机 Section：配置了竖线分隔列表时随机选一段播放
@@ -799,9 +810,34 @@ void UBattleComponent::StartClash(EClashType ClashType)
 	}
 	SetPlayerClashReady(true);
 
-	// 命中时间锚点：优先取碰撞攻击 Montage 的 ClashAttackHit 通知时间，缺失回落 ClashAttackTime
-	const float NotifyHitTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashAttackHit")));
-	ClashHitTime = NotifyHitTime > 0.0f ? NotifyHitTime : ClashAttackTime;
+	// 命中时间锚点：用真实播放秒数（扣除随机 Section 起点并按 PlayRate 折算）
+	ClashStartTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	float NotifyHitTime = GetNotifyRealTime(TelegraphMontage, FName(TEXT("ClashAttackHit")), Telegraph);
+	if (NotifyHitTime < 0.0f && TelegraphMontage)
+	{
+		// 所选 Section 缺少 ClashAttackHit 通知：用该 Section 的结束时间（真实秒数）作为命中锚点，
+		// 避免全局 ClashAttackTime(0.8s) 比攻击动画打击帧更早触发（无输入时"提前受击"）
+		const int32 SectionIndex = TelegraphMontage->GetSectionIndex(Telegraph.SectionName);
+		if (SectionIndex != INDEX_NONE)
+		{
+			float SectionStart = 0.0f;
+			float SectionEnd = 0.0f;
+			TelegraphMontage->GetSectionStartAndEndTime(SectionIndex, SectionStart, SectionEnd);
+			NotifyHitTime = (SectionEnd - SectionStart) / FMath::Max(0.01f, Telegraph.PlayRate);
+			UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::StartClash - Section %s 无 ClashAttackHit 通知，用 Section 结束时间回落 %.3f"),
+				*Telegraph.SectionName.ToString(), NotifyHitTime);
+		}
+	}
+	ClashHitTime = NotifyHitTime >= 0.0f ? NotifyHitTime : ClashAttackTime;
+	if (ClashHitTime <= 0.0f)
+	{
+		// 避免 0 延时：UE SetTimer 对 Rate<=0 直接失效，影响定时器会永不触发
+		ClashHitTime = ClashAttackTime;
+	}
+	const float RawNotifyTime = GetNotifyTime(TelegraphMontage, FName(TEXT("ClashAttackHit")));
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartClash - ClashHitTime=%.3f (Section=%s RawNotify=%.3f SectionStart=%.3f Rate=%.2f)"),
+		ClashHitTime, *Telegraph.SectionName.ToString(), RawNotifyTime,
+		GetSectionStartTime(TelegraphMontage, Telegraph.SectionName), Telegraph.PlayRate);
 	LastClashInputTime = -1.0f;
 
 	// 注册敌方碰撞攻击待命中事件（金额由 ResolveClash 决定；通知/回落二选一消费）
@@ -825,6 +861,9 @@ void UBattleComponent::OpenClashWindow()
 
 void UBattleComponent::OnClashImpact()
 {
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnClashImpact - Phase=%d bClashResolved=%d PendingResult=%d Elapsed=%.3f HitTime=%.3f"),
+		(int32)Phase, bClashResolved ? 1 : 0, (int32)PendingClashResult, Now - ClashStartTime, ClashHitTime);
 	if (Phase != EBattlePhase::Clash || bClashResolved)
 	{
 		return;
@@ -847,6 +886,8 @@ void UBattleComponent::OnClashImpact()
 
 void UBattleComponent::ResolveClash(EClashResult Result)
 {
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ResolveClash - Result=%d bClashResolved=%d"),
+		(int32)Result, bClashResolved ? 1 : 0);
 	if (bClashResolved)
 	{
 		return;
@@ -930,8 +971,11 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	default:
 		// 格挡失败：敌方获得 1 层蓄力
 		EnemyChargeStacks = FMath::Min(EnemyChargeStacks + 1, GetMaxChargeStacks(false));
-		// 全额伤害
-		PlayClashFailReaction(EClashResult::BlockFail);
+		// 受击：立刻混入受击动画（格挡动画只有红防姿态一种，不使用 BlockFail）
+		if (const FCombatAnimRow* Row = GetCombatAnimRow(true))
+		{
+			PlayCombatAnim(PlayerRole.Get(), Row->Hurt);
+		}
 		break;
 	}
 
@@ -969,6 +1013,17 @@ void UBattleComponent::OnBlockPressed()
 		return;
 	}
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	// 用"相对碰撞开始的经过时间"与命中时间比较，不能拿世界绝对时间与相对时间比
+	const float Elapsed = Now - ClashStartTime;
+
+	// 格挡失败锁定：失败后 BlockFailLockoutSeconds 内不可再次格挡（优先于窗口判定）
+	if (LastBlockFailTime >= 0.0f && Elapsed - LastBlockFailTime < GetBlockFailLockout())
+	{
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnBlockPressed - 格挡失败锁定中（%.1fs 后可再格挡），忽略"),
+			GetBlockFailLockout() - (Elapsed - LastBlockFailTime));
+		return;
+	}
+
 	const float Cooldown = GetClashInputCooldown();
 	if (LastClashInputTime >= 0.0f && Now - LastClashInputTime < Cooldown)
 	{
@@ -977,13 +1032,19 @@ void UBattleComponent::OnBlockPressed()
 	}
 	LastClashInputTime = Now;
 
-	if (Now >= ClashHitTime - GetBlockWindow())
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnBlockPressed - Elapsed=%.3f HitTime=%.3f Window=%.3f"),
+		Elapsed, ClashHitTime, GetBlockWindow());
+	if (Elapsed >= ClashHitTime - GetBlockWindow())
 	{
 		ResolveClash(EClashResult::BlockSuccess);
 		return;
 	}
-	// 窗口外提前按下：先记录失败结果，窗口内再按可覆盖
+
+	// 窗口外按下 = 格挡失败：立即播放格挡动画（红防姿态），并锁定 1s 内不可再次格挡
 	PendingClashResult = EClashResult::BlockFail;
+	LastBlockFailTime = Elapsed;
+	PlayBlockAnimNow();
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnBlockPressed - 格挡失败，立即播放格挡动画，锁定 %.1fs"), GetBlockFailLockout());
 }
 
 void UBattleComponent::OnDodgePressed()
@@ -1001,7 +1062,11 @@ void UBattleComponent::OnDodgePressed()
 	}
 	LastClashInputTime = Now;
 
-	if (Now >= ClashHitTime - GetDodgeWindow())
+	// 用"相对碰撞开始的经过时间"与命中时间比较，不能拿世界绝对时间与相对时间比
+	const float Elapsed = Now - ClashStartTime;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnDodgePressed - Elapsed=%.3f HitTime=%.3f Window=%.3f"),
+		Elapsed, ClashHitTime, GetDodgeWindow());
+	if (Elapsed >= ClashHitTime - GetDodgeWindow())
 	{
 		ResolveClash(EClashResult::DodgeSuccess);
 		return;
@@ -1497,6 +1562,67 @@ float UBattleComponent::GetNotifyTime(UAnimMontage* Montage, FName EventName) co
 	return -1.0f;
 }
 
+float UBattleComponent::GetNotifyRealTime(UAnimMontage* Montage, FName EventName, const FAnimRef& AnimRef) const
+{
+	if (!Montage)
+	{
+		return -1.0f;
+	}
+	float SectionStart = 0.0f;
+	float SectionEnd = -1.0f;
+	const int32 SectionIndex = AnimRef.SectionName.IsNone() ? INDEX_NONE : Montage->GetSectionIndex(AnimRef.SectionName);
+	if (SectionIndex != INDEX_NONE)
+	{
+		Montage->GetSectionStartAndEndTime(SectionIndex, SectionStart, SectionEnd);
+	}
+	// 指定了 Section 时只取该 Section 时间范围内的通知（多个同名通知按当前 Section 匹配），
+	// 否则会把其它 Section 的通知时间误当成本段命中锚点
+	for (const FAnimNotifyEvent& Event : Montage->Notifies)
+	{
+		if (!Event.Notify)
+		{
+			continue;
+		}
+		bool bMatch = false;
+		if (const UAnimNotify_CombatDamage* DamageNotify = Cast<UAnimNotify_CombatDamage>(Event.Notify))
+		{
+			bMatch = (DamageNotify->EventName == EventName);
+		}
+		else if (const UAnimNotify_CombatMarker* Marker = Cast<UAnimNotify_CombatMarker>(Event.Notify))
+		{
+			bMatch = (Marker->MarkerName == EventName);
+		}
+		if (!bMatch)
+		{
+			continue;
+		}
+		const float NotifyTime = Event.GetTime();
+		if (SectionIndex == INDEX_NONE
+			|| (NotifyTime >= SectionStart - UE_KINDA_SMALL_NUMBER && NotifyTime <= SectionEnd + UE_KINDA_SMALL_NUMBER))
+		{
+			return (NotifyTime - SectionStart) / FMath::Max(0.01f, AnimRef.PlayRate);
+		}
+	}
+	return -1.0f;
+}
+
+float UBattleComponent::GetSectionStartTime(UAnimMontage* Montage, FName SectionName) const
+{
+	if (!Montage || SectionName.IsNone())
+	{
+		return 0.0f;
+	}
+	const int32 SectionIndex = Montage->GetSectionIndex(SectionName);
+	if (SectionIndex == INDEX_NONE)
+	{
+		return 0.0f;
+	}
+	float SectionStart = 0.0f;
+	float SectionEnd = 0.0f;
+	Montage->GetSectionStartAndEndTime(SectionIndex, SectionStart, SectionEnd);
+	return SectionStart;
+}
+
 void UBattleComponent::RegisterPendingHit(bool bPlayerAttacker, FName EventName, ABaseCharacter* Target, float Amount,
 	AActor* Causer, const FAnimRef& HitReaction, ABaseCharacter* Defender,
 	const FAnimRef& DefenderReaction, const FAnimRef& DefenderFollowUp, UAnimMontage* FallbackMontage,
@@ -1618,6 +1744,13 @@ void UBattleComponent::OnHitNotify(ABaseCharacter* Attacker, FName EventName)
 	if (!Attacker)
 	{
 		return;
+	}
+	if (EventName == FName(TEXT("ClashAttackHit")))
+	{
+		const bool bPlayerAttacker = (Attacker == PlayerRole.Get());
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnHitNotify - ClashAttackHit bPlayerAttacker=%d bActive=%d Amount=%.1f"),
+			bPlayerAttacker ? 1 : 0, (bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit).bActive ? 1 : 0,
+			bPlayerAttacker ? PlayerPendingHit.Amount : EnemyPendingHit.Amount);
 	}
 	const bool bPlayerAttacker = (Attacker == PlayerRole.Get());
 	FPendingHitEvent& Hit = bPlayerAttacker ? PlayerPendingHit : EnemyPendingHit;
@@ -1872,9 +2005,41 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 	}
 
 	const FAnimRef* BlueRef = GetActionRef(*AttackerRow, EBattleAction::BlueAttack);
+	// 双向错峰预排：红防开始 = max(0, HitReal - GuardReal)，蓝攻开始 = max(0, GuardReal - HitReal)。
+	// 当 GuardReady 晚于命中帧时，红防立即起手、蓝攻延后出刀，保证举剑帧与命中帧重合。
+	UAnimMontage* BlueMontage = nullptr;
+	float HitReal = -1.0f;
 	if (BlueRef)
 	{
-		PlayCombatAnim(Attacker, *BlueRef);
+		BlueMontage = BlueRef->Montage.LoadSynchronous();
+		HitReal = GetNotifyRealTime(BlueMontage, FName(TEXT("BlueAttackHit")), *BlueRef);
+	}
+	const float GuardReal = GetNotifyRealTime(
+		DefenderRow->RedDefense.Montage.LoadSynchronous(), FName(TEXT("GuardReady")), DefenderRow->RedDefense);
+	const float BlueStart = (HitReal >= 0.0f && GuardReal >= 0.0f) ? FMath::Max(0.0f, GuardReal - HitReal) : 0.0f;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::RegisterBlueVsRedHit - 错峰预排 BlueStart=%.3f (HitReal=%.3f GuardReal=%.3f)"),
+		BlueStart, HitReal, GuardReal);
+	if (BlueRef)
+	{
+		if (BlueStart > 0.0f)
+		{
+			// 红防先起手：蓝攻延后 BlueStart 秒再播（正延时定时器可正常触发）
+			if (UWorld* World = GetWorld())
+			{
+				World->GetTimerManager().ClearTimer(BlueAttackDelayTimer);
+				World->GetTimerManager().SetTimer(BlueAttackDelayTimer, [this, Attacker, BlueRefCopy = *BlueRef]()
+				{
+					if (Phase != EBattlePhase::Ended)
+					{
+						PlayCombatAnim(Attacker, BlueRefCopy);
+					}
+				}, BlueStart, false);
+			}
+		}
+		else
+		{
+			PlayCombatAnim(Attacker, *BlueRef);
+		}
 	}
 
 	if (bCounterSucceeds)
@@ -1892,10 +2057,13 @@ void UBattleComponent::RegisterBlueVsRedHit(bool bAttackerPlayer, float Incoming
 	RegisterPendingHit(bAttackerPlayer, FName(TEXT("BlueAttackHit")), Defender, IncomingAmount, Attacker,
 		FAnimRef(), Defender, DefenderRow->RedDefense, DefenderFollowUp,
 		BlueRef ? BlueRef->Montage.LoadSynchronous() : nullptr, bCounterSucceeds);
-	ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit);
+	if (BlueRef)
+	{
+		ScheduleDefenderReaction(bAttackerPlayer ? PlayerPendingHit : EnemyPendingHit, *BlueRef);
+	}
 }
 
-void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
+void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit, const FAnimRef& AttackRef)
 {
 	if (!Hit.Defender || Hit.DefenderReaction.Montage.IsNull())
 	{
@@ -1910,36 +2078,67 @@ void UBattleComponent::ScheduleDefenderReaction(const FPendingHitEvent& Hit)
 	FTimerHandle& Timer = bPlayerDefender ? PlayerDefenderTimer : EnemyDefenderTimer;
 	World->GetTimerManager().ClearTimer(Timer);
 
-	const float HitTime = GetNotifyTime(Hit.FallbackMontage, FName(TEXT("BlueAttackHit")));
-	const float GuardReadyTime = GetNotifyTime(Hit.DefenderReaction.Montage.LoadSynchronous(), FName(TEXT("GuardReady")));
+	// 统一换算为"从 Montage 播放起点开始的真实秒数"：通知绝对时间先减 Section 起点，再按 PlayRate 折算，
+	// 否则任一 Montage 的 PlayRate != 1 或从 Section 起播时，红防会提前/延后，举剑帧无法与蓝攻命中点重合
+	UAnimMontage* HitMontage = Hit.FallbackMontage;
+	UAnimMontage* GuardMontage = Hit.DefenderReaction.Montage.LoadSynchronous();
+	const float HitNotify = GetNotifyTime(HitMontage, FName(TEXT("BlueAttackHit")));
+	const float GuardNotify = GetNotifyTime(GuardMontage, FName(TEXT("GuardReady")));
+	const float HitSectionStart = GetSectionStartTime(HitMontage, AttackRef.SectionName);
+	const float GuardSectionStart = GetSectionStartTime(GuardMontage, Hit.DefenderReaction.SectionName);
+	const float HitTime = HitNotify >= 0.0f
+		? (HitNotify - HitSectionStart) / FMath::Max(0.01f, AttackRef.PlayRate)
+		: -1.0f;
+	const float GuardReadyTime = GuardNotify >= 0.0f
+		? (GuardNotify - GuardSectionStart) / FMath::Max(0.01f, Hit.DefenderReaction.PlayRate)
+		: -1.0f;
 	float Delay = 0.0f;
-	if (HitTime > 0.0f && GuardReadyTime >= 0.0f)
+	if (HitTime >= 0.0f && GuardReadyTime >= 0.0f)
 	{
 		Delay = FMath::Max(0.0f, HitTime - GuardReadyTime);
 	}
-	else if (HitTime > 0.0f)
+	else if (HitTime >= 0.0f)
 	{
 		const FCombatParamsRow Defaults;
 		const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
 		const FCombatParamsRow& P = Params ? *Params : Defaults;
 		Delay = FMath::Max(0.0f, HitTime - P.RedDefenseLeadTime);
-		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防无 GuardReady 标记，使用 RedDefenseLeadTime 回落"));
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防无 GuardReady 标记（或标记位于播放 Section 之外），使用 RedDefenseLeadTime 回落"));
 	}
 	else
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ScheduleDefenderReaction - 蓝攻无 BlueAttackHit 通知，红防立即启动"));
 	}
-	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防预排 Delay=%f (HitTime=%f, GuardReadyTime=%f)"),
-		Delay, HitTime, GuardReadyTime);
+	// 安全钳制：预排不能晚于蓝攻动作播完，且必须为有限值，否则红防永不播放 → 金色反击待命中挂起 → 回合卡死
+	const float MaxDelay = HitMontage
+		? FMath::Max(0.0f, HitMontage->GetPlayLength() / FMath::Max(0.01f, AttackRef.PlayRate))
+		: 0.0f;
+	if (!FMath::IsFinite(Delay))
+	{
+		Delay = 0.0f;
+	}
+	Delay = FMath::Clamp(Delay, 0.0f, MaxDelay);
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ScheduleDefenderReaction - 红防预排 Delay=%.3f (HitNotify=%.3f HitSectionStart=%.3f HitRate=%.2f | GuardNotify=%.3f GuardSectionStart=%.3f GuardRate=%.2f | 钳制上限=%.3f)"),
+		Delay, HitNotify, HitSectionStart, AttackRef.PlayRate, GuardNotify, GuardSectionStart, Hit.DefenderReaction.PlayRate, MaxDelay);
 
-	World->GetTimerManager().SetTimer(Timer, [this, Defender = Hit.Defender,
+	auto PlayDefenderChain = [this, Defender = Hit.Defender,
 		Reaction = Hit.DefenderReaction, FollowUp = Hit.DefenderFollowUp]()
 	{
 		if (Phase != EBattlePhase::Ended)
 		{
 			PlayAnimThenReaction(Defender, Reaction, FollowUp);
 		}
-	}, Delay, false);
+	};
+
+	if (Delay > 0.0f)
+	{
+		World->GetTimerManager().SetTimer(Timer, MoveTemp(PlayDefenderChain), Delay, false);
+	}
+	else
+	{
+		// UE 定时器不接受 0 速率（SetTimer 会直接失效），Delay<=0 表示必须立即启动红防链
+		PlayDefenderChain();
+	}
 }
 
 void UBattleComponent::SetPlayerClashReady(bool bReady)
@@ -1964,7 +2163,7 @@ void UBattleComponent::PlayBlockSuccessChain()
 	{
 		return;
 	}
-	PlayAnimThenReaction(PlayerRole.Get(), Row->BlockSuccess, Row->GoldCounter);
+	PlayAnimThenReaction(PlayerRole.Get(), Row->Block, Row->GoldCounter);
 }
 
 void UBattleComponent::PlayClashFailReaction(EClashResult Result)
@@ -1974,8 +2173,23 @@ void UBattleComponent::PlayClashFailReaction(EClashResult Result)
 	{
 		return;
 	}
-	const FAnimRef& Ref = (Result == EClashResult::DodgeFail) ? Row->DodgeFail : Row->BlockFail;
+	const FAnimRef& Ref = (Result == EClashResult::DodgeFail) ? Row->DodgeFail : Row->Hurt;
 	PlayCombatAnim(PlayerRole.Get(), Ref.Montage.IsNull() ? Row->Hurt : Ref);
+}
+
+void UBattleComponent::PlayBlockAnimNow()
+{
+	if (!PlayerRole.IsValid())
+	{
+		return;
+	}
+	const FCombatAnimRow* Row = GetCombatAnimRow(true);
+	if (!Row)
+	{
+		return;
+	}
+	// 格挡动画只有一种：红防姿态（不使用 BlockFail）
+	PlayCombatAnim(PlayerRole.Get(), Row->RedDefense);
 }
 
 void UBattleComponent::PlayAnimThenReaction(ABaseCharacter* Character, const FAnimRef& ActionRef, const FAnimRef& ReactionRef)
@@ -2164,6 +2378,7 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
+		GetWorld()->GetTimerManager().ClearTimer(BlueAttackDelayTimer);
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
@@ -2250,6 +2465,7 @@ void UBattleComponent::ResetForRetry()
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
+		GetWorld()->GetTimerManager().ClearTimer(BlueAttackDelayTimer);
 	}
 	LastClashInputTime = -1.0f;
 	EndHitStop();
@@ -2339,6 +2555,14 @@ float UBattleComponent::GetClashInputCooldown() const
 	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
 	const FCombatParamsRow& P = Params ? *Params : Defaults;
 	return P.ClashInputCooldown;
+}
+
+float UBattleComponent::GetBlockFailLockout() const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+	const FCombatParamsRow& P = Params ? *Params : Defaults;
+	return P.BlockFailLockoutSeconds;
 }
 
 UCombatFormulaSubsystem* UBattleComponent::GetCombatSubsystem() const

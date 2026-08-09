@@ -6,7 +6,8 @@
 #include "Components/ActorComponent.h"
 #include "BossIntroComponent.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBossIntroFinished);
+/** 入场动画结束（含跳过），EnemyActor = 挂载本组件的敌人（Owner），供战斗组件区分多个 Boss */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossIntroFinished, AActor*, EnemyActor);
 
 class USphereComponent;
 class ULevelSequence;
@@ -126,7 +127,7 @@ public:
 
 	// ---- 事件 ----
 
-	/** 入场动画正常结束或被跳过后广播（此时状态已为 Combat），战斗系统监听此事件启动战斗 */
+	/** 入场动画正常结束或被跳过后广播（此时状态已为 Combat，参数为挂载本组件的敌人），战斗系统监听此事件启动战斗 */
 	UPROPERTY(BlueprintAssignable, Category = "BossIntro|Events")
 	FOnBossIntroFinished OnIntroFinished;
 

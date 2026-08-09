@@ -85,6 +85,10 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float HitStopDuration = 0.12f;
 
+	/** 同色碰撞可格挡期间的世界时间流速（0.05=慢放；0=关闭），玩家点击格挡/闪避后恢复；[PLAYTEST] */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
+	float ClashTimeDilation = 0.05f;
+
 	/** 闪避失败额外伤害倍率 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float DodgeFailDamageScale = 1.2f;
@@ -105,12 +109,6 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|DodgeBuff")
 	int32 DodgeBuffTurns = 1;
 
-	// ---- 先制 ----
-
-	/** 玩家先制攻击的伤害比例（相对白攻基础伤害，0.3 = 30%），[PLAYTEST] */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|FirstStrike")
-	float FirstStrikeDamageScale = 0.3f;
-
 	// ---- 金色攻击（格挡反击） ----
 
 	/** 金色攻击（格挡反击）最小伤害，[PLAYTEST] */
@@ -122,10 +120,6 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	float GoldAttackDamageMax = 35.0f;
 
 	// ---- 特殊规则 ----
-
-	/** 先制攻击使敌人禁用蓄力的回合数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Rules")
-	int32 FirstStrikeDisableChargeTurns = 1;
 
 	/** 教学战斗敌人逃跑血量百分比阈值（0~1），[待定] */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Rules")

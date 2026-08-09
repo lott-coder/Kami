@@ -38,6 +38,34 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-09 | 策划 ⚡
+
+**问题/事项：** 设计序章教学敌人（新手教程单场战斗），替代原"教学1+教学2"双教学结构。
+
+**处理过程：**
+1. 与用户定案 5 项决策：新增 `apprentice_cave` 行；洞穴仅此一场教学战斗；教学 1 一次性教完全部机制（三色克制/金色反击/蓄力/同色碰撞/格挡闪避）；教学战无掉落（烟仅在击败敌人时掉落）；取消教学 2。
+2. 附加定案：序章剧情改为主角 Dale 发现魔法师并突袭 → 玩家先制（与敌方先制效果一致：开局玩家 1 层、敌方 0 层，无其它效果）。
+3. 产出 `Plans/tutorial-enemy.md` 计划书；同步 GDD v0.17（§3.3/§5.2.1/§7.2/§9.3/§19.4）与 DataTable_Spec v0.13（`apprentice_cave` 行、`inept` 洞穴移除、行数 8→9）。
+4. 规则补充定案：先制效果统一——玩家/敌方先制一致，仅先制方开局 1 层蓄力；撤销先制伤害（`FirstStrikeDamageScale`）与首回合禁蓄力（`FirstStrikeDisableChargeTurns`）；同步 GDD v0.18 / DataTable_Spec v0.14。
+5. C++ 落地（GDD v0.19 / DataTable_Spec v0.15）：`FCombatParamsRow` 移除两个废弃参数；`StartBattle` 教学战自动玩家先制（`bEnemyFirstStrike=false`）；`UEnemyCombatAIComponent` 新增教学脚本模式（`apprentice_cave` 自动启用，7 回合固定行动 + 非法回落 + 每步引导提示）；`UBattleComponent` 新增教学钩子（锁血 1、脚本播完/血量阈值必逃、`FinishBattle(true, true)` 逃跑路径、重开重置脚本）；HUD 新增可选绑定 `TutorialHintText`。编译通过（-NoUba）。
+6. 补建敌人 C++ 类：`AApprentice`（EnemyID=apprentice，普通低级魔法师基类）与 `AApprenticeCave`（EnemyID=apprentice_cave，序章教学变体，EnemyID 自动识别教学模式）；同步 DataTable_Spec v0.16；编译通过（-NoUba）。
+7. Bug修复：Untitled 测试关卡同时放置 BP_Satan 与 BP_ApprenticeCave（均 Tag=Boss），`UBattleComponent` 只绑定第一个 Boss 的入场委托，导致教学怪 `LS_ApprenticeCaveIntro` 播完后 `OnIntroFinished` 无人监听、不进战斗。修复：`FOnBossIntroFinished` 改为携带敌人参数（`AActor* EnemyActor`），战斗组件绑定所有 Tag=Boss 敌人的入场动画，`HandleIntroFinished` 按实际播完者设置 `BossEnemy` 并开战（同时重置 `bBossDefeated` 支持同一关卡多个 Boss 各自触发）；编译通过（-NoUba）。
+8. 新需求落地（GDD v0.20 / DataTable_Spec v0.17）：①教学路线锁定——`TutorialPlayerRoute`（T1蓝攻/T2白攻/T3红防/T4红防/T5蓝攻/T6蓄力/T7蓝攻），HUD 每回合只开放指定按钮，`PlayerChooseAction` 逻辑层拒绝非法选择，额外回合不锁；②同色碰撞可格挡慢放——新增 `ClashTimeDilation`（0.05，0=关闭），可格挡窗口开启时世界时间流速降至该值，玩家点击格挡/闪避后恢复，碰撞结算/清理/失败重开兜底恢复；编译通过（-NoUba）。
+9. 慢放范围限定：`ClashTimeDilation` 仅序章教学战生效（`ApplyClashTimeDilation` 增加 `IsTutorialBattle()` 门控），正式战斗（如 Satan）不修改时间流速；同步 GDD v0.21 / DataTable_Spec v0.18；编译通过（-NoUba）。
+10. Bug修复：慢放出现时立刻点击格挡被判失败——慢放原从 `ClashHitTime − max(格挡窗,闪避窗)` 开始，格挡窗比闪避窗晚 0.1s（游戏时间），慢放后游戏时间流速 0.05，该 0.1s 相当于约 2s 真实时间，"慢放一出现就点击"按游戏时间仍在窗口外 → 提前按失败。修复：慢放起点改为 `min(格挡窗,闪避窗)`（慢放出现时两个窗口均已开放），保留原 Elapsed 窗口判定，不修改输入逻辑；同步 GDD v0.22；编译通过（-NoUba）。
+11. Bug修复：引导提示/玩家路线锁定比敌方当前行动快一回合——`TutorialScriptIndex` 在敌方选招时（回合开始）已 +1 指向下一回合，但提示与路线直接用它取值。修复：`GetCurrentTutorialHint` / `GetLockedPlayerAction` 取 `索引 − 1`（当前回合），敌方行动本身与表格一致；编译通过（-NoUba）。
+12. 教学扩展为 9 回合完整战斗逻辑（GDD v0.23 / DataTable_Spec v0.19）：新增 T4"蓄力 vs 白攻（0 层抵抗 0.3 伤 + 1 层 + 额外回合）"与 T7"红防 vs 蓄力到 2 层（自动强化蓝攻破防，2.25 倍蓝伤）"；玩家路线同步 9 回合（T4 蓄力→额外回合蓝攻/蓄力）；HUD 额外回合显示"只能选择蓝攻或蓄力"引导；必逃改为脚本播完（T9 碰撞结算后）触发，`RunAwayHPThreshold` 仅脚本未启用时兜底，避免加长脚本被血量提前打断；编译通过（-NoUba）。
+13. Bug修复：白攻/红防会清空自身蓄力层数，原 9 回合脚本 T4 敌方白攻后层数归 0，T5 蓝攻非法（被回落替换，教学点丢失）。修复：插入 T5 红红跳过（双方红防清空蓄力，顺带教学红红规则），把玩家层数清回 0 再接 T6 蓄力 vs 白攻抵抗；脚本扩展为 10 回合（T1 蓝克白 / T2 白克红 / T3 反例 / T4 红克蓝+金反击 / T5 红红跳过 / T6 蓄力抵抗+额外回合 / T7 蓝断蓄 / T8 满蓄破红防 / T9 双方蓄力 / T10 蓝蓝碰撞）；同步 GDD v0.24；编译通过（-NoUba）。
+14. 教学引导重构（GDD v0.25 / DataTable_Spec v0.20）：按用户要求取消逐回合按键锁定与固定敌方脚本（`UEnemyCombatAIComponent` 恢复随机 AI，脚本/路线系统移除）；改为——①进入战斗后给出一次总提示（先制/蓄力上限/三色克制）；②两个条件教学点：玩家蓄力 1 层（首回合除外）→ 敌方强制红防 + 锁定蓄力（满蓄自动强化蓝攻破红防）；玩家蓄力 0 层 → 敌方强制白攻 + 锁定蓄力（0→1 层抵抗 + 额外回合）；③同色碰撞触发时给出格挡/闪避操作提示；④必逃改为两个教学点均演示后按 `RunAwayHPThreshold` 触发，15 回合上限兜底防软锁；编译通过（-NoUba）。
+15. Bug修复：教学战入场动画播完编辑器崩溃（EXCEPTION_ACCESS_VIOLATION 读取 0x160）——调用栈 `NativeConstruct → UpdateTutorialHint → GetTutorialHintText → IsTutorialBattle`。根因：重构提示逻辑时把 `Battle->GetTutorialHintText()` 移出了 `Battle.IsValid()` 保护，而 Widget 的 `NativeConstruct` 先于 `BindToBattle` 执行，此时 `Battle` 为空弱引用，解引用空指针。修复：调用前判空（`Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty()`）；编译通过（-NoUba）。
+16. 新需求（GDD v0.26）：教学战玩家第一次使用白攻时必定触发白白碰撞——`PlayerChooseAction` 检测首次白攻（`bTutorialFirstWhiteAttackUsed`）并覆盖敌方已选行动为白攻；教学战内仅一次，失败重开重置；编译通过（-NoUba）。
+
+**结果/解决方案：** 教学引导重构为"开场总提示一次 + 两个条件教学点（蓄力 1 层/敌方红防 → 满蓄破防；蓄力 0 层/敌方白攻 → 抵抗+额外回合）+ 首次白攻必定白白碰撞 + 碰撞提示"，玩家自由出招、敌方随机 AI；`apprentice_cave`（Tutorial/180HP/BaseDamageScale 0.4/无掉落/SpawnAreas=hole）；教学锁血 1；必逃在两个教学点完成后按血量阈值触发，15 回合兜底。C++ 侧全部落地并通过编译；编辑器侧资产（DT 行、BP_Apprentice/BP_Apprentice_Cave/ABP、蒙太奇、WBP 绑定、Level Sequence）由用户手动完成。
+
+**经验教训：** 教学敌人设计应先把"教学点 → 回合脚本 → 现有规则约束（蓄力门槛/层数流转/先制）"三者对齐再定数值；逃跑型敌人不配置掉落，烟掉落语义统一为"击败敌人"；玩家先制规则在序章教学战首次落地，后续探索攻击先制可直接复用。
+
+---
+
 ### 2026-08-08 | 程序 ⚡
 
 **事项：** 双蒙太奇时间对齐统一采用"双向错峰"预排——两侧各自取 `max(0, 对方真实时间 − 自身真实时间)` 作为开始延时，而不是固定一侧先播、只延后另一侧；同时约定 `FTimerManager::SetTimer` 不接受 `Rate <= 0`（直接失效），非正延时必须立即执行。
@@ -826,6 +854,7 @@
 
 | 日期 | 决策 | 理由 | 影响 |
 |------|------|------|------|
+| 2026-08-09 | ⚡ 序章教学敌人定案 + C++ 落地：`apprentice_cave` 单场完整教学 + 玩家先制开场 + 无掉落必逃 | 教学集中避免打断节奏；玩家先制支撑"主角发现→突袭"叙事；烟只在击败时掉落保持语义一致 | Plans/tutorial-enemy.md、GDD v0.19、DataTable_Spec v0.15、EnemyCombatAIComponent/BattleComponent/HUD |
 | 2026-08-02 | ⚡ 战斗行动选择只用 HUD 鼠标点击（不用 1-5 键位） | 行动按钮即 UI 核心交互，避免键位与实时格挡/闪避混淆 | 战斗输入系统、Task 10 资产清单 |
 | 2026-08-02 | ⚡ 战斗舞台配置入 `DT_BattleStage`（DataTable，非 DataAsset） | 与 `DT_CombatParams` 单例口径一致，策划调参 + CSV/脚本可重建；战斗/非战斗两套状态由保存恢复保证 | 12 号表、`FCombatStageRow`、DataTable_Spec v0.6 |
 | 2026-08-02 | ⚡ 战斗失败回到 Boss 触发点直接重播入场动画 | 验证循环最短，先保证战斗闭环可重测 | 失败流程、`ResetIntro` + `UpdateOverlaps` 重开逻辑 |
@@ -852,6 +881,8 @@
 | Montage 从指定 Section 跳转不生效 | 确认 Montage 已保存落盘；`PlayAnimMontage(Montage, 1.0, "Draw")` 从 `Draw` Section 起始 | 2026-08-04 |
 | 武器停在场景中心不跟随人物 | `Template Mismatch`：网格用嵌套默认子对象创建；改为 Actor 级默认子对象 + `SetupAttachment` | 2026-08-04 |
 | 模板动画蓝图能否直接引用动画资产 | 不能；模板无 Target Skeleton，只搭结构，动画在子 ABP 中填充 | 2026-08-04 |
+| 多个 Tag=Boss 敌人同关卡时，入场序列播完不进战斗 | 战斗组件原先只绑定第一个 Boss 的 `OnIntroFinished`；改为绑定全部，按完成者（委托携带敌人参数）开战 | 2026-08-09 |
+| 教学战入场动画播完编辑器崩溃 | HUD `NativeConstruct` 在 `BindToBattle` 前对空 `Battle` 弱引用调用 `GetTutorialHintText`；调用前加 `IsValid()` 判空 | 2026-08-09 |
 
 ---
 

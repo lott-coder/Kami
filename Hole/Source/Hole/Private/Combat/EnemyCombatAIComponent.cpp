@@ -9,7 +9,7 @@ UEnemyCombatAIComponent::UEnemyCombatAIComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
-EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAction LastPlayerAction, bool bExtraTurn, int32 ChargeStacks, int32 PlayerChargeStacks) const
+EBattleAction UEnemyCombatAIComponent::ChooseAction(int32 RoundNumber, EBattleAction LastPlayerAction, bool bExtraTurn, int32 ChargeStacks, int32 PlayerChargeStacks)
 {
 	const int32 MaxStacks = GetMaxChargeStacks();
 

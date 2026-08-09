@@ -29,6 +29,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/WorldSettings.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputAction.h"
@@ -77,17 +78,25 @@ void UBattleComponent::BeginPlay()
 		PlayerRole = Role;
 	}
 
-	BossEnemy = FindBossEnemy();
-	if (BossEnemy.IsValid())
+	// 绑定场景中所有 Tag=Boss 敌人的入场动画：谁播完就进谁的战斗
+	// （同一测试关卡可同时存在 Satan 与序章教学怪；仅绑定第一个会导致教学怪序列播完无人监听）
+	const TArray<AEnemy*> BossEnemies = FindBossEnemies();
+	for (AEnemy* Enemy : BossEnemies)
 	{
-		if (UBossIntroComponent* Intro = BossEnemy->FindComponentByClass<UBossIntroComponent>())
+		if (UBossIntroComponent* Intro = Enemy ? Enemy->FindComponentByClass<UBossIntroComponent>() : nullptr)
 		{
 			Intro->OnIntroFinished.AddDynamic(this, &UBattleComponent::HandleIntroFinished);
 		}
 	}
-	else
+	BossEnemy = BossEnemies.Num() > 0 ? BossEnemies[0] : nullptr;
+
+	if (BossEnemies.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::BeginPlay - 场景中未找到 Tag=Boss 的 AEnemy"));
+	}
+	else if (BossEnemies.Num() > 1)
+	{
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::BeginPlay - 场景中存在 %d 个 Tag=Boss 敌人，入场结束后按完成者开战"), BossEnemies.Num());
 	}
 }
 
@@ -154,6 +163,13 @@ void UBattleComponent::StartBattle()
 	}
 
 	EnemyAI = BossEnemy->FindComponentByClass<UEnemyCombatAIComponent>();
+
+	// 序章教学战：主角突袭魔法师 → 玩家先制（与敌方先制效果一致：先制方开局 1 层蓄力，无其它效果）
+	if (IsTutorialBattle())
+	{
+		bEnemyFirstStrike = false;
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartBattle - 序章教学战：玩家先制（玩家 1 层 / 敌方 0 层）"));
+	}
 	EnterBattle();
 }
 
@@ -193,6 +209,13 @@ bool UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 技能系统未实装"));
 		return false;
 	}
+	// 教学点锁定：条件教学点回合只能选择指定行动（HUD 同步禁用其它按钮）
+	if (const EBattleAction LockedAction = GetTutorialLockedPlayerAction(); LockedAction != EBattleAction::None && Action != LockedAction)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 教学点锁定：本回合只能选择行动 %d，拒绝 %d"),
+			(int32)LockedAction, (int32)Action);
+		return false;
+	}
 	if (Action == EBattleAction::BlueAttack && PlayerChargeStacks <= 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::PlayerChooseAction - 蓝攻需要至少 1 层蓄力"));
@@ -209,8 +232,24 @@ bool UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		return false;
 	}
 
+	// 教学战：玩家第一次使用白攻 → 敌方必定同步白攻，触发白白碰撞教学
+	// （教学锁定回合玩家只能蓄力，因此该覆盖只会在自由回合生效）
+	if (IsTutorialBattle() && Action == EBattleAction::WhiteAttack && !bTutorialFirstWhiteAttackUsed)
+	{
+		bTutorialFirstWhiteAttackUsed = true;
+		if (EnemyChosenAction != EBattleAction::WhiteAttack)
+		{
+			EnemyChosenAction = EBattleAction::WhiteAttack;
+			UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayerChooseAction - 教学第一次白攻：强制敌方同步白攻，触发白白碰撞"));
+		}
+	}
+
 	bPlayerChoseAction = true;
 	PlayerLastAction = Action;
+	if (IsTutorialBattle())
+	{
+		bTutorialInitialHintPending = false;
+	}
 	OnBattleStateChanged.Broadcast();
 
 	if (bPlayerExtraTurnPending)
@@ -268,30 +307,142 @@ AEnemy* UBattleComponent::GetBossEnemy() const
 	return BossEnemy.Get();
 }
 
+bool UBattleComponent::IsTutorialBattle() const
+{
+	return BossEnemy.IsValid() && BossEnemy->EnemyID == FName(TEXT("apprentice_cave"));
+}
+
+FText UBattleComponent::GetTutorialHintText() const
+{
+	if (!IsTutorialBattle())
+	{
+		return FText::GetEmpty();
+	}
+	// 碰撞阶段：对拼操作提示
+	if (Phase == EBattlePhase::Clash && !bClashResolved)
+	{
+		return FText::FromString(TEXT("双方使用相同的攻击触发对拼，需要在敌方攻击将要击中的时候点击E格挡/Shift闪避，格挡成功可以造成反击"));
+	}
+	if (Phase != EBattlePhase::ActionSelect || bPlayerChoseAction || bPlayerExtraTurnPending)
+	{
+		return FText::GetEmpty();
+	}
+	// 进入战斗后的首条总提示（仅一次，玩家首次选择行动后清除）
+	if (bTutorialInitialHintPending)
+	{
+		return FText::FromString(TEXT("触发先制攻击可以在战斗开始时直接获得一层蓄力，蓄力层数最高两层，拥有蓄力层数可以使用蓝色攻击，蓝色攻击克制白色攻击，白色攻击克制红色防御，红色防御克制蓝色攻击"));
+	}
+	return TutorialActiveHint;
+}
+
+EBattleAction UBattleComponent::GetTutorialLockedPlayerAction() const
+{
+	// 额外回合按标准规则（仅蓝攻/蓄力），教学锁定只作用于两个蓄力教学点回合
+	if (!IsTutorialBattle() || bPlayerExtraTurnPending || !bTutorialChargeLockActive)
+	{
+		return EBattleAction::None;
+	}
+	// 教学点条件保证玩家蓄力为 0/1 层；兜底：蓄力已达上限时解锁，避免卡死
+	if (PlayerChargeStacks >= GetMaxChargeStacks(true))
+	{
+		return EBattleAction::None;
+	}
+	return EBattleAction::Charge;
+}
+
+bool UBattleComponent::ShouldTriggerTutorialFlee() const
+{
+	if (!IsTutorialBattle() || !BossEnemy.IsValid() || bTutorialFleeTriggered)
+	{
+		return false;
+	}
+	// 两个蓄力教学点都演示过后才允许血量逃跑（引导不被打断）
+	const bool bMomentsDone = bTutorialChargeCapTaught && bTutorialChargeResistTaught;
+	const float MaxHP = BossEnemy->GetMaxHealth();
+	const bool bLowHp = MaxHP > 0.0f && (BossEnemy->CurrentHealth / MaxHP) <= GetRunAwayHPThreshold();
+	// 兜底：教学点迟迟未触发（如玩家层数始终不到 0/1）时按回合上限逃跑，避免软锁
+	const bool bRoundCap = RoundNumber >= 15;
+	return (bMomentsDone && bLowHp) || bRoundCap;
+}
+
+void UBattleComponent::UpdateTutorialDirector()
+{
+	// 教学点 A：玩家蓄力 1 层（首回合除外）→ 敌方红防，锁定蓄力，
+	// 演示"蓄力到上限后若敌方红防，自动强化蓝攻破防"
+	if (RoundNumber > 1 && !bTutorialChargeCapTaught && PlayerChargeStacks == 1)
+	{
+		TutorialForcedEnemyAction = EBattleAction::RedDefense;
+		bTutorialChargeLockActive = true;
+		bTutorialChargeCapTaught = true;
+		TutorialActiveHint = FText::FromString(TEXT("使用蓄力使蓄力层数到达上限，若敌方此时使用红防，则会在完成蓄力后自动对敌方使用蓄力攻击"));
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::UpdateTutorialDirector - 教学点A：蓄力到上限破红防"));
+		return;
+	}
+	// 教学点 B：玩家蓄力 0 层 → 敌方白攻，锁定蓄力，
+	// 演示"蓄力到达 1 层时若敌方白攻，减少受伤并获得额外回合"
+	if (!bTutorialChargeResistTaught && PlayerChargeStacks == 0)
+	{
+		TutorialForcedEnemyAction = EBattleAction::WhiteAttack;
+		bTutorialChargeLockActive = true;
+		bTutorialChargeResistTaught = true;
+		TutorialActiveHint = FText::FromString(TEXT("使用蓄力使蓄力到达一层时，若敌方使用白攻，则我方减少受到伤害并获得额外回合"));
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::UpdateTutorialDirector - 教学点B：蓄力抵抗白攻"));
+		return;
+	}
+	// 非教学点回合：随机 AI、不锁定、无提示
+	TutorialForcedEnemyAction = EBattleAction::None;
+	bTutorialChargeLockActive = false;
+	TutorialActiveHint = FText::GetEmpty();
+}
+
+void UBattleComponent::ResetTutorialDirector()
+{
+	bTutorialInitialHintPending = false;
+	bTutorialChargeCapTaught = false;
+	bTutorialChargeResistTaught = false;
+	bTutorialFirstWhiteAttackUsed = false;
+	bTutorialChargeLockActive = false;
+	TutorialForcedEnemyAction = EBattleAction::None;
+	TutorialActiveHint = FText::GetEmpty();
+}
+
 // ==================== 内部流程（Task 6/7/8 补全） ====================
 
 AEnemy* UBattleComponent::FindBossEnemy() const
 {
+	const TArray<AEnemy*> All = FindBossEnemies();
+	return All.Num() > 0 ? All[0] : nullptr;
+}
+
+TArray<AEnemy*> UBattleComponent::FindBossEnemies() const
+{
+	TArray<AEnemy*> Result;
 	if (!GetWorld())
 	{
-		return nullptr;
+		return Result;
 	}
 	for (TActorIterator<AEnemy> It(GetWorld()); It; ++It)
 	{
 		if (It->ActorHasTag(FName(TEXT("Boss"))))
 		{
-			return *It;
+			Result.Add(*It);
 		}
 	}
-	return nullptr;
+	return Result;
 }
 
-void UBattleComponent::HandleIntroFinished()
+void UBattleComponent::HandleIntroFinished(AActor* FinishedEnemy)
 {
-	if (Phase == EBattlePhase::Idle && BossEnemy.IsValid())
+	AEnemy* Enemy = Cast<AEnemy>(FinishedEnemy);
+	if (!Enemy || Phase != EBattlePhase::Idle)
 	{
-		StartBattle();
+		return;
 	}
+	// 同一关卡可能放置多个 Tag=Boss 敌人：以实际播完入场动画的敌人作为本场战斗目标
+	BossEnemy = Enemy;
+	bBossDefeated = false;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::HandleIntroFinished - 敌人 %s 入场动画结束，开始战斗"), *Enemy->EnemyID.ToString());
+	StartBattle();
 }
 
 void UBattleComponent::EnterBattle()
@@ -304,6 +455,11 @@ void UBattleComponent::EnterBattle()
 	AddCombatMapping();
 	SetupCombatInput();
 	ShowHUD();
+	if (IsTutorialBattle())
+	{
+		// 进入战斗后直接给出一次总提示（玩家首次选择行动后清除）
+		bTutorialInitialHintPending = true;
+	}
 	SetPhase(EBattlePhase::Entering);
 	OnBattleStateChanged.Broadcast();
 
@@ -347,6 +503,17 @@ void UBattleComponent::StartNewRound()
 
 void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 {
+	// 教学导演：条件教学点优先覆盖敌方行动（蓄力破红防 / 蓄力抵抗白攻）
+	if (!bExtraTurn && IsTutorialBattle())
+	{
+		UpdateTutorialDirector();
+		if (TutorialForcedEnemyAction != EBattleAction::None)
+		{
+			EnemyChosenAction = TutorialForcedEnemyAction;
+			return;
+		}
+	}
+
 	if (!bExtraTurn && bForcedEnemyActionEnabled)
 	{
 		EnemyChosenAction = ForcedEnemyAction;
@@ -695,6 +862,13 @@ void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActo
 	Target->ReceiveDamage(Amount, Causer);
 	OnBattleStateChanged.Broadcast();
 
+	// 教学敌人锁血 1：必逃设计，避免魔法师在逃跑剧情前被击杀
+	if (IsTutorialBattle() && Target == BossEnemy.Get() && Target->IsDead())
+	{
+		Target->CurrentHealth = 1.0f;
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ApplyDamageTo - 教学敌人锁血 1（保证必逃）"));
+	}
+
 	if (Target->IsDead())
 	{
 		FinishBattle(Target == BossEnemy.Get());
@@ -736,6 +910,14 @@ void UBattleComponent::EndTurnAndAdvance()
 {
 	if (Phase == EBattlePhase::Ended || bTurnGateOpen)
 	{
+		return;
+	}
+
+	// 教学必逃：脚本播完（T7 碰撞结算后）或血量低于阈值 → 敌方逃跑，不再开新回合
+	if (ShouldTriggerTutorialFlee())
+	{
+		bTutorialFleeTriggered = true;
+		FinishBattle(true, true);
 		return;
 	}
 
@@ -846,7 +1028,9 @@ void UBattleComponent::StartClash(EClashType ClashType)
 
 	const float BlockWindow = GetBlockWindow();
 	const float DodgeWindow = GetDodgeWindow();
-	const float OpenDelay = FMath::Max(0.0f, ClashHitTime - FMath::Max(BlockWindow, DodgeWindow));
+	// 慢放起点 = 两个窗口中较晚打开的那个（min）：慢放一出现，格挡/闪避窗口均已开放，
+	// 立即点击按原 Elapsed 窗口判定即为成功，无需修改输入逻辑
+	const float OpenDelay = FMath::Max(0.0f, ClashHitTime - FMath::Min(BlockWindow, DodgeWindow));
 
 	GetWorld()->GetTimerManager().SetTimer(ClashOpenTimer, this, &UBattleComponent::OpenClashWindow, OpenDelay, false);
 	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashHitTime, false);
@@ -857,6 +1041,7 @@ void UBattleComponent::StartClash(EClashType ClashType)
 void UBattleComponent::OpenClashWindow()
 {
 	bClashWindowOpen = true;
+	ApplyClashTimeDilation();
 }
 
 void UBattleComponent::OnClashImpact()
@@ -1004,6 +1189,7 @@ void UBattleComponent::ClearClashTimers()
 		GetWorld()->GetTimerManager().ClearTimer(ClashImpactTimer);
 	}
 	bClashWindowOpen = false;
+	RestoreTimeDilation();
 }
 
 void UBattleComponent::OnBlockPressed()
@@ -1031,6 +1217,8 @@ void UBattleComponent::OnBlockPressed()
 		return;
 	}
 	LastClashInputTime = Now;
+	// 玩家点击格挡/闪避：立即恢复正常时间流速（慢放结束）
+	RestoreTimeDilation();
 
 	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::OnBlockPressed - Elapsed=%.3f HitTime=%.3f Window=%.3f"),
 		Elapsed, ClashHitTime, GetBlockWindow());
@@ -1061,6 +1249,8 @@ void UBattleComponent::OnDodgePressed()
 		return;
 	}
 	LastClashInputTime = Now;
+	// 玩家点击格挡/闪避：立即恢复正常时间流速（慢放结束）
+	RestoreTimeDilation();
 
 	// 用"相对碰撞开始的经过时间"与命中时间比较，不能拿世界绝对时间与相对时间比
 	const float Elapsed = Now - ClashStartTime;
@@ -2364,7 +2554,7 @@ void UBattleComponent::SheathePlayerWeapon()
 	}
 }
 
-void UBattleComponent::FinishBattle(bool bPlayerWon)
+void UBattleComponent::FinishBattle(bool bPlayerWon, bool bFlee)
 {
 	if (Phase == EBattlePhase::Ended)
 	{
@@ -2373,7 +2563,10 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 
 	SetPhase(EBattlePhase::Ended);
 	ClearClashTimers();
-	PlayDeathAnimations(bPlayerWon);
+	if (!bFlee)
+	{
+		PlayDeathAnimations(bPlayerWon);
+	}
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
@@ -2382,11 +2575,16 @@ void UBattleComponent::FinishBattle(bool bPlayerWon)
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
-	ShowResultHUD(bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败")));
+	FText ResultText = bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败"));
+	if (bFlee)
+	{
+		ResultText = FText::FromString(TEXT("敌方逃跑了"));
+	}
+	ShowResultHUD(ResultText);
 	OnBattleStateChanged.Broadcast();
 
-	const float Delay = bPlayerWon ? 2.0f : DefeatRestartDelay;
-	if (bPlayerWon)
+	const float Delay = (bPlayerWon || bFlee) ? 2.0f : DefeatRestartDelay;
+	if (bPlayerWon || bFlee)
 	{
 		GetWorld()->GetTimerManager().SetTimer(EndDelayTimer, this, &UBattleComponent::HandleVictoryCleanup, Delay, false);
 	}
@@ -2453,6 +2651,7 @@ void UBattleComponent::ResetForRetry()
 	PlayerChargeStacks = 0;
 	EnemyChargeStacks = 0;
 	RoundNumber = 0;
+	bTutorialFleeTriggered = false;
 	bPlayerChoseAction = false;
 	bPlayerExtraTurnPending = false;
 	bEnemyExtraTurnPending = false;
@@ -2462,6 +2661,7 @@ void UBattleComponent::ResetForRetry()
 	ClearPendingHits();
 	bTurnGateOpen = false;
 	GatedMontages.Reset();
+	ResetTutorialDirector();
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);
@@ -2469,6 +2669,7 @@ void UBattleComponent::ResetForRetry()
 	}
 	LastClashInputTime = -1.0f;
 	EndHitStop();
+	RestoreTimeDilation();
 }
 
 float UBattleComponent::GetPlayerWhiteDamage() const
@@ -2563,6 +2764,64 @@ float UBattleComponent::GetBlockFailLockout() const
 	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
 	const FCombatParamsRow& P = Params ? *Params : Defaults;
 	return P.BlockFailLockoutSeconds;
+}
+
+float UBattleComponent::GetRunAwayHPThreshold() const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+	const FCombatParamsRow& P = Params ? *Params : Defaults;
+	return P.RunAwayHPThreshold;
+}
+
+float UBattleComponent::GetClashTimeDilation() const
+{
+	const FCombatParamsRow Defaults;
+	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
+	const FCombatParamsRow& P = Params ? *Params : Defaults;
+	return P.ClashTimeDilation;
+}
+
+void UBattleComponent::ApplyClashTimeDilation()
+{
+	// 慢放仅序章教学战生效：正式战斗（如 Satan）不使用时间流速修正
+	if (!IsTutorialBattle())
+	{
+		return;
+	}
+	const float Dilation = GetClashTimeDilation();
+	if (Dilation <= 0.0f || bTimeDilationApplied)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	AWorldSettings* Settings = World ? World->GetWorldSettings() : nullptr;
+	if (!Settings)
+	{
+		return;
+	}
+	OriginalTimeDilation = Settings->TimeDilation;
+	Settings->SetTimeDilation(Dilation);
+	bTimeDilationApplied = true;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ApplyClashTimeDilation - 世界时间流速 %.3f（同色碰撞可格挡慢放）"), Dilation);
+}
+
+void UBattleComponent::RestoreTimeDilation()
+{
+	if (!bTimeDilationApplied)
+	{
+		return;
+	}
+	if (UWorld* World = GetWorld())
+	{
+		if (AWorldSettings* Settings = World->GetWorldSettings())
+		{
+			Settings->SetTimeDilation(OriginalTimeDilation);
+		}
+	}
+	bTimeDilationApplied = false;
+	OriginalTimeDilation = 1.0f;
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::RestoreTimeDilation - 世界时间流速恢复正常"));
 }
 
 UCombatFormulaSubsystem* UBattleComponent::GetCombatSubsystem() const

@@ -47,6 +47,7 @@ void UCombatHUDWidget::NativeConstruct()
 
 	BindHoverEffects();
 	HideEnemyActionHint();
+	UpdateTutorialHint();
 }
 
 void UCombatHUDWidget::NativeDestruct()
@@ -130,10 +131,26 @@ void UCombatHUDWidget::RefreshAll()
 		EnemyChargeText->SetText(FText::Format(FText::FromString(TEXT("蓄力 {0}")), FText::AsNumber(Battle->GetEnemyChargeStacks())));
 	}
 
+	UpdateTutorialHint();
+
 	// 额外回合：只允许 蓝攻/蓄力；技能 v1 始终禁用
 	const bool bExtra = Battle->IsPlayerExtraTurn();
 	const bool bCanBlueAttack = Battle->GetPlayerChargeStacks() > 0;
 	const bool bCanCharge = Battle->GetPlayerChargeStacks() < Battle->GetPlayerMaxChargeStacks();
+
+	// 教学点锁定：条件教学点回合只开放指定行动按钮，其余锁定
+	const EBattleAction LockedAction = Battle->GetTutorialLockedPlayerAction();
+	if (LockedAction != EBattleAction::None)
+	{
+		SetChoiceButtonsEnabled(
+			LockedAction == EBattleAction::RedDefense,
+			LockedAction == EBattleAction::BlueAttack,
+			LockedAction == EBattleAction::WhiteAttack,
+			LockedAction == EBattleAction::Charge,
+			false);
+		return;
+	}
+
 	SetChoiceButtonsEnabled(!bExtra, bCanBlueAttack, !bExtra, bCanCharge, false);
 }
 
@@ -246,6 +263,40 @@ void UCombatHUDWidget::HideEnemyActionHint()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(EnemyHintTimer);
+	}
+}
+
+void UCombatHUDWidget::UpdateTutorialHint()
+{
+	if (!TutorialHintText)
+	{
+		return;
+	}
+
+	bool bShow = false;
+	bool bExtraTurnSelect = false;
+	if (Battle.IsValid() && Battle->IsTutorialBattle())
+	{
+		const EBattlePhase Phase = Battle->GetBattlePhase();
+		// 行动选择阶段：显示当前教学点；玩家额外回合显示"只能蓝攻/蓄力"引导
+		// 碰撞阶段：显示格挡/闪避操作引导
+		bExtraTurnSelect = Battle->IsPlayerExtraTurn() && !Battle->HasPlayerChosenAction();
+		bShow = ((Phase == EBattlePhase::ActionSelect && !Battle->HasPlayerChosenAction()
+					&& (bExtraTurnSelect || !Battle->IsPlayerExtraTurn()))
+			|| (Phase == EBattlePhase::Clash && !Battle->IsClashResolved()));
+	}
+
+	const FText HintText = bExtraTurnSelect
+		? FText::FromString(TEXT("额外回合：只能选择蓝攻或蓄力！"))
+		: (Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty());
+	if (bShow && !HintText.IsEmpty())
+	{
+		TutorialHintText->SetText(HintText);
+		TutorialHintText->SetVisibility(ESlateVisibility::Visible);
+	}
+	else
+	{
+		TutorialHintText->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 

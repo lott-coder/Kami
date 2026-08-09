@@ -71,6 +71,10 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> EnemyActionHintText;
 
+	/** 教学引导提示文字（WBP 中可选，缺失时教学提示静默跳过） */
+	UPROPERTY(meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> TutorialHintText;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> RedDefenseButton;
 
@@ -138,6 +142,7 @@ private:
 	void ShowEnemyActionHint();
 	void SetHintText(const FText& Text);
 	void HideEnemyActionHint();
+	void UpdateTutorialHint();
 	void ChooseAction(EBattleAction Action);
 
 	UFUNCTION()

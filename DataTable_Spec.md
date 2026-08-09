@@ -1,8 +1,8 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.12
-> **日期：** 2026-08-05
-> **关联策划案：** GDD_Outline.md v0.11
+> **版本：** v0.20
+> **日期：** 2026-08-09
+> **关联策划案：** GDD_Outline.md v0.26
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -88,7 +88,7 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 |----|--------|-----------|----------|------|------|
 | 01 | `DT_CombatParams` | `FCombatParamsRow` | — | 1（单例） | 战斗全局数值平衡参数 |
 | 02 | `DT_CharacterConfig` | `FCharacterConfigRow` | `CharacterClass` | 5 | 可玩角色基础属性 |
-| 03 | `DT_EnemyConfig` | `FEnemyConfigRow` | `EnemyClass` | 8 | 敌人类型与 AI 行为 |
+| 03 | `DT_EnemyConfig` | `FEnemyConfigRow` | `EnemyClass` | 9 | 敌人类型与 AI 行为 |
 | 04 | `DT_WeaponConfig` | `FWeaponConfigRow` | `WeaponClass` | 4（目标8-12） | 武器类型与战斗修正 |
 | 05 | `DT_MaskConfig` | `FMaskConfigRow` | — | 5（目标15-20） | 面具类型与稀有度效果 |
 | 06 | `DT_SmokeConfig` | `FSmokeConfigRow` | — | 9 | 烟分类与力量印记 |
@@ -134,15 +134,14 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | `ClashInputCooldown` | `float` | 0.15 | GDD §5.2.5 | 格挡/闪避输入冷却（秒），防连按，[PLAYTEST] |
 | `RedDefenseLeadTime` | `float` | 0.3 | GDD §5.2.3 | 红防举剑标记缺失时的回落提前量（秒），[PLAYTEST] |
 | `HitStopDuration` | `float` | 0.12 | GDD §5.2.5 | 格挡/闪避/红防反击成功停帧时长（秒），0 关闭，[PLAYTEST] |
+| `ClashTimeDilation` | `float` | 0.05 | GDD §5.2.5 | 仅序章教学战：同色碰撞可格挡期间的世界时间流速（0.05=慢放，0=关闭），玩家输入后恢复，[PLAYTEST] |
 | `CritDamageMultiplier` | `float` | 1.5 | GDD §5.2.7 | 蓝攻暴击伤害倍率，[PLAYTEST] |
 | `DodgeBuffDamageScale` | `float` | 1.2 | GDD §5.2.5 | 闪避成功后下回合伤害倍率，[PLAYTEST] |
 | `DodgeBuffTurns` | `int32` | 1 | GDD §5.2.5 | 闪避Buff持续回合数 |
-| `FirstStrikeDamageScale` | `float` | 0.3 | GDD §5.2.1 | 玩家先制攻击伤害比例（相对白攻基础），[PLAYTEST] |
 | `GoldAttackDamageMin` | `float` | 25.0 | GDD §5.2.5 | 金色攻击（反击）最小伤害，[PLAYTEST] |
 | `GoldAttackDamageMax` | `float` | 35.0 | GDD §5.2.5 | 金色攻击（反击）最大伤害，[PLAYTEST] |
-| `FirstStrikeDisableChargeTurns` | `int32` | 1 | GDD §5.2.7 | 先制攻击使敌人禁用蓄力的回合数 |
 | `PlayerDefaultHP` | `float` | 100.0 | GDD §5.2.7 | 玩家初始 HP（用于新角色默认值） |
-| `RunAwayHPThreshold` | `float` | 0.3 | §5.2.1 类比 | 教学战斗敌人逃跑血量百分比阈值，[待定] |
+| `RunAwayHPThreshold` | `float` | 0.3 | §5.2.1 类比 | 教学战斗敌人逃跑血量百分比阈值（两个蓄力教学点均演示后触发；15 回合上限兜底），[待定] |
 | `Movement_BackwardSpeedScale` | `float` | 0.6 | GDD §5.1 | 后退速度倍率 |
 
 > **注意：** WalkSpeed/SprintSpeed 已迁移至 DT_CharacterConfig（每个角色可独立设置移动速度）。
@@ -233,7 +232,6 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
   + DT_SkillTreeConfig 已解锁白攻被动
 
 金色攻击（反击）伤害 = Rand(GoldAttackDamageMin~Max) × (1 + CounterDmgBonus)
-先制伤害 = 白攻基础伤害 × FirstStrikeDamageScale（玩家先制时）
 ```
 
 #### 4.4.2 三层数据流 —— 默认值、配置值与运行时状态
@@ -493,7 +491,7 @@ AttributeComp->AddModifier(AttributeNames::WhiteAtkBonus(), Multiply, 1.2f, 1);
 | 资产名 | `DT_EnemyConfig` |
 | 结构体 | `FEnemyConfigRow` |
 | 行 ID | 敌人英文类型名 |
-| 行数 | ~8 |
+| 行数 | ~9 |
 | 来源 | GDD §7.2 敌人类型与分布 |
 
 ### 5.2 新增枚举
@@ -547,7 +545,8 @@ enum class EEnemyTier : uint8
 
 | RowName | DisplayName | Tier | MaxHP | AIPreference | DropSmoke | SpawnAreas | GDD §7.2 |
 |---------|-------------|------|-------|-------------|-----------|------------|----------|
-| `inept` | 无能力者 | Tutorial | 50 | PreferWhite | `hunter_smoke` | `hole,town_outskirts` | 第1行 |
+| `inept` | 无能力者 | Tutorial | 50 | PreferWhite | `hunter_smoke` | `town_outskirts` | 第1行 |
+| `apprentice_cave` | 低级魔法师（序章教学） | Tutorial | 180 | Balanced | —（无掉落） | `hole` | 序章教学（完整教学、必逃） |
 | `apprentice` | 低级魔法师 | Normal | 80 | Balanced | `apprentice_smoke` | `town,market` | 第2行 |
 | `adept` | 高级魔法师 | Elite | 150 | Adaptive | `adept_smoke` | `market,mansion` | 第3行 |
 | `commander` | 魔法师统领 | Boss | 500 | Adaptive | `commander_smoke` | `mansion` | 第4行 |
@@ -555,6 +554,8 @@ enum class EEnemyTier : uint8
 | `demon` | 恶魔 | Elite | 350 | Random | `demon_smoke` | `hell` | 第6行 |
 | `satan` | 撒旦 | FinalBoss | `[待定]` | Adaptive | `satan_smoke` | `hell` | 第7行 |
 | `friendly_creature` | 友善生物 | Tutorial | 20 | Balanced | `healing_smoke` | `all_areas_hidden` | 第8行 |
+
+> **序章教学（2026-08-09 定案）：** 洞穴仅此一场教学战斗；`apprentice_cave` 无掉落（烟仅在击败敌人时掉落，该敌必逃）；教学脚本 v1 由代码按行 ID 内置（`UBattleComponent` / `UEnemyCombatAIComponent`），后续可升级为表驱动。`apprentice` 对应 C++ 类 `AApprentice`（BP_Apprentice）；`apprentice_cave` 对应 `AApprenticeCave`（BP_Apprentice_Cave，EnemyID 自动识别教学）。
 
 ---
 
@@ -1234,4 +1235,12 @@ DT_CombatParams (单例，无外键)
 > | v0.9 | 2026-08-05 | 新增 13 号表 `DT_CombatAnimConfig`（`FCombatAnimRow` + `FAnimRef`，一行一实体，19 个动作列）；回落约定：`BlockFail`/`DodgeFail`/`ChargeInterrupted` 空 = 播 `Hurt`；同步 GDD v0.9 |
 > | v0.10 | 2026-08-06 | 参数表新增 `ClashInputCooldown`/`RedDefenseLeadTime`/`HitStopDuration`；13 号表新增 `BlockedReaction` 列（被格挡动画）；同步 GDD v0.11 |
 > | v0.11 | 2026-08-06 | 命名修订：`ClashTelegraphBlue/White` → `ClashAttackBlue/White`（碰撞攻击）；命中事件 `ClashTelegraphHit` → `ClashAttackHit`；计时参数 `ClashTelegraphTime` → `ClashAttackTime` |
+> | v0.13 | 2026-08-09 | 序章教学敌人定案：新增 `apprentice_cave` 行（Tutorial/180HP/无掉落/洞穴）、`inept` 洞穴移除（SpawnAreas=town_outskirts）、敌人表行数 8→9；同步 GDD v0.17 |
+> | v0.14 | 2026-08-09 | 先制规则简化：玩家/敌方先制效果一致（先制方开局 1 层蓄力），`FirstStrikeDamageScale` / `FirstStrikeDisableChargeTurns` 标记废弃；同步 GDD v0.18 |
+> | v0.15 | 2026-08-09 | 移除废弃的 `FirstStrikeDamageScale` / `FirstStrikeDisableChargeTurns`（C++ `FCombatParamsRow` 同步移除）；同步 GDD v0.19 |
+> | v0.16 | 2026-08-09 | 新增敌人 C++ 类 `AApprentice` / `AApprenticeCave`（分别对应 `apprentice` / `apprentice_cave` 行，BP_Apprentice / BP_Apprentice_Cave 的基类） |
+> | v0.17 | 2026-08-09 | 参数表新增 `ClashTimeDilation`（同色碰撞可格挡慢放 0.05，0=关闭）；教学路线锁定说明；同步 GDD v0.20 |
+> | v0.18 | 2026-08-09 | `ClashTimeDilation` 范围限定：仅序章教学战生效；同步 GDD v0.21 |
+> | v0.19 | 2026-08-09 | `RunAwayHPThreshold` 语义修订：仅教学脚本未启用时兜底，脚本进行中不触发（9 回合完整教学）；同步 GDD v0.23 |
+> | v0.20 | 2026-08-09 | 教学引导重构：`RunAwayHPThreshold` 改为"两个蓄力教学点均演示后触发 + 15 回合兜底"；同步 GDD v0.25 |
 > | v0.12 | 2026-08-06 | 13 号表新增 `ClashAttackBlueSections`/`ClashAttackWhiteSections`：碰撞攻击随机 Section（竖线分隔）；同步 GDD v0.12 |

@@ -169,17 +169,34 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Battle")
 	bool HasPlayerChosenAction() const { return bPlayerChoseAction; }
 
+	/** 是否为序章教学战斗（BossEnemy.EnemyID == "apprentice_cave"） */
+	UFUNCTION(BlueprintPure, Category = "Battle")
+	bool IsTutorialBattle() const;
+
+	/** 教学战斗当前引导提示（行动选择阶段显示当前教学点；碰撞阶段显示格挡/闪避提示） */
+	UFUNCTION(BlueprintPure, Category = "Battle")
+	FText GetTutorialHintText() const;
+
+	/** 教学点锁定：条件教学点回合唯一允许的玩家行动（蓄力）；None = 不锁定（额外回合/锁定行动非法时回落不锁） */
+	UFUNCTION(BlueprintPure, Category = "Battle")
+	EBattleAction GetTutorialLockedPlayerAction() const;
+
+	UFUNCTION(BlueprintPure, Category = "Battle")
+	bool IsClashResolved() const { return bClashResolved; }
+
 	/** 命中通知回调（由 UAnimNotify_CombatDamage 调用；事件驱动，战斗组件外部入口） */
 	void OnHitNotify(ABaseCharacter* Attacker, FName EventName);
 
 protected:
 	UFUNCTION()
-	void HandleIntroFinished();
+	void HandleIntroFinished(AActor* FinishedEnemy);
 
 private:
 	// ==================== 流程 ====================
 
 	AEnemy* FindBossEnemy() const;
+	/** 查找场景中所有 Tag=Boss 的敌人（同一关卡可存在多个 Boss/教学怪，入场结束后按完成者开战） */
+	TArray<AEnemy*> FindBossEnemies() const;
 	void EnterBattle();
 	void StartNewRound();
 	void ChooseEnemyAction(bool bExtraTurn);
@@ -190,10 +207,16 @@ private:
 	void ApplyResolution(const FTurnResolution& Resolution);
 	void ApplyDamageTo(ABaseCharacter* Target, float Amount, AActor* Causer);
 	void EndTurnAndAdvance();
-	void FinishBattle(bool bPlayerWon);
+	void FinishBattle(bool bPlayerWon, bool bFlee = false);
 	void HandleVictoryCleanup();
 	void HandleDefeatRestart();
 	void ResetForRetry();
+	/** 教学导演：每回合开始决定条件教学点（敌方行动覆盖 + 蓄力锁定 + 提示）；非教学战/额外回合跳过 */
+	void UpdateTutorialDirector();
+	/** 重置教学导演状态（失败重开时调用） */
+	void ResetTutorialDirector();
+	/** 教学必逃判定：脚本播完 或 敌方血量 <= RunAwayHPThreshold（已触发/非教学返回 false） */
+	bool ShouldTriggerTutorialFlee() const;
 
 	// ==================== 同色碰撞 ====================
 
@@ -336,6 +359,12 @@ private:
 	float GetDodgeWindow() const;
 	float GetClashInputCooldown() const;
 	float GetBlockFailLockout() const;
+	float GetRunAwayHPThreshold() const;
+	float GetClashTimeDilation() const;
+	/** 同色碰撞可格挡期间启用世界时间慢放（0.05）；已慢放则跳过 */
+	void ApplyClashTimeDilation();
+	/** 恢复世界时间流速（玩家点击格挡/闪避、碰撞结束、战斗清理时调用） */
+	void RestoreTimeDilation();
 	UCombatFormulaSubsystem* GetCombatSubsystem() const;
 	UAttributeComponent* GetPlayerAttr() const;
 	UAttributeComponent* GetEnemyAttr() const;
@@ -364,6 +393,23 @@ private:
 	bool bPlayerExtraTurnPending = false;
 	bool bEnemyExtraTurnPending = false;
 	bool bBossDefeated = false;
+	bool bTutorialFleeTriggered = false;
+	/** 教学引导：进入战斗后的首条总提示（玩家首次选择行动后清除） */
+	bool bTutorialInitialHintPending = false;
+	/** 教学点：蓄力到上限破红防（玩家 1 层 + 敌方红防） */
+	bool bTutorialChargeCapTaught = false;
+	/** 教学点：蓄力抵抗白攻获得额外回合（玩家 0 层 + 敌方白攻） */
+	bool bTutorialChargeResistTaught = false;
+	/** 教学战玩家是否已使用过白攻（第一次使用白攻时强制敌方同步白攻，触发白白碰撞教学） */
+	bool bTutorialFirstWhiteAttackUsed = false;
+	/** 教学点进行中：本回合锁定玩家只能使用蓄力 */
+	bool bTutorialChargeLockActive = false;
+	/** 教学导演覆盖的敌方行动（None = 随机 AI） */
+	EBattleAction TutorialForcedEnemyAction = EBattleAction::None;
+	/** 当前教学点提示文字（非教学点回合为空） */
+	FText TutorialActiveHint;
+	bool bTimeDilationApplied = false;
+	float OriginalTimeDilation = 1.0f;
 
 	bool bClashWindowOpen = false;
 	bool bClashResolved = false;

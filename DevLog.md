@@ -59,6 +59,15 @@
 14. 教学引导重构（GDD v0.25 / DataTable_Spec v0.20）：按用户要求取消逐回合按键锁定与固定敌方脚本（`UEnemyCombatAIComponent` 恢复随机 AI，脚本/路线系统移除）；改为——①进入战斗后给出一次总提示（先制/蓄力上限/三色克制）；②两个条件教学点：玩家蓄力 1 层（首回合除外）→ 敌方强制红防 + 锁定蓄力（满蓄自动强化蓝攻破红防）；玩家蓄力 0 层 → 敌方强制白攻 + 锁定蓄力（0→1 层抵抗 + 额外回合）；③同色碰撞触发时给出格挡/闪避操作提示；④必逃改为两个教学点均演示后按 `RunAwayHPThreshold` 触发，15 回合上限兜底防软锁；编译通过（-NoUba）。
 15. Bug修复：教学战入场动画播完编辑器崩溃（EXCEPTION_ACCESS_VIOLATION 读取 0x160）——调用栈 `NativeConstruct → UpdateTutorialHint → GetTutorialHintText → IsTutorialBattle`。根因：重构提示逻辑时把 `Battle->GetTutorialHintText()` 移出了 `Battle.IsValid()` 保护，而 Widget 的 `NativeConstruct` 先于 `BindToBattle` 执行，此时 `Battle` 为空弱引用，解引用空指针。修复：调用前判空（`Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty()`）；编译通过（-NoUba）。
 16. 新需求（GDD v0.26）：教学战玩家第一次使用白攻时必定触发白白碰撞——`PlayerChooseAction` 检测首次白攻（`bTutorialFirstWhiteAttackUsed`）并覆盖敌方已选行动为白攻；教学战内仅一次，失败重开重置；编译通过（-NoUba）。
+17. 新需求（2026-08-10）：教学提示背景 + 动画——`UCombatHUDWidget` 新增 `TutorialHintPanel`（BindWidgetOptional）与 4 个可选 Widget Animation 绑定（In / TextIn / TextOut / Out）：背景从右向左展开 → 文字渐显；玩家行动后仅文字淡出（背景保持），新回合无提示或战斗结束才完整收缩退出；动画缺失回退瞬时显隐；时长与曲线全部由 WBP 动画控制（C++ 不硬编码）；编译通过（-NoUba）。
+18. Bug修复：用户只制作 `TutorialHintInAnim` 且使用平移变换入场，PIE 中提示不显示——根因：`ShowTutorialHint` 在播放前把面板预设为"隐形起点"（Scale 0.01 / Opacity 0 / 文字 Opacity 0），假设入场动画会把这些属性动画回 1；平移动画从不触碰透明度和缩放，导致面板全程保持全透明。修复：不再预设隐形起点（起点/终点完全由 WBP 动画关键帧定义），新增 `OnTutorialHintInFinished` 在入场动画结束后强制对齐到完全可见（Scale 1 / Opacity 1 / 文字 Opacity 1），兼容平移/缩放/淡入任意组合；编译通过（-NoUba）。
+19. 需求调整（2026-08-10）：动画改动全部放在编辑器内部——移除 C++ 对渲染数值的所有预设与对齐（Scale / Opacity / Pivot 起点预设、`OnTutorialHintInFinished` 结束强制对齐、折叠时的数值复位），C++ 只负责可见性切换与播放/停止动画；起点/终点/曲线完全由 WBP 关键帧定义；编译通过（-NoUba）。
+20. 需求调整（2026-08-10）：取消"连续提示背景跨回合保留"——玩家行动后文字与背景一起 Out（完整退出），进入有提示的回合再整体 In；移除 `TutorialHintTextInAnim` / `TutorialHintTextOutAnim` 绑定与 `HideTutorialHintTextOnly` 逻辑，只保留 `TutorialHintInAnim` / `TutorialHintOutAnim`；编译通过（-NoUba）。
+21. 新需求（2026-08-10）：碰撞提示（回合中触发）配置专用入场动画 `TutorialHintClashInAnim`——提示框从屏幕左侧出现；`ShowTutorialHint` 按当前阶段（Clash 且未结算）选择碰撞动画，未配置时回退普通 `TutorialHintInAnim`，退出统一走 `TutorialHintOutAnim`；编译通过（-NoUba）。
+22. 新需求（2026-08-10）：碰撞提示新增专用退出动画 `TutorialHintClashOutAnim`——提示框向屏幕左侧消失；`HideTutorialHintFull` 按 `bCurrentHintIsClash` 选择退出动画（未配置时回退 `TutorialHintOutAnim`），两个退出动画共用 `OnTutorialHintOutFinished` 折叠回调；编译通过（-NoUba）。
+23. 需求（2026-08-10）：教学提示文案分段——开场总提示、教学点 A/B、碰撞提示的文案用 `\n` 拆成多行（段落之间如需空行用 `\n\n`）；配合 WBP 自动换行 + 面板固定宽度显示；编译通过（-NoUba）。
+24. 需求（2026-08-10）：提示文案术语调整（用户手动修改）——"蓝攻/白攻/红防"改为教学向表述"蓄力攻击/普通攻击/防御"，段落间用 `\n\n` 空行分段；重新编译通过（-NoUba）。
+25. 架构重构（2026-08-10）：教学系统独立为 `UTutorialDirectorComponent`（UActorComponent，挂在教学怪上，EnemyID 自动启用）——教学决策（教学点触发/敌方行动覆盖/蓄力锁定/提示文案/必逃判定/首次白攻碰撞）全部迁入导演；`UBattleComponent` 瘦身为"调用 + 执行"（锁血/逃跑/提示转发），保留 `bTutorialFleeTriggered` 防重入；行为与重构前一致；编译通过（-NoUba）。
 
 **结果/解决方案：** 教学引导重构为"开场总提示一次 + 两个条件教学点（蓄力 1 层/敌方红防 → 满蓄破防；蓄力 0 层/敌方白攻 → 抵抗+额外回合）+ 首次白攻必定白白碰撞 + 碰撞提示"，玩家自由出招、敌方随机 AI；`apprentice_cave`（Tutorial/180HP/BaseDamageScale 0.4/无掉落/SpawnAreas=hole）；教学锁血 1；必逃在两个教学点完成后按血量阈值触发，15 回合兜底。C++ 侧全部落地并通过编译；编辑器侧资产（DT 行、BP_Apprentice/BP_Apprentice_Cave/ABP、蒙太奇、WBP 绑定、Level Sequence）由用户手动完成。
 

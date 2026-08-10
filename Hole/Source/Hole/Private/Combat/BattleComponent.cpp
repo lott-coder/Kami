@@ -2,6 +2,7 @@
 
 #include "Combat/BattleComponent.h"
 #include "Combat/EnemyCombatAIComponent.h"
+#include "Combat/TutorialDirectorComponent.h"
 #include "UI/CombatHUDWidget.h"
 #include "UI/BattleResultHUDWidget.h"
 #include "Character/Role.h"
@@ -163,6 +164,7 @@ void UBattleComponent::StartBattle()
 	}
 
 	EnemyAI = BossEnemy->FindComponentByClass<UEnemyCombatAIComponent>();
+	TutorialDirector = BossEnemy->FindComponentByClass<UTutorialDirectorComponent>();
 
 	// 序章教学战：主角突袭魔法师 → 玩家先制（与敌方先制效果一致：先制方开局 1 层蓄力，无其它效果）
 	if (IsTutorialBattle())
@@ -232,12 +234,11 @@ bool UBattleComponent::PlayerChooseAction(EBattleAction Action)
 		return false;
 	}
 
-	// 教学战：玩家第一次使用白攻 → 敌方必定同步白攻，触发白白碰撞教学
-	// （教学锁定回合玩家只能蓄力，因此该覆盖只会在自由回合生效）
-	if (IsTutorialBattle() && Action == EBattleAction::WhiteAttack && !bTutorialFirstWhiteAttackUsed)
+	// 教学导演：清除首条总提示；教学战内第一次白攻 → 覆盖敌方行动为白攻，触发白白碰撞
+	if (TutorialDirector.IsValid())
 	{
-		bTutorialFirstWhiteAttackUsed = true;
-		if (EnemyChosenAction != EBattleAction::WhiteAttack)
+		if (TutorialDirector->OnPlayerChoseAction(Action, bPlayerExtraTurnPending)
+			&& EnemyChosenAction != EBattleAction::WhiteAttack)
 		{
 			EnemyChosenAction = EBattleAction::WhiteAttack;
 			UE_LOG(LogTemp, Log, TEXT("UBattleComponent::PlayerChooseAction - 教学第一次白攻：强制敌方同步白攻，触发白白碰撞"));
@@ -246,10 +247,6 @@ bool UBattleComponent::PlayerChooseAction(EBattleAction Action)
 
 	bPlayerChoseAction = true;
 	PlayerLastAction = Action;
-	if (IsTutorialBattle())
-	{
-		bTutorialInitialHintPending = false;
-	}
 	OnBattleStateChanged.Broadcast();
 
 	if (bPlayerExtraTurnPending)
@@ -314,96 +311,29 @@ bool UBattleComponent::IsTutorialBattle() const
 
 FText UBattleComponent::GetTutorialHintText() const
 {
-	if (!IsTutorialBattle())
-	{
-		return FText::GetEmpty();
-	}
-	// 碰撞阶段：对拼操作提示
-	if (Phase == EBattlePhase::Clash && !bClashResolved)
-	{
-		return FText::FromString(TEXT("双方使用相同的攻击触发对拼，需要在敌方攻击将要击中的时候点击E格挡/Shift闪避，格挡成功可以造成反击"));
-	}
-	if (Phase != EBattlePhase::ActionSelect || bPlayerChoseAction || bPlayerExtraTurnPending)
-	{
-		return FText::GetEmpty();
-	}
-	// 进入战斗后的首条总提示（仅一次，玩家首次选择行动后清除）
-	if (bTutorialInitialHintPending)
-	{
-		return FText::FromString(TEXT("触发先制攻击可以在战斗开始时直接获得一层蓄力，蓄力层数最高两层，拥有蓄力层数可以使用蓝色攻击，蓝色攻击克制白色攻击，白色攻击克制红色防御，红色防御克制蓝色攻击"));
-	}
-	return TutorialActiveHint;
+	return TutorialDirector.IsValid()
+		? TutorialDirector->GetTutorialHintText(Phase, bClashResolved, bPlayerChoseAction, bPlayerExtraTurnPending)
+		: FText::GetEmpty();
 }
 
 EBattleAction UBattleComponent::GetTutorialLockedPlayerAction() const
 {
 	// 额外回合按标准规则（仅蓝攻/蓄力），教学锁定只作用于两个蓄力教学点回合
-	if (!IsTutorialBattle() || bPlayerExtraTurnPending || !bTutorialChargeLockActive)
+	if (!IsTutorialBattle() || bPlayerExtraTurnPending || !TutorialDirector.IsValid())
 	{
 		return EBattleAction::None;
 	}
-	// 教学点条件保证玩家蓄力为 0/1 层；兜底：蓄力已达上限时解锁，避免卡死
-	if (PlayerChargeStacks >= GetMaxChargeStacks(true))
-	{
-		return EBattleAction::None;
-	}
-	return EBattleAction::Charge;
+	return TutorialDirector->GetLockedPlayerAction(PlayerChargeStacks, GetMaxChargeStacks(true));
 }
 
 bool UBattleComponent::ShouldTriggerTutorialFlee() const
 {
-	if (!IsTutorialBattle() || !BossEnemy.IsValid() || bTutorialFleeTriggered)
+	if (!TutorialDirector.IsValid() || !BossEnemy.IsValid() || bTutorialFleeTriggered)
 	{
 		return false;
 	}
-	// 两个蓄力教学点都演示过后才允许血量逃跑（引导不被打断）
-	const bool bMomentsDone = bTutorialChargeCapTaught && bTutorialChargeResistTaught;
-	const float MaxHP = BossEnemy->GetMaxHealth();
-	const bool bLowHp = MaxHP > 0.0f && (BossEnemy->CurrentHealth / MaxHP) <= GetRunAwayHPThreshold();
-	// 兜底：教学点迟迟未触发（如玩家层数始终不到 0/1）时按回合上限逃跑，避免软锁
-	const bool bRoundCap = RoundNumber >= 15;
-	return (bMomentsDone && bLowHp) || bRoundCap;
-}
-
-void UBattleComponent::UpdateTutorialDirector()
-{
-	// 教学点 A：玩家蓄力 1 层（首回合除外）→ 敌方红防，锁定蓄力，
-	// 演示"蓄力到上限后若敌方红防，自动强化蓝攻破防"
-	if (RoundNumber > 1 && !bTutorialChargeCapTaught && PlayerChargeStacks == 1)
-	{
-		TutorialForcedEnemyAction = EBattleAction::RedDefense;
-		bTutorialChargeLockActive = true;
-		bTutorialChargeCapTaught = true;
-		TutorialActiveHint = FText::FromString(TEXT("使用蓄力使蓄力层数到达上限，若敌方此时使用红防，则会在完成蓄力后自动对敌方使用蓄力攻击"));
-		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::UpdateTutorialDirector - 教学点A：蓄力到上限破红防"));
-		return;
-	}
-	// 教学点 B：玩家蓄力 0 层 → 敌方白攻，锁定蓄力，
-	// 演示"蓄力到达 1 层时若敌方白攻，减少受伤并获得额外回合"
-	if (!bTutorialChargeResistTaught && PlayerChargeStacks == 0)
-	{
-		TutorialForcedEnemyAction = EBattleAction::WhiteAttack;
-		bTutorialChargeLockActive = true;
-		bTutorialChargeResistTaught = true;
-		TutorialActiveHint = FText::FromString(TEXT("使用蓄力使蓄力到达一层时，若敌方使用白攻，则我方减少受到伤害并获得额外回合"));
-		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::UpdateTutorialDirector - 教学点B：蓄力抵抗白攻"));
-		return;
-	}
-	// 非教学点回合：随机 AI、不锁定、无提示
-	TutorialForcedEnemyAction = EBattleAction::None;
-	bTutorialChargeLockActive = false;
-	TutorialActiveHint = FText::GetEmpty();
-}
-
-void UBattleComponent::ResetTutorialDirector()
-{
-	bTutorialInitialHintPending = false;
-	bTutorialChargeCapTaught = false;
-	bTutorialChargeResistTaught = false;
-	bTutorialFirstWhiteAttackUsed = false;
-	bTutorialChargeLockActive = false;
-	TutorialForcedEnemyAction = EBattleAction::None;
-	TutorialActiveHint = FText::GetEmpty();
+	return TutorialDirector->ShouldTriggerFlee(
+		RoundNumber, BossEnemy->CurrentHealth, BossEnemy->GetMaxHealth(), GetRunAwayHPThreshold());
 }
 
 // ==================== 内部流程（Task 6/7/8 补全） ====================
@@ -455,10 +385,10 @@ void UBattleComponent::EnterBattle()
 	AddCombatMapping();
 	SetupCombatInput();
 	ShowHUD();
-	if (IsTutorialBattle())
+	if (TutorialDirector.IsValid())
 	{
-		// 进入战斗后直接给出一次总提示（玩家首次选择行动后清除）
-		bTutorialInitialHintPending = true;
+		// 进入战斗后直接给出一次总提示（玩家首次选择行动后由导演清除）
+		TutorialDirector->OnBattleEntered();
 	}
 	SetPhase(EBattlePhase::Entering);
 	OnBattleStateChanged.Broadcast();
@@ -504,12 +434,13 @@ void UBattleComponent::StartNewRound()
 void UBattleComponent::ChooseEnemyAction(bool bExtraTurn)
 {
 	// 教学导演：条件教学点优先覆盖敌方行动（蓄力破红防 / 蓄力抵抗白攻）
-	if (!bExtraTurn && IsTutorialBattle())
+	if (!bExtraTurn && TutorialDirector.IsValid())
 	{
-		UpdateTutorialDirector();
-		if (TutorialForcedEnemyAction != EBattleAction::None)
+		TutorialDirector->UpdateForRound(RoundNumber, PlayerChargeStacks);
+		const EBattleAction ForcedAction = TutorialDirector->GetForcedEnemyAction();
+		if (ForcedAction != EBattleAction::None)
 		{
-			EnemyChosenAction = TutorialForcedEnemyAction;
+			EnemyChosenAction = ForcedAction;
 			return;
 		}
 	}
@@ -2661,7 +2592,10 @@ void UBattleComponent::ResetForRetry()
 	ClearPendingHits();
 	bTurnGateOpen = false;
 	GatedMontages.Reset();
-	ResetTutorialDirector();
+	if (TutorialDirector.IsValid())
+	{
+		TutorialDirector->ResetDirector();
+	}
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(ChargePoseTimer);

@@ -47,6 +47,19 @@ void UCombatHUDWidget::NativeConstruct()
 
 	BindHoverEffects();
 	HideEnemyActionHint();
+	CollapseTutorialHintPanel();
+	if (TutorialHintOutAnim)
+	{
+		FWidgetAnimationDynamicEvent FinishedEvent;
+		FinishedEvent.BindDynamic(this, &UCombatHUDWidget::OnTutorialHintOutFinished);
+		BindToAnimationFinished(TutorialHintOutAnim, FinishedEvent);
+	}
+	if (TutorialHintClashOutAnim)
+	{
+		FWidgetAnimationDynamicEvent ClashOutFinishedEvent;
+		ClashOutFinishedEvent.BindDynamic(this, &UCombatHUDWidget::OnTutorialHintOutFinished);
+		BindToAnimationFinished(TutorialHintClashOutAnim, ClashOutFinishedEvent);
+	}
 	UpdateTutorialHint();
 }
 
@@ -289,15 +302,96 @@ void UCombatHUDWidget::UpdateTutorialHint()
 	const FText HintText = bExtraTurnSelect
 		? FText::FromString(TEXT("额外回合：只能选择蓝攻或蓄力！"))
 		: (Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty());
-	if (bShow && !HintText.IsEmpty())
+	const bool bDesiredShow = bShow && !HintText.IsEmpty();
+	if (bDesiredShow)
 	{
-		TutorialHintText->SetText(HintText);
-		TutorialHintText->SetVisibility(ESlateVisibility::Visible);
+		ShowTutorialHint(HintText);
 	}
 	else
 	{
+		// 无提示：完整退出（进入有提示的回合时 In，玩家确认行动/碰撞结束/战斗结束 Out）
+		HideTutorialHintFull();
+	}
+}
+
+void UCombatHUDWidget::ShowTutorialHint(const FText& Text)
+{
+	if (CurrentTutorialHint.EqualTo(Text) && bTutorialHintBackgroundVisible
+		&& TutorialHintText->GetRenderOpacity() > 0.01f)
+	{
+		// 同一提示持续显示：不重播
+		return;
+	}
+
+	if (TutorialHintOutAnim) StopAnimation(TutorialHintOutAnim);
+	if (TutorialHintInAnim) StopAnimation(TutorialHintInAnim);
+	if (TutorialHintClashInAnim) StopAnimation(TutorialHintClashInAnim);
+	if (TutorialHintClashOutAnim) StopAnimation(TutorialHintClashOutAnim);
+
+	TutorialHintText->SetText(Text);
+	CurrentTutorialHint = Text;
+
+	// 渲染数值（平移/缩放/透明度/锚点）全部由 WBP 动画关键帧定义，C++ 只负责可见性与播放
+	if (TutorialHintPanel)
+	{
+		TutorialHintPanel->SetVisibility(ESlateVisibility::Visible);
+	}
+	TutorialHintText->SetVisibility(ESlateVisibility::Visible);
+	bTutorialHintBackgroundVisible = true;
+
+	// 碰撞提示（回合中触发）使用专用入场动画（从屏幕左侧出现）；未配置时回退普通入场
+	const bool bClashHint = Battle.IsValid() && Battle->GetBattlePhase() == EBattlePhase::Clash && !Battle->IsClashResolved();
+	bCurrentHintIsClash = bClashHint;
+	UWidgetAnimation* const InAnim = bClashHint
+		? (TutorialHintClashInAnim ? TutorialHintClashInAnim : TutorialHintInAnim)
+		: TutorialHintInAnim;
+	if (InAnim)
+	{
+		PlayAnimation(InAnim);
+	}
+}
+
+void UCombatHUDWidget::HideTutorialHintFull()
+{
+	if (!bTutorialHintBackgroundVisible)
+	{
+		return;
+	}
+	if (TutorialHintInAnim) StopAnimation(TutorialHintInAnim);
+	if (TutorialHintClashInAnim) StopAnimation(TutorialHintClashInAnim);
+	// 碰撞提示使用专用退出动画（向屏幕左侧消失）；未配置时回退通用退出
+	UWidgetAnimation* const OutAnim = bCurrentHintIsClash && TutorialHintClashOutAnim
+		? TutorialHintClashOutAnim
+		: TutorialHintOutAnim;
+	if (OutAnim)
+	{
+		PlayAnimation(OutAnim);
+		// 结束后由 OnTutorialHintOutFinished 折叠面板
+	}
+	else
+	{
+		CollapseTutorialHintPanel();
+	}
+}
+
+void UCombatHUDWidget::OnTutorialHintOutFinished()
+{
+	CollapseTutorialHintPanel();
+}
+
+void UCombatHUDWidget::CollapseTutorialHintPanel()
+{
+	if (TutorialHintPanel)
+	{
+		TutorialHintPanel->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	if (TutorialHintText)
+	{
 		TutorialHintText->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	bTutorialHintBackgroundVisible = false;
+	bCurrentHintIsClash = false;
+	CurrentTutorialHint = FText::GetEmpty();
 }
 
 void UCombatHUDWidget::BindHoverEffects()

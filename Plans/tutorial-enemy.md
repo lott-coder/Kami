@@ -77,6 +77,13 @@
 - 判定窗口时长仍按世界时间计算——慢放只延长真实反应时间，不改变判定公平性（0.05 ≈ 时停，若出现计时/表现问题可改为完整时停）。
 - 实现：`UBattleComponent::ApplyClashTimeDilation` / `RestoreTimeDilation`，参数在 `DT_CombatParams`。
 
+### 4.5 提示表现：背景 + 动画（2026-08-10）
+
+- 结构：`TutorialHintPanel`（背景容器，右缘锚点 pivot(1, 0.5)）包裹 `TutorialHintText`。
+- 时序：提示 In = 玩家进入有提示的回合（行动选择）/ 碰撞阶段开始；提示 Out = 玩家确认行动 / 碰撞结束 / 战斗结束。每次提示都是完整的 In→Out 循环，**无"背景跨回合保留"**。
+- C++ 绑定（`BindWidgetAnimOptional`，WBP 动画名须一致）：`TutorialHintInAnim`（普通提示完整入场）、`TutorialHintClashInAnim`（碰撞提示专用入场——提示框从屏幕左侧出现，回合中触发；未配置时回退普通入场）、`TutorialHintOutAnim`（通用完整退出，结束后折叠面板）与 `TutorialHintClashOutAnim`（碰撞提示专用退出——提示框向屏幕左侧消失；未配置时回退通用退出）；渲染数值全部由关键帧定义，C++ 只控制可见性与播放。
+- 时长与曲线全部在 WBP Widget Animation 中调整（C++ 不硬编码）；默认参考：In 0.35s、Out 0.35s。
+
 ## 5. 逃跑与门扉
 
 - 逃跑触发：两个蓄力教学点（A/B）均演示后，敌方血量 ≤ `RunAwayHPThreshold`（0.3）触发逃跑；15 回合上限兜底，避免教学点因玩家层数状态迟迟未触发导致软锁。
@@ -105,14 +112,15 @@
 
 ### 代码
 
-- `UBattleComponent`：玩家先制分支；教学模式钩子（提示委托、锁血、逃跑结束路径）。
+- `UTutorialDirectorComponent`：教学导演（挂在教学怪上，EnemyID 自动启用）——纯决策层：教学点触发、敌方行动覆盖、蓄力锁定、提示文案、必逃判定、首次白攻碰撞。
+- `UBattleComponent`：玩家先制分支；只调用教学导演并执行（锁血、逃跑结束路径、提示转发）。
 - `UEnemyCombatAIComponent`：随机 AI（v1 四选一 + 额外回合蓝攻/蓄力）；固定脚本/路线已移除。
 - HUD：`WBP_CombatHUD` 增加可选绑定 `TutorialHintText`，复用现有提示显示/隐藏机制。
 - 同色碰撞可格挡慢放：`ClashTimeDilation` 世界时间流速，玩家输入/结算/清理恢复。
 - 过场：开场突袭 + 逃跑开门用 Level Sequence（参考 `UBossIntroComponent` 生命周期，注意销毁 SequenceActor）。
 - 存档：`bPrologueCompleted` 标记，保证序章仅一次。
 
-> **C++ 落地状态（2026-08-09）：** 上述代码项已实现并通过编译——玩家先制在 `StartBattle` 按教学战自动置 `bEnemyFirstStrike=false`；教学引导改为"开场总提示一次 + 两个条件教学点（蓄力 1 层/敌方红防 → 满蓄破防；蓄力 0 层/敌方白攻 → 抵抗+额外回合）+ 碰撞提示"，敌方恢复随机 AI（固定脚本与逐回合锁定已移除）；条件教学点由 `UBattleComponent::UpdateTutorialDirector` 覆盖敌方行动并锁定蓄力；同色碰撞可格挡慢放（`ClashTimeDilation` 0.05，**仅教学战生效**，输入/结算/清理恢复）；必逃在两个教学点完成后按血量阈值触发，15 回合兜底；`ApplyDamageTo` 教学锁血 1；HUD `TutorialHintText` 显示总提示/教学点/额外回合/碰撞引导；新增敌人 C++ 类 `AApprentice`（apprentice）/ `AApprenticeCave`（apprentice_cave）。编辑器侧（DT 资产行、BP_Apprentice / BP_Apprentice_Cave / ABP、蒙太奇、WBP 绑定、Level Sequence）由用户完成。
+> **C++ 落地状态（2026-08-09，2026-08-10 重构）：** 上述代码项已实现并通过编译——玩家先制在 `StartBattle` 按教学战自动置 `bEnemyFirstStrike=false`；教学引导为"开场总提示一次 + 两个条件教学点（蓄力 1 层/敌方红防 → 满蓄破防；蓄力 0 层/敌方白攻 → 抵抗+额外回合）+ 首次白攻必定白白碰撞 + 碰撞提示"，敌方恢复随机 AI（固定脚本与逐回合锁定已移除）；教学决策全部收敛到 `UTutorialDirectorComponent`（教学导演，挂在教学怪上），`UBattleComponent` 只做调用与执行；同色碰撞可格挡慢放（`ClashTimeDilation` 0.05，**仅教学战生效**，输入/结算/清理恢复）；必逃在两个教学点完成后按血量阈值触发，15 回合兜底；`ApplyDamageTo` 教学锁血 1；HUD `TutorialHintText` 显示总提示/教学点/额外回合/碰撞引导；新增敌人 C++ 类 `AApprentice`（apprentice）/ `AApprenticeCave`（apprentice_cave）。编辑器侧（DT 资产行、BP_Apprentice / BP_Apprentice_Cave / ABP、蒙太奇、WBP 绑定、Level Sequence）由用户完成。
 
 ### 美术/音频
 

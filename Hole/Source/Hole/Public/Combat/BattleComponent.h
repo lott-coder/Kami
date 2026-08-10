@@ -14,6 +14,7 @@ class ABaseCharacter;
 class UCombatHUDWidget;
 class UBattleResultHUDWidget;
 class UEnemyCombatAIComponent;
+class UTutorialDirectorComponent;
 class UInputAction;
 class UInputMappingContext;
 class UAnimMontage;
@@ -211,11 +212,7 @@ private:
 	void HandleVictoryCleanup();
 	void HandleDefeatRestart();
 	void ResetForRetry();
-	/** 教学导演：每回合开始决定条件教学点（敌方行动覆盖 + 蓄力锁定 + 提示）；非教学战/额外回合跳过 */
-	void UpdateTutorialDirector();
-	/** 重置教学导演状态（失败重开时调用） */
-	void ResetTutorialDirector();
-	/** 教学必逃判定：脚本播完 或 敌方血量 <= RunAwayHPThreshold（已触发/非教学返回 false） */
+	/** 教学必逃判定：委托给 UTutorialDirectorComponent（已触发/非教学返回 false） */
 	bool ShouldTriggerTutorialFlee() const;
 
 	// ==================== 同色碰撞 ====================
@@ -381,6 +378,7 @@ private:
 	TWeakObjectPtr<UCombatHUDWidget> CombatHUD;
 	TWeakObjectPtr<UBattleResultHUDWidget> ResultHUD;
 	TWeakObjectPtr<UEnemyCombatAIComponent> EnemyAI;
+	TWeakObjectPtr<UTutorialDirectorComponent> TutorialDirector;
 
 	int32 RoundNumber = 0;
 	int32 PlayerChargeStacks = 0;
@@ -393,21 +391,8 @@ private:
 	bool bPlayerExtraTurnPending = false;
 	bool bEnemyExtraTurnPending = false;
 	bool bBossDefeated = false;
+	/** 教学必逃已触发（执行侧防重入；判定逻辑在 UTutorialDirectorComponent） */
 	bool bTutorialFleeTriggered = false;
-	/** 教学引导：进入战斗后的首条总提示（玩家首次选择行动后清除） */
-	bool bTutorialInitialHintPending = false;
-	/** 教学点：蓄力到上限破红防（玩家 1 层 + 敌方红防） */
-	bool bTutorialChargeCapTaught = false;
-	/** 教学点：蓄力抵抗白攻获得额外回合（玩家 0 层 + 敌方白攻） */
-	bool bTutorialChargeResistTaught = false;
-	/** 教学战玩家是否已使用过白攻（第一次使用白攻时强制敌方同步白攻，触发白白碰撞教学） */
-	bool bTutorialFirstWhiteAttackUsed = false;
-	/** 教学点进行中：本回合锁定玩家只能使用蓄力 */
-	bool bTutorialChargeLockActive = false;
-	/** 教学导演覆盖的敌方行动（None = 随机 AI） */
-	EBattleAction TutorialForcedEnemyAction = EBattleAction::None;
-	/** 当前教学点提示文字（非教学点回合为空） */
-	FText TutorialActiveHint;
 	bool bTimeDilationApplied = false;
 	float OriginalTimeDilation = 1.0f;
 

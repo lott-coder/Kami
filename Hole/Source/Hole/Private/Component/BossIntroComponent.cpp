@@ -197,6 +197,8 @@ void UBossIntroComponent::SetState(EBossIntroState NewState)
 		}
 		break;
 	}
+
+	OnIntroStateChanged.Broadcast(NewState);
 }
 
 void UBossIntroComponent::PlayIntroSequence()

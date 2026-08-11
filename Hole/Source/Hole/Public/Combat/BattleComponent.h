@@ -18,6 +18,9 @@ class UTutorialDirectorComponent;
 class UInputAction;
 class UInputMappingContext;
 class UAnimMontage;
+class ULevelSequence;
+class ULevelSequencePlayer;
+class ALevelSequenceActor;
 struct FCombatAnimRow;
 struct FAnimRef;
 class UAttributeComponent;
@@ -25,6 +28,7 @@ class UCombatFormulaSubsystem;
 class UBossIntroComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnBattleStateChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTutorialFleeSequenceStateChanged, bool, bPlaying);
 
 /** 待命中事件：一次攻击在命中帧要执行的伤害与防御反应（v1 每侧最多一条） */
 struct FPendingHitEvent
@@ -101,15 +105,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	bool bEnemyFirstStrike = true;
 
-	/** 失败横幅停留时间（秒）后回到 Boss 触发点 */
+	/** 结算 HUD 创建失败时的兜底停留时间（秒）后自动收尾/重开；正常流程等待玩家点击屏幕继续 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
 	float DefeatRestartDelay = 2.0f;
+
+	/** 死亡结算链路：HP 清空后延迟冻结时长（秒），期间世界时间正常、受击方正常播放 Hurt */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	float DeathSequenceFreezeDelay = 1.0f;
+
+	/** 死亡结算链路：摄像机转动时长（秒） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	float DeathSequenceCameraDuration = 1.0f;
+
+	/** 死亡结算链路：摄像机转动到位后的停留时长（秒），随后弹出结算界面 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	float DeathSequenceHoldDuration = 0.5f;
+
+	/** 死亡结算链路：摄像机偏航转动量（度，策划可调） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	float DeathCameraYawOffset = 15.0f;
+
+	/** 死亡结算链路：摄像机俯仰转动量（度，策划可调） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	float DeathCameraPitchOffset = -3.0f;
+
+	/** 教学战逃跑 Level Sequence 的跳过输入（默认自动加载 /Game/Input/IA_Skip） */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Battle|Config")
+	TObjectPtr<UInputAction> TutorialFleeSkipAction;
 
 	// ==================== 事件 ====================
 
 	/** HUD 监听此事件刷新（回合开始/伤害/阶段切换时广播） */
 	UPROPERTY(BlueprintAssignable, Category = "Battle|Events")
 	FOnBattleStateChanged OnBattleStateChanged;
+
+	/** 教学逃跑 Level Sequence 播放状态变化（true=播放中；BGM 组件据此静音） */
+	UPROPERTY(BlueprintAssignable, Category = "Battle|Events")
+	FOnTutorialFleeSequenceStateChanged OnTutorialFleeSequenceStateChanged;
 
 	// ==================== 公开接口 ====================
 
@@ -170,11 +202,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Battle")
 	bool HasPlayerChosenAction() const { return bPlayerChoseAction; }
 
-	/** 是否为序章教学战斗（BossEnemy.EnemyID == "apprentice_cave"） */
+	/** 是否为序章教学战斗（BossEnemy.EnemyID == DT_TutorialConfig.TutorialEnemyID，默认 "apprentice_cave"） */
 	UFUNCTION(BlueprintPure, Category = "Battle")
 	bool IsTutorialBattle() const;
 
-	/** 教学战斗当前引导提示（行动选择阶段显示当前教学点；碰撞阶段显示格挡/闪避提示） */
+	/** 教学战斗当前引导提示（行动选择阶段显示当前教学点/额外回合；碰撞阶段显示格挡/闪避提示；整场只出现一次） */
 	UFUNCTION(BlueprintPure, Category = "Battle")
 	FText GetTutorialHintText() const;
 
@@ -199,6 +231,10 @@ private:
 	/** 查找场景中所有 Tag=Boss 的敌人（同一关卡可存在多个 Boss/教学怪，入场结束后按完成者开战） */
 	TArray<AEnemy*> FindBossEnemies() const;
 	void EnterBattle();
+	/** 从 DT_SettlementConfig 加载结算链路参数与教学逃跑动画（表缺失时使用组件默认值） */
+	void ApplySettlementConfig();
+	/** 从 DT_TutorialConfig 加载教学战配置（敌人 ID/先制/锁血/碰撞慢放；表缺失时使用结构体默认值） */
+	void ApplyTutorialConfig();
 	void StartNewRound();
 	void ChooseEnemyAction(bool bExtraTurn);
 	void StartPlayerExtraTurn();
@@ -208,9 +244,28 @@ private:
 	void ApplyResolution(const FTurnResolution& Resolution);
 	void ApplyDamageTo(ABaseCharacter* Target, float Amount, AActor* Causer);
 	void EndTurnAndAdvance();
-	void FinishBattle(bool bPlayerWon, bool bFlee = false);
+	void FinishBattle(bool bPlayerWon);
 	void HandleVictoryCleanup();
 	void HandleDefeatRestart();
+	/** 结算链路：一方死亡/教学逃跑 → 延迟 → 画面完全暂停 → 摄像机轻微转动 → 弹出结算界面 */
+	void StartDeathSequence(bool bPlayerWon, bool bFlee = false);
+	void TickDeathSequence();
+	void EndDeathSequence();
+	/** 教学战逃跑 Level Sequence（结算完成点击继续后播放；暂空 = 直接收尾） */
+	void StartTutorialFleeSequence();
+	void StopTutorialFleeSequence();
+	/** 逃跑序列结束/跳过后的统一收尾（收刀/恢复探索/解锁玩家） */
+	void FinishVictoryCleanup();
+	/** 胜利收尾后销毁敌人实例（教学逃跑同样销毁） */
+	void DestroyDefeatedEnemy();
+	UFUNCTION()
+	void OnTutorialFleeSequenceFinished();
+	void OnTutorialFleeSkipPressed();
+	void BindTutorialFleeSkipInput();
+	void UnbindTutorialFleeSkipInput();
+	/** 结算界面点击继续：胜利→收尾退出战斗，失败→回到触发点重开 */
+	UFUNCTION()
+	void HandleResultContinue();
 	void ResetForRetry();
 	/** 教学必逃判定：委托给 UTutorialDirectorComponent（已触发/非教学返回 false） */
 	bool ShouldTriggerTutorialFlee() const;
@@ -244,7 +299,8 @@ private:
 	void UnlockPlayer();
 	void ShowHUD();
 	void HideHUD();
-	void ShowResultHUD(const FText& Text);
+	/** 显示结算 HUD；返回 false 表示未配置/创建失败（调用方需兜底自动收尾） */
+	bool ShowResultHUD(const FText& Text, bool bVictory, const FText& ItemRewards, const FText& EquipmentRewards);
 	void HideResultHUD();
 	void SheathePlayerWeapon();
 
@@ -292,9 +348,6 @@ private:
 	/** 动作 Montage 播完回调：接待接反应动画 */
 	UFUNCTION()
 	void OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
-
-	/** 战斗结束：败方播 Death，胜方播 Victory（空引用跳过） */
-	void PlayDeathAnimations(bool bPlayerWon);
 
 	/** 从行结构取某动作的动画引用（红防/蓝攻/白攻/蓄力；其他返回 nullptr） */
 	const FAnimRef* GetActionRef(const FCombatAnimRow& Row, EBattleAction Action) const;
@@ -356,7 +409,6 @@ private:
 	float GetDodgeWindow() const;
 	float GetClashInputCooldown() const;
 	float GetBlockFailLockout() const;
-	float GetRunAwayHPThreshold() const;
 	float GetClashTimeDilation() const;
 	/** 同色碰撞可格挡期间启用世界时间慢放（0.05）；已慢放则跳过 */
 	void ApplyClashTimeDilation();
@@ -393,6 +445,40 @@ private:
 	bool bBossDefeated = false;
 	/** 教学必逃已触发（执行侧防重入；判定逻辑在 UTutorialDirectorComponent） */
 	bool bTutorialFleeTriggered = false;
+	/** 教学战敌人 ID（从 DT_TutorialConfig 加载；默认 "apprentice_cave"） */
+	FName TutorialEnemyID = FName(TEXT("apprentice_cave"));
+	/** 教学战玩家先制（从 DT_TutorialConfig 加载） */
+	bool bTutorialPlayerFirstStrike = true;
+	/** 教学敌人锁血值（从 DT_TutorialConfig 加载） */
+	float TutorialLockHP = 1.0f;
+	/** 教学战碰撞慢放时间流速（从 DT_TutorialConfig 加载） */
+	float TutorialClashTimeDilation = 0.05f;
+	/** 教学战时缓提早时间（从 DT_TutorialConfig 加载）：慢放比命中点提前开始的时间 */
+	float TutorialTimeSlowEarlyTime = 0.15f;
+	/** 结算界面等待点击继续时，记录当前结果是胜利还是失败（HandleResultContinue 路由用） */
+	bool bResultContinueIsVictory = false;
+	/** 死亡结算链路是否进行中（停帧→镜头转动→结算界面） */
+	bool bDeathSequenceActive = false;
+	/** 死亡结算链路是否已进入冻结阶段（延迟阶段世界时间仍正常，Hurt 正常播放） */
+	bool bDeathSequenceFrozen = false;
+	/** 死亡结算链路的结果（谁获胜） */
+	bool bDeathSequencePlayerWon = false;
+	/** 死亡结算链路已推进的真实时间（秒；世界时间冻结时用真实帧时间驱动） */
+	float DeathSequenceElapsed = 0.0f;
+	/** 死亡结算链路开始时玩家控制旋转（镜头转动的基准） */
+	FRotator DeathStartControlRotation;
+	/** 死亡结算链路开始时 SpringArm 相机旋转滞后是否开启（冻结期间临时关闭，保证镜头能转动） */
+	bool bDeathSequenceCameraLagWasEnabled = false;
+	/** 教学战逃跑 Level Sequence（从 DT_SettlementConfig 加载；结算后播放） */
+	TSoftObjectPtr<ULevelSequence> TutorialFleeSequence;
+	UPROPERTY()
+	TObjectPtr<ULevelSequencePlayer> TutorialFleePlayer;
+	UPROPERTY()
+	TObjectPtr<ALevelSequenceActor> TutorialFleeActor;
+	UPROPERTY()
+	TObjectPtr<AActor> TutorialFleePreviousViewTarget;
+	/** 教学战逃跑序列是否正在播放 */
+	bool bTutorialFleeSequencePlaying = false;
 	bool bTimeDilationApplied = false;
 	float OriginalTimeDilation = 1.0f;
 

@@ -34,6 +34,9 @@ enum class EBossIntroState : uint8
 	Combat	UMETA(DisplayName = "战斗")
 };
 
+/** 入场状态机变化（Idle/Playing/Combat），供外部（如 BGM 组件）跟随过场状态 */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBossIntroStateChanged, EBossIntroState, NewState);
+
 // ============================================================================
 // UBossIntroComponent — Boss 出场动画管理器
 // ============================================================================
@@ -130,6 +133,10 @@ public:
 	/** 入场动画正常结束或被跳过后广播（此时状态已为 Combat，参数为挂载本组件的敌人），战斗系统监听此事件启动战斗 */
 	UPROPERTY(BlueprintAssignable, Category = "BossIntro|Events")
 	FOnBossIntroFinished OnIntroFinished;
+
+	/** 状态机每次切换时广播（Playing = 过场播放中，BGM 组件据此静音） */
+	UPROPERTY(BlueprintAssignable, Category = "BossIntro|Events")
+	FOnBossIntroStateChanged OnIntroStateChanged;
 
 protected:
 	// ---- 出场动画实现（C++ 子类可覆写以自定义行为） ----

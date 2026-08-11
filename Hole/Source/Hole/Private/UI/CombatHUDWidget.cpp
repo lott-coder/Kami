@@ -299,9 +299,7 @@ void UCombatHUDWidget::UpdateTutorialHint()
 			|| (Phase == EBattlePhase::Clash && !Battle->IsClashResolved()));
 	}
 
-	const FText HintText = bExtraTurnSelect
-		? FText::FromString(TEXT("额外回合：只能选择蓝攻或蓄力！"))
-		: (Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty());
+	const FText HintText = Battle.IsValid() ? Battle->GetTutorialHintText() : FText::GetEmpty();
 	const bool bDesiredShow = bShow && !HintText.IsEmpty();
 	if (bDesiredShow)
 	{

@@ -84,12 +84,6 @@ struct HOLE_API FCombatAnimRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
 	FAnimRef DodgeFail;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
-	FAnimRef Death;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Reaction")
-	FAnimRef Victory;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CombatAnim|Action")
 	FAnimRef Skill;
 

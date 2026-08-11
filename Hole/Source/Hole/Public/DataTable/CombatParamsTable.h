@@ -85,10 +85,6 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float HitStopDuration = 0.12f;
 
-	/** 同色碰撞可格挡期间的世界时间流速（0.05=慢放；0=关闭），玩家点击格挡/闪避后恢复；[PLAYTEST] */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
-	float ClashTimeDilation = 0.05f;
-
 	/** 闪避失败额外伤害倍率 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Defense")
 	float DodgeFailDamageScale = 1.2f;
@@ -120,10 +116,6 @@ struct HOLE_API FCombatParamsRow : public FTableRowBase
 	float GoldAttackDamageMax = 35.0f;
 
 	// ---- 特殊规则 ----
-
-	/** 教学战斗敌人逃跑血量百分比阈值（0~1），[待定] */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat|Rules")
-	float RunAwayHPThreshold = 0.3f;
 
 	// ---- 默认值 ----
 

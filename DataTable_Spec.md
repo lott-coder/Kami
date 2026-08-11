@@ -1,8 +1,8 @@
 # 数据配置表规范（DataTable Specification）
 
-> **版本：** v0.20
-> **日期：** 2026-08-09
-> **关联策划案：** GDD_Outline.md v0.26
+> **版本：** v0.32
+> **日期：** 2026-08-11
+> **关联策划案：** GDD_Outline.md v0.30
 > **用途：** 定义所有需要暴露给策划的 DataTable 结构，作为 C++ 结构体定义的依据
 
 ---
@@ -24,7 +24,11 @@
 13. [11 — 货币/经济配置 (DT_EconomyConfig)](#13-11--货币经济配置)
 14. [12 — 战斗舞台配置 (DT_BattleStage)](#14-12--战斗舞台配置)
 15. [13 — 战斗动画配置 (DT_CombatAnimConfig)](#15-13--战斗动画配置)
-16. [数据关联总览](#16-数据关联总览)
+16. [14 — 结算配置 (DT_SettlementConfig)](#16-14--结算配置)
+17. [15 — 教学战配置 (DT_TutorialConfig)](#17-15--教学战配置)
+18. [16 — 非战斗背景音乐 (DT_AreaBGMConfig)](#18-16--非战斗背景音乐)
+19. [17 — 战斗背景音乐 (DT_EnemyBGMConfig)](#19-17--战斗背景音乐)
+20. [数据关联总览](#20-数据关联总览)
 
 ---
 
@@ -99,6 +103,10 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | 11 | `DT_EconomyConfig` | `FEconomyConfigRow` | — | 8 | 货币兑换率与价格基数 |
 | 12 | `DT_BattleStage` | `FCombatStageRow` | — | 1（单例） | 战斗舞台站位与固定摄像机参数 |
 | 13 | `DT_CombatAnimConfig` | `FCombatAnimRow` | — | 2（规划中，目标按实体扩充） | 战斗动画事件配置（实体 × FAnimRef） |
+| 14 | `DT_SettlementConfig` | `FSettlementConfigRow` | — | 1（单例） | 结算链路数据（死亡延迟冻结/镜头转动/教学逃跑动画） |
+| 15 | `DT_TutorialConfig` | `FTutorialConfigRow` | — | 1（单例） | 教学战配置（敌人 ID/先制/锁血/逃跑线/教学点/全部引导文案） |
+| 16 | `DT_AreaBGMConfig` | `FBGMConfigRow` | — | 7（6 区域 + Default） | 非战斗（探索）背景音乐，按区域行 |
+| 17 | `DT_EnemyBGMConfig` | `FBGMConfigRow` | — | 9（敌人行 + Default） | 战斗背景音乐，按敌人行（不同敌人不同） |
 
 > **实况说明（2026-08-01）：** 上表"行数"为当前资产实况；目标行数见各章节"基本信息"。
 
@@ -134,14 +142,12 @@ enum class EConsumableType     : uint8 { ... };  // ConsumableConfigTable.h — 
 | `ClashInputCooldown` | `float` | 0.15 | GDD §5.2.5 | 格挡/闪避输入冷却（秒），防连按，[PLAYTEST] |
 | `RedDefenseLeadTime` | `float` | 0.3 | GDD §5.2.3 | 红防举剑标记缺失时的回落提前量（秒），[PLAYTEST] |
 | `HitStopDuration` | `float` | 0.12 | GDD §5.2.5 | 格挡/闪避/红防反击成功停帧时长（秒），0 关闭，[PLAYTEST] |
-| `ClashTimeDilation` | `float` | 0.05 | GDD §5.2.5 | 仅序章教学战：同色碰撞可格挡期间的世界时间流速（0.05=慢放，0=关闭），玩家输入后恢复，[PLAYTEST] |
 | `CritDamageMultiplier` | `float` | 1.5 | GDD §5.2.7 | 蓝攻暴击伤害倍率，[PLAYTEST] |
 | `DodgeBuffDamageScale` | `float` | 1.2 | GDD §5.2.5 | 闪避成功后下回合伤害倍率，[PLAYTEST] |
 | `DodgeBuffTurns` | `int32` | 1 | GDD §5.2.5 | 闪避Buff持续回合数 |
 | `GoldAttackDamageMin` | `float` | 25.0 | GDD §5.2.5 | 金色攻击（反击）最小伤害，[PLAYTEST] |
 | `GoldAttackDamageMax` | `float` | 35.0 | GDD §5.2.5 | 金色攻击（反击）最大伤害，[PLAYTEST] |
 | `PlayerDefaultHP` | `float` | 100.0 | GDD §5.2.7 | 玩家初始 HP（用于新角色默认值） |
-| `RunAwayHPThreshold` | `float` | 0.3 | §5.2.1 类比 | 教学战斗敌人逃跑血量百分比阈值（两个蓄力教学点均演示后触发；15 回合上限兜底），[待定] |
 | `Movement_BackwardSpeedScale` | `float` | 0.6 | GDD §5.1 | 后退速度倍率 |
 
 > **注意：** WalkSpeed/SprintSpeed 已迁移至 DT_CharacterConfig（每个角色可独立设置移动速度）。
@@ -711,31 +717,33 @@ enum class ESmokeSource : uint8
 | `DisplayName` | `FText` | — | 烟显示名（中文） |
 | `Source` | `ESmokeSource` | Inept | 来源敌人分类 |
 | `PowerImprint` | `FText` | — | 力量印记描述（给策划看的，不显示在游戏中） |
-| `bConvertToSkill` | `bool` | false | 是否自动转化为技能 |
-| `ConvertedSkillID` | `FName` | — | 转化后的技能 ID（引用 DT_SkillConfig，可不填） |
+| `bConvertToSkill` | `bool` | false | 是否可提炼为主动技能（博士处提炼，不自动转化） |
+| `ConvertedSkillID` | `FName` | — | 提炼解锁的主动技能 ID（引用 DT_SkillConfig，对应技能树主动节点；可不填） |
 | `bConvertToItem` | `bool` | false | 是否自动转化为道具 |
 | `ConvertedItemID` | `FName` | — | 转化后的道具 ID（引用 DT_ConsumableConfig，可不填） |
 | `bCanRefineToPassive` | `bool` | false | 是否可在博士处提炼为永久被动 |
 | `bCanExchangeForCurrency` | `bool` | false | 是否可兑换为货币（仅治愈之烟为 true） |
 | `CurrencyPerSmoke` | `int32` | 0 | 兑换货币数量（仅治愈之烟），`[待定]` 约 50-100 |
-| `CanDirectHealSmokeReserve` | `bool` | false | 是否可直接回复烟储备（仅治愈之烟为 true） |
-| `DirectHealAmount` | `float` | 0.0 | 直接回复烟储备量 |
+| `bUsableAsItem` | `bool` | false | 是否为道具烟：可直接作为道具使用（消耗烟本身，不进入烟储备） |
+| `DirectUseItemID` | `FName` | — | 直接使用效果对应的消耗品行（引用 DT_ConsumableConfig，如 `healing_smoke_direct`；可不填） |
+
+> v0.21 变更：原 `CanDirectHealSmokeReserve` / `DirectHealAmount` 并入 `bUsableAsItem` / `DirectUseItemID`（道具烟通用化，不再仅限治愈之烟）。
 
 ### 8.4 行数据
 
-| RowName | DisplayName | Source | ConvertSkill | ConvertItem | RefinePassive | ExchangeCurrency | GDD §5.3.2 |
-|---------|-------------|--------|-------------|-------------|---------------|-----------------|------------|
-| `hunter_smoke` | 猎手之烟 | Inept | ✅ 探测技能 | ✅ 白攻伤害道具 | ❌ | ❌ | 第1行 |
-| `apprentice_smoke` | 学徒之烟 | Apprentice | ✅ 基础魔法技能 | ✅ 蓝攻基础提升 | ❌ | ❌ | 第2行 |
-| `adept_smoke` | 术者之烟 | Adept | ✅ 进阶技能 | ✅ 蓄力速度道具 | ✅ | ❌ | 第3行 |
-| `commander_smoke` | 统领之烟 | Commander | ✅ 专属技能 | ✅ 稀有面具 | ✅ | ❌ | 第4行 |
-| `border_smoke` | 边境之烟 | BorderGuard | ❌ | ✅ 格挡窗口道具 | ✅ | ❌ | 第5行 |
-| `demon_smoke` | 恶魔之烟 | Demon | ✅ 最强攻击技能 | ✅ 传说面具 | ✅ | ❌ | 第6行 |
-| `satan_smoke` | 撒旦之烟 | Satan | ✅ 终极技能 | ✅ 特殊结局道具 | ❌ | ❌ | 第7行 |
-| `healing_smoke` | 治愈之烟 | Friendly | ❌ | ❌ | ❌ | ✅ | 第8行 |
-| `puzzle_smoke` | 谜题之烟 | Puzzle | ✅ 独特被动技能 | ✅ 剧情碎片 | ❌ | ❌ | 第9行 |
+| RowName | DisplayName | Source | ConvertSkill | ConvertItem | RefinePassive | ExchangeCurrency | DirectUse（道具烟） | GDD §5.3.2 |
+|---------|-------------|--------|-------------|-------------|---------------|-----------------|----------------------|------------|
+| `hunter_smoke` | 猎手之烟 | Inept | ✅ 探测技能 | ✅ 白攻伤害道具 | ❌ | ❌ | ❌ | 第1行 |
+| `apprentice_smoke` | 学徒之烟 | Apprentice | ✅ 基础魔法技能 | ✅ 蓝攻基础提升 | ❌ | ❌ | ❌ | 第2行 |
+| `adept_smoke` | 术者之烟 | Adept | ✅ 进阶技能 | ✅ 蓄力速度道具 | ✅ | ❌ | ❌ | 第3行 |
+| `commander_smoke` | 统领之烟 | Commander | ✅ 专属技能 | ✅ 稀有面具 | ✅ | ❌ | ❌ | 第4行 |
+| `border_smoke` | 边境之烟 | BorderGuard | ❌ | ✅ 格挡窗口道具 | ✅ | ❌ | ❌ | 第5行 |
+| `demon_smoke` | 恶魔之烟 | Demon | ✅ 最强攻击技能 | ✅ 传说面具 | ✅ | ❌ | ❌ | 第6行 |
+| `satan_smoke` | 撒旦之烟 | Satan | ✅ 终极技能 | ✅ 特殊结局道具 | ❌ | ❌ | ❌ | 第7行 |
+| `healing_smoke` | 治愈之烟 | Friendly | ❌ | ❌ | ❌ | ✅ | ✅ 直接回复烟储备（`healing_smoke_direct`） | 第8行 |
+| `puzzle_smoke` | 谜题之烟 | Puzzle | ❌ | ✅ 剧情碎片 | ✅ 独特被动技能 | ❌ | ✅ 剧情碎片（消耗品行待定） | 第9行 |
 
-> **设计说明：** `ConvertedSkillID` / `ConvertedItemID` 是可选的外键引用——如果击败该敌人**必定**掉落某个特定技能/物品，则在此指定。如果是**随机掉落**（从该类别的技能/物品池中随机），则由掉落系统处理，不在此表中。
+> **设计说明：** 技能统一通过博士提炼解锁——`ConvertedSkillID` 表示该烟在博士处**必定**解锁的主动技能（对应技能树主动节点），随机技能由提炼/掉落系统从技能池处理。`ConvertedItemID` 表示自动转化的道具；`bUsableAsItem` 的道具烟可直接使用，效果由 `DirectUseItemID` 指向的消耗品行提供。
 
 ---
 
@@ -791,7 +799,7 @@ enum class ESkillTarget : uint8
 | `EffectDurationTurns` | `int32` | 0 | 效果持续回合数（0=即时效果） |
 | `bIgnoresElementalColor` | `bool` | true | 是否无视颜色克制（GDD §5.2.6：所有技能均无视） |
 | `bRetainedAcrossLoops` | `bool` | true | 技能是否在轮回间保留 |
-| `ObtainFromSmokeType` | `FName` | — | 获取来源烟类型（引用 DT_SmokeConfig） |
+| `ObtainFromSmokeType` | `FName` | — | 获取来源烟类型（交付博士提炼解锁；引用 DT_SmokeConfig） |
 | `ObtainDescription` | `FText` | — | 获取方式文字描述 |
 | `MaxUsesPerLoop` | `int32` | -1 | 每轮轮回最大使用次数（-1=无限） |
 | `IconTexture` | `TSoftObjectPtr<UTexture2D>` | — | 技能图标 |
@@ -825,8 +833,8 @@ enum class ESkillTarget : uint8
 | 资产名 | `DT_SkillTreeConfig` |
 | 结构体 | `FSkillTreeConfigRow` |
 | 行 ID | 节点英文名 |
-| 行数 | ~12 |
-| 来源 | GDD §6.2 局外技能树 |
+| 行数 | 15（被动已入表）+ 主动节点随技能表补全 |
+| 来源 | GDD §6.2 局外技能树（主动技能 + 被动增益） |
 
 ### 10.2 新增枚举
 
@@ -844,6 +852,15 @@ enum class ESkillTreeBranch : uint8
 };
 ```
 
+```cpp
+UENUM(BlueprintType)
+enum class ESkillTreeNodeType : uint8
+{
+    Passive  UMETA(DisplayName = "被动增益"),
+    Active   UMETA(DisplayName = "主动技能")
+};
+```
+
 ### 10.3 列定义
 
 | 列名 | 类型 | 默认值 | 备注 |
@@ -852,6 +869,8 @@ enum class ESkillTreeBranch : uint8
 | `Branch` | `ESkillTreeBranch` | Foundation | 所属分支 |
 | `Tier` | `int32` | 0 | 层级（0=根，2=最深） |
 | `ParentNodeID` | `FName` | — | 前置节点 RowName（空=根节点） |
+| `NodeType` | `ESkillTreeNodeType` | Passive | 节点类型：被动增益 / 主动技能 |
+| `UnlockSkillID` | `FName` | — | 主动节点解锁的技能 ID（引用 DT_SkillConfig，被动节点留空） |
 | `Description` | `FText` | — | 效果描述 |
 | `RequiredSmokeType` | `FName` | — | 解锁所需的烟类型（引用 DT_SmokeConfig） |
 | `RequiredSmokeCount` | `int32` | 1 | 需要消耗的烟数量 |
@@ -878,6 +897,16 @@ enum class ESkillTreeBranch : uint8
 | `dodge_window_up` | DodgeSpecialty | 2 | `white_dmg_5` | `hunter_smoke` | DodgeWindow | 0.05s | 闪避窗口+ |
 | `dodge_buff_up` | DodgeSpecialty | 2 | `dodge_window_up` | `hunter_smoke` | DodgeBuffBonus | 10% | 闪避Buff+ |
 | `legendary_node` | Foundation | 3 | `defense_block_reduce` | `demon_smoke` | `[待定]` | `[待定]` | 最深传说节点 |
+
+**主动技能节点示例（`NodeType=Active`，解锁后进入战斗技能栏）：**
+
+| RowName | Tier | Parent | ReqSmoke | UnlockSkillID | GDD §7.4 |
+|---------|------|--------|----------|---------------|----------|
+| `node_heal_30` | 1 | `foundation_hp_1` | `healing_smoke` | `heal_30` | 治愈类 |
+| `node_atk_fixed_dmg` | 1 | `foundation_hp_1` | `adept_smoke` | `atk_fixed_dmg` | 攻击类 |
+| `node_exclusive_barrier` | 3 | — | `commander_smoke` | `exclusive_barrier` | 专属技能 |
+
+> 主动节点无需 `EffectType` / `EffectValue`（效果由 DT_SkillConfig 行定义）；被动节点无需 `UnlockSkillID`。
 
 ### 10.5 EffectType 字典（2026-08-01 定案）
 
@@ -1119,8 +1148,6 @@ enum class EConsumableType : uint8
 | `Block` | `FAnimRef` | 格挡动作（成功/失败共用一种）；格挡成功时播完衔接 `GoldCounter` |
 | `DodgeSuccess` | `FAnimRef` | 闪避成功 |
 | `DodgeFail` | `FAnimRef` | 闪避失败；空 = 回落 `Hurt` |
-| `Death` | `FAnimRef` | 倒地/失败 |
-| `Victory` | `FAnimRef` | 胜利姿态；可空 |
 | `Skill` | `FAnimRef` | 技能动作；v1 预留留空 |
 | `ClashReady` | `FAnimRef` | 玩家同色碰撞准备姿态（状态型循环；碰撞期间切换 Idle，结束后回退） |
 | `ClashAttackBlue` | `FAnimRef` | 蓝 vs 蓝碰撞攻击（敌方攻击提示） |
@@ -1134,14 +1161,150 @@ enum class EConsumableType : uint8
 
 | RowName | DisplayName | Entry.Montage | Entry.SectionName | 备注 |
 |---------|-------------|---------------|-------------------|------|
-| `drifter` | 漂泊者 | `/Game/Blueprint/Character/Roles/Dale/Animations/Entrance/MTG_DrawGreatSword` | `Draw` | 其余列空：战斗动作待资产占位，`Sheathe`/`Skill`/`Victory` 留空 |
+| `drifter` | 漂泊者 | `/Game/Blueprint/Character/Roles/Dale/Animations/Entrance/MTG_DrawGreatSword` | `Draw` | 其余列空：战斗动作待资产占位，`Sheathe`/`Skill` 留空 |
 | `satan` | 撒旦 | 空 | — | 开场咆哮走 `LS_SatanIntro`，不入本表；其余列空/占位 |
 
 ---
 
-## 16. 数据关联总览
+## 16. 14 — 结算配置 (DT_SettlementConfig)
 
-### 16.1 外键引用关系
+### 16.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_SettlementConfig` |
+| 结构体 | `FSettlementConfigRow` |
+| 行 ID | 单行 `Default`（代码优先按 `Default` 查找，缺失时自动取第一行，兼容编辑器新建时的 `NewRow`） |
+| 行数 | 1（单例） |
+| 来源 | 2026-08-11 胜利结算界面/死亡结算链路定案；承接 GDD §5.2.2 |
+
+### 16.2 列定义
+
+| 列名 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `FreezeDelay` | `float` | 1.0 | HP 清空后延迟冻结时长（秒）；**从 HP 清空时刻开始计算，与 Hurt 是否播完无关**——期间世界时间正常播放 Hurt，到点即冻结（冻结帧可能定格在 Hurt 播放中） |
+| `CameraDuration` | `float` | 1.0 | 摄像机转动时长（秒） |
+| `HoldDuration` | `float` | 0.5 | 摄像机转动到位后的停留时长（秒），随后弹出结算界面 |
+| `CameraYawOffset` | `float` | 15.0 | 摄像机偏航转动量（度，策划可调） |
+| `CameraPitchOffset` | `float` | -3.0 | 摄像机俯仰转动量（度，策划可调） |
+
+### 16.3 行数据（v1）
+
+| RowName | FreezeDelay | CameraDuration | HoldDuration | CameraYawOffset | CameraPitchOffset |
+|---------|-------------|----------------|--------------|-----------------|-------------------|
+| `Default` | 1.0 | 1.0 | 0.5 | 15.0 | -3.0 |
+
+---
+
+## 17. 15 — 教学战配置 (DT_TutorialConfig)
+
+### 17.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_TutorialConfig` |
+| 结构体 | `FTutorialConfigRow` |
+| 行 ID | 单行 `Default`（代码优先按 `Default` 查找，缺失时自动取第一行，兼容编辑器新建时的 `NewRow`） |
+| 行数 | 1（单例） |
+| 来源 | 2026-08-11 教学战配置集中化；承接 GDD §9.3 教学引导 / 死亡逃跑结算链路 |
+
+### 17.2 列定义
+
+| 列名 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `TutorialEnemyID` | `FName` | `apprentice_cave` | 教学战敌人 ID（教学导演自动启用 / 教学战判定） |
+| `bPlayerFirstStrike` | `bool` | true | 教学战玩家先制（开场玩家 1 层蓄力） |
+| `LockHP` | `float` | 1.0 | 教学敌人锁血值（避免必逃演出前被击杀） |
+| `RunAwayHPThreshold` | `float` | 0.3 | 敌方血量 ≤ 该比例（0~1）时触发逃跑，立即进入结算链路 |
+| `RunAwayRoundCap` | `int32` | 15 | 教学战回合数兜底（≥ 该值强制逃跑，避免软锁） |
+| `ClashTimeDilation` | `float` | 0.05 | 同色碰撞可格挡慢放的世界时间流速（0.05=慢放，0=关闭，仅教学战生效） |
+| `TimeSlowEarlyTime` | `float` | 0.15 | 时缓提早时间（秒）：教学战同色碰撞慢放比命中点（`ClashHitTime`）提前开始的时间，参数直接生效（慢放起点 = 命中点 − 本值）；值 ≤ min(格挡窗, 闪避窗) 时慢放出现时两个输入窗口均已开放 |
+| `ChargeCapTriggerStack` | `int32` | 1 | 教学点 A 触发层数（玩家蓄力层数，蓄满破红防） |
+| `ChargeCapMinRound` | `int32` | 2 | 教学点 A 最早触发回合（RoundNumber ≥ 该值） |
+| `ChargeResistTriggerStack` | `int32` | 0 | 教学点 B 触发层数（玩家蓄力层数，蓄力抵抗白攻） |
+| `bFirstWhiteAttackForcesClash` | `bool` | true | 教学战内第一次白攻强制敌方同步白攻（必定白白碰撞教学） |
+| `FleeSequence` | `TSoftObjectPtr<ULevelSequence>` | 空 | 教学战逃跑 Level Sequence（结算后播放，机制同 Boss 开场动画：序列播放/镜头混合/IA_Skip 跳过；暂空 = 不播放） |
+| `OpeningHint` | `FText` | 空 | 开场总提示；留空回退代码默认文案 |
+| `ChargeCapHint` | `FText` | 空 | 教学点 A 提示；留空回退代码默认文案 |
+| `ChargeResistHint` | `FText` | 空 | 教学点 B 提示；留空回退代码默认文案 |
+| `ClashHint` | `FText` | 空 | 同色碰撞格挡/闪避操作提示；留空回退代码默认文案 |
+| `ExtraTurnHint` | `FText` | 空 | 额外回合提示；留空回退代码默认文案 |
+
+### 17.3 行数据（v1）
+
+| RowName | TutorialEnemyID | bPlayerFirstStrike | LockHP | RunAwayHPThreshold | RunAwayRoundCap | ClashTimeDilation | TimeSlowEarlyTime | ChargeCapTriggerStack | ChargeCapMinRound | ChargeResistTriggerStack | bFirstWhiteAttackForcesClash | FleeSequence |
+|---------|-----------------|--------------------|--------|--------------------|-----------------|-------------------|-------------------|-----------------------|-------------------|--------------------------|------------------------------|-------------|
+| `Default` | `apprentice_cave` | true | 1.0 | 0.3 | 15 | 0.05 | 0.15 | 1 | 2 | 0 | true | 空 |
+
+> 提示文案列（OpeningHint / ChargeCapHint / ChargeResistHint / ClashHint / ExtraTurnHint）由脚本生成的默认行预填与代码一致的默认文案；留空时运行回退代码内默认文案。
+
+---
+
+## 18. 16 — 非战斗背景音乐 (DT_AreaBGMConfig)
+
+### 18.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_AreaBGMConfig` |
+| 结构体 | `FBGMConfigRow`（与 DT_EnemyBGMConfig 共用） |
+| 行 ID | 区域 ID（`hole`/`town`/`market`/`mansion`/`border`/`hell`）+ `Default` 兜底 |
+| 行数 | 7（v1） |
+| 来源 | 2026-08-11 背景音乐需求；承接 GDD §11.1 各区域音乐风格 |
+
+### 18.2 列定义
+
+| 列名 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Music` | `TSoftObjectPtr<USoundBase>` | 空 | 背景音乐资产（Wave/SoundCue/MetaSound）；空 = 不播放 |
+| `Volume` | `float` | 1.0 | 播放音量（0~1） |
+| `bLoop` | `bool` | true | 是否循环（资产自身不循环时由组件手动循环） |
+| `FadeInTime` | `float` | 1.0 | 淡入时长（秒） |
+| `FadeOutTime` | `float` | 1.0 | 淡出时长（秒） |
+
+### 18.3 行数据（v1）
+
+| RowName | 说明 |
+|---------|------|
+| `Default` | 兜底（未配置区域时使用） |
+| `hole` / `town` / `market` / `mansion` / `border` / `hell` | 按 GDD §11.1 音乐风格填资产 |
+
+---
+
+## 19. 17 — 战斗背景音乐 (DT_EnemyBGMConfig)
+
+### 19.1 基本信息
+
+| 项 | 值 |
+|----|-----|
+| 资产名 | `DT_EnemyBGMConfig` |
+| 结构体 | `FBGMConfigRow`（与 DT_AreaBGMConfig 共用） |
+| 行 ID | 敌人 ID（`apprentice`/`apprentice_cave`/`adept`/`commander`/`border_guard`/`demon`/`satan`/`friendly_creature`）+ `Default` 兜底 |
+| 行数 | 9（v1） |
+| 来源 | 2026-08-11 背景音乐需求；不同敌人可配不同战斗 BGM（Boss 战风格增强见 GDD §11.1） |
+
+### 19.2 列定义
+
+| 列名 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `Music` | `TSoftObjectPtr<USoundBase>` | 空 | 战斗背景音乐资产；空 = 不播放 |
+| `Volume` | `float` | 1.0 | 播放音量（0~1） |
+| `bLoop` | `bool` | true | 是否循环（资产自身不循环时由组件手动循环） |
+| `FadeInTime` | `float` | 1.0 | 淡入时长（秒） |
+| `FadeOutTime` | `float` | 1.0 | 淡出时长（秒） |
+
+### 19.3 行数据（v1）
+
+| RowName | 说明 |
+|---------|------|
+| `Default` | 兜底（未配置敌人的战斗音乐） |
+| `satan` / `apprentice_cave` / `apprentice` / `adept` / `commander` / `border_guard` / `demon` / `friendly_creature` | 按敌人填入不同战斗 BGM |
+
+---
+
+## 20. 数据关联总览
+
+### 20.1 外键引用关系
 
 ```
 DT_CombatParams (单例，无外键)
@@ -1155,37 +1318,47 @@ DT_CombatParams (单例，无外键)
      │
      ├── DT_SmokeConfig
      │      ├── ConvertedSkillID ────► DT_SkillConfig
-     │      └── ConvertedItemID ────► DT_ConsumableConfig
+     │      ├── ConvertedItemID ────► DT_ConsumableConfig
+     │      └── DirectUseItemID ────► DT_ConsumableConfig（道具烟直接使用）
      │
      ├── DT_SkillConfig
-     │      └── ObtainFromSmokeType ► DT_SmokeConfig
+     │      └── ObtainFromSmokeType ► DT_SmokeConfig（博士提炼解锁）
      │
      ├── DT_SkillTreeConfig
      │      ├── ParentNodeID ───────► DT_SkillTreeConfig (自身)
-     │      └── RequiredSmokeType ──► DT_SmokeConfig
+     │      ├── RequiredSmokeType ──► DT_SmokeConfig
+     │      └── UnlockSkillID ──────► DT_SkillConfig（主动节点）
      │
      ├── DT_AreaConfig (独立)
      ├── DT_ConsumableConfig
      │      └── ObtainFromSmokeType ─► DT_SmokeConfig
      │
      ├── DT_EconomyConfig (单例，无外键)
-     └── DT_CombatAnimConfig (独立，无外键；软引用 UAnimMontage 资产)
+     ├── DT_CombatAnimConfig (独立，无外键；软引用 UAnimMontage 资产)
+     ├── DT_SettlementConfig (单例，无外键)
+     ├── DT_TutorialConfig (单例，无外键；软引用逃跑 Level Sequence 资产)
+     ├── DT_AreaBGMConfig (独立，无外键；软引用 USoundBase 资产)
+     └── DT_EnemyBGMConfig (独立，无外键；软引用 USoundBase 资产)
 ```
 
-### 16.2 GDD 章节 → 配置表映射
+### 20.2 GDD 章节 → 配置表映射
 
 | GDD 章节 | 主要内容 | 对应配置表 |
 |----------|----------|-----------|
 | §5.1 移动系统 | 移动速度、操作按键 | DT_CombatParams (速度), DT_CharacterConfig (角色差异化) |
 | §5.2.3-5.2.5 战斗 | 三色克制、蓄力、同色碰撞 | DT_CombatParams |
 | §5.2.5 同色碰撞动画 | 实时格挡/闪避与碰撞动画提示 | DT_CombatAnimConfig |
+| §5.2.2 战斗界面/死亡结算链路 | 延迟冻结/镜头转动 | DT_SettlementConfig |
+| §9.3 教学引导 | 教学敌人 ID/先制/锁血/逃跑线/教学点/逃跑动画/引导文案 | DT_TutorialConfig |
+| §11.1 音乐风格方向（非战斗） | 各区域探索背景音乐 | DT_AreaBGMConfig |
+| §11.1 音乐风格方向（战斗） | 不同敌人/ Boss 战斗背景音乐 | DT_EnemyBGMConfig |
 | §5.2.6 技能系统 | 技能类型 | DT_SkillConfig |
 | §5.2.7 战斗参数表 | 初始数值 | DT_CombatParams |
 | §5.3.2 烟分类体系 | 9种烟 | DT_SmokeConfig |
 | §5.3.4 货币系统 | 货币名称/获取 | DT_EconomyConfig |
 | §5.5 AI行为 | 敌人AI | DT_EnemyConfig (AIPreference, AIDifficulty, 范围) |
 | §6.1 等级系统 | 无等级，烟驱动成长 | DT_SmokeConfig + DT_SkillTreeConfig |
-| §6.2 局外技能树 | 被动增益节点 | DT_SkillTreeConfig |
+| §6.2 局外技能树 | 主动技能 + 被动增益节点 | DT_SkillTreeConfig |
 | §6.3.1 武器 | 武器类型/效果 | DT_WeaponConfig |
 | §6.3.2 面具 | 面具稀有度/效果 | DT_MaskConfig |
 | §6.4 解锁节奏 | 轮回解锁内容 | DT_AreaConfig (区域), DT_CharacterConfig (角色) |
@@ -1196,7 +1369,7 @@ DT_CombatParams (单例，无外键)
 | §8.3 关键角色 | 6个角色 | DT_CharacterConfig |
 | §14 经济系统 | 货币、产出/消耗 | DT_EconomyConfig |
 
-### 16.3 `[待定]` 项清单
+### 20.3 `[待定]` 项清单
 
 | 编号 | 位置 | 内容 | 影响范围 |
 |------|------|------|----------|
@@ -1243,4 +1416,5 @@ DT_CombatParams (单例，无外键)
 > | v0.18 | 2026-08-09 | `ClashTimeDilation` 范围限定：仅序章教学战生效；同步 GDD v0.21 |
 > | v0.19 | 2026-08-09 | `RunAwayHPThreshold` 语义修订：仅教学脚本未启用时兜底，脚本进行中不触发（9 回合完整教学）；同步 GDD v0.23 |
 > | v0.20 | 2026-08-09 | 教学引导重构：`RunAwayHPThreshold` 改为"两个蓄力教学点均演示后触发 + 15 回合兜底"；同步 GDD v0.25 |
+> | v0.21 | 2026-08-10 | 技能获取与烟定位修订：`bConvertToSkill` 语义改为博士提炼解锁主动技能；DT_SmokeConfig 新增 `bUsableAsItem`/`DirectUseItemID`（道具烟，替代 `CanDirectHealSmokeReserve`/`DirectHealAmount`）；DT_SkillTreeConfig 新增 `NodeType`/`UnlockSkillID`（技能树含主动+被动）；同步 GDD v0.27 |
 > | v0.12 | 2026-08-06 | 13 号表新增 `ClashAttackBlueSections`/`ClashAttackWhiteSections`：碰撞攻击随机 Section（竖线分隔）；同步 GDD v0.12 |

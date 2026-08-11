@@ -13,6 +13,9 @@ struct FEnemyConfigRow;
 struct FCombatParamsRow;
 struct FCombatStageRow;
 struct FCombatAnimRow;
+struct FSettlementConfigRow;
+struct FTutorialConfigRow;
+struct FBGMConfigRow;
 struct FMaskConfigRow;
 struct FWeaponConfigRow;
 struct FAttributeModifier;
@@ -55,6 +58,18 @@ public:
 
 	/** DT_CombatAnimConfig 行（找不到返回 nullptr） */
 	const FCombatAnimRow* GetCombatAnimRow(FName EntityID) const;
+
+	/** DT_SettlementConfig 行：优先 "Default"，缺失时取第一行（兼容编辑器新建时的 NewRow）；表缺失返回 nullptr */
+	const FSettlementConfigRow* GetSettlementConfigRow() const;
+
+	/** DT_TutorialConfig 行：优先 "Default"，缺失时取第一行；表缺失返回 nullptr */
+	const FTutorialConfigRow* GetTutorialConfigRow() const;
+
+	/** DT_AreaBGMConfig 行：精确 AreaID → Default → 第一行；表缺失返回 nullptr */
+	const FBGMConfigRow* GetAreaBGMConfigRow(FName AreaID) const;
+
+	/** DT_EnemyBGMConfig 行：精确 EnemyID → Default → 第一行；表缺失返回 nullptr */
+	const FBGMConfigRow* GetEnemyBGMConfigRow(FName EnemyID) const;
 
 	// ---- 跨表合并（角色/敌人基础属性） ----
 
@@ -107,4 +122,8 @@ private:
 	mutable TObjectPtr<UDataTable> MaskTable;
 	mutable TObjectPtr<UDataTable> WeaponTable;
 	mutable TObjectPtr<UDataTable> CombatAnimTable;
+	mutable TObjectPtr<UDataTable> SettlementTable;
+	mutable TObjectPtr<UDataTable> TutorialTable;
+	mutable TObjectPtr<UDataTable> AreaBGMTable;
+	mutable TObjectPtr<UDataTable> EnemyBGMTable;
 };

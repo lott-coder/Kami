@@ -38,6 +38,71 @@
 
 ## 2026-07-06 ~ 至今
 
+### 2026-08-11 | 策划 ⚡ / 程序
+
+**问题/事项：** 结算界面与死亡结算链路设计定案与落地。
+
+**处理过程：**
+1. 定案（用户需求）：取消战后三选一 Buff；战斗胜利只显示"道具（烟+道具）"与"装备"两个栏位；结算横幅只有胜利/失败两态文字（教学逃跑归为胜利）；结算后不自动收尾，点击屏幕继续（右下角"继续前进"提示）。
+2. C++：`UBattleResultHUDWidget` 新增 `ShowVictoryResult`/`ShowResult` 两态接口、奖励两栏可选绑定（`RewardPanel`/`ItemRewardText`/`EquipmentRewardText`）、右下角提示（`ContinueHintText`）、点击屏幕/Enter/空格继续（`OnContinueClicked`）；`UBattleComponent::ShowResultHUD` 改为返回 bool，点击继续按结果路由 `HandleVictoryCleanup`/`HandleDefeatRestart`，移除胜利/失败自动收尾计时器（仅 `WBP_BattleResult` 未配置时兜底自动收尾，避免软锁）。
+3. Bug修复：胜利后结算面板不出现——`WBP_BattleResult` 资产已创建，但 `UBattleComponent` 构造期 `FClassFinder` 在资产创建前已执行，`BattleResultHUDClass` 为空。修复：`ShowResultHUD` 在类为空时运行时 `LoadClass` 重新加载 `/Game/UI/HUD/WBP_BattleResult`。
+4. Bug修复：教学战额外回合提示每次额外回合重复出现。修复：额外回合提示移入 `UTutorialDirectorComponent`（`bExtraTurnHintEverShown`/`bExtraTurnHintActive`），整场只展示一次；教学战所有提示统一"整场只出现一次"口径（开场总提示/教学点A/B/碰撞/额外回合）。
+5. 新需求：死亡结算链路——一方血量清空 → 画面完全暂停（世界时间冻结为 0）→ 摄像机轻微转动（平滑插值到 `DeathCameraYawOffset`/`DeathCameraPitchOffset`）→ 停留后弹出结算界面。参数全部在 `UBattleComponent` 上策划可调（`DeathSequenceFreezeDuration`/`DeathSequenceCameraDuration`/`DeathSequenceHoldDuration`/偏航/俯仰）；链路用真实帧时间驱动（`FApp::GetDeltaTime()`），避免时间冻结时计时器卡死；冻结期间临时关闭 SpringArm 旋转滞后，保证镜头转动立即生效；结算前不再播放 Death/Victory 蒙太奇（`DT_CombatAnimConfig` 两列保留备用）。
+6. 同步 GDD v0.28：§4.1 微观循环、§9.1 界面清单、§9.2 HUD 原则、§19.5 修订记录。
+7. 新需求（2026-08-11 二次修订）：①画面冻结延迟到 HP 清空后 1s（`DeathSequenceFreezeDelay`，策划可调），延迟期间世界时间正常、死亡方正常播放 Hurt；②`FCombatAnimRow` 删除 `Death`/`Victory` 列（受击反应不再区分死亡）；③新增 14 号表 `DT_SettlementConfig`（`FSettlementConfigRow`，单行 Default）承载结算链路参数与教学逃跑序列 `FleeSequence`（暂空）；④教学战结算与正常战斗一致，逃跑触发胜利结算，逃跑序列在结算后播放（暂空 = 不播放）；⑤C++ 结算参数改为进入战斗时从表加载（`UCombatFormulaSubsystem::GetSettlementConfigRow`），表缺失回退组件默认值；⑥`Scripts/create_datatables.py`/`export_datatables.py`/`verify_datatables.py` 同步 14 号表，动画表脚本同步删除 Death/Victory 并修正 Block 列。
+8. 同步 GDD v0.30 / DataTable_Spec v0.22：新增 §16 结算配置（14 号表），动画表删除 Death/Victory 列。
+9. 新需求（2026-08-11 三次修订）：①教学战逃跑动画改为 **Level Sequence**（`DT_SettlementConfig.FleeSequence`，`TSoftObjectPtr<ULevelSequence>`），播放机制复用 Boss 开场动画模式——`ULevelSequencePlayer` + 动态 `ALevelSequenceActor` + 镜头混合 + `IA_Skip` 跳过输入（`TutorialFleeSkipAction`），序列结束/跳过后再执行 `FinishVictoryCleanup`；②画面冻结在结算界面显示期间**始终保持**，只有点击继续（结算完成）才恢复世界时间（`EndDeathSequence` 不再恢复时间；`WBP_BattleResult` 缺失走兜底计时器时先恢复时间，避免冻结计时器不触发）。
+10. 同步 GDD v0.31 / DataTable_Spec v0.23。
+11. 编译通过（常规构建 13.5s）。
+12. Bug修复：结算界面弹出后画面取消定格——`ClearClashTimers()` 内部无条件调用 `RestoreTimeDilation()`，而 `FinishBattle` 开头就调用 `ClearClashTimers()`，等于结算界面弹出的瞬间把冻结解除。修复：`ClearClashTimers` 只清计时器、不再管时间流速（职责解耦）；碰撞结算 `ResolveClash` 与 `EndPlay` 改为显式调用 `RestoreTimeDilation()`；死亡链路冻结在结算界面显示期间保持，点击继续才恢复。
+13. 编译通过（常规构建 12.9s）。
+14. 需求：删除 `FreezeDuration`（`DeathSequenceFreezeDuration`）——冻结后不再额外停顿，直接开始镜头转动；同步移除 `FSettlementConfigRow`/`UBattleComponent` 字段、脚本列、DataTable_Spec v0.24（§16.2/16.3）、GDD v0.32。
+15. 编译通过。
+16. 语义澄清（用户确认）：`FreezeDelay` 不是"Hurt 播完后延迟"，而是从 HP 清空时刻开始计时，到点即冻结——静止画面可能定格在 Hurt 动画播放中（代码本就如此，仅补文档：GDD v0.33 / DataTable_Spec v0.24 描述更新）。
+17. Bug修复：调整相机旋转角度/Hold Duration 无效——`DT_SettlementConfig` 资产里的行名是编辑器默认的 `NewRow`，而 C++ 只按 `Default` 查行，查不到就静默回退结构体默认值，策划改的表数据从未被读取。修复：`UCombatFormulaSubsystem::GetSettlementConfigRow` 优先 `Default`，缺失时自动取表中第一行，并补警告日志；`ApplySettlementConfig` 在配置不可用时也输出警告。同步 DataTable_Spec v0.25。
+18. 编译通过（常规构建 26s）。
+19. Bug修复：教学战结算与普通战不一致——普通战会走"延迟→冻结→镜头转动→结算界面"链路，而教学逃跑直接 `FinishBattle` 弹界面。修复：教学逃跑改调 `StartDeathSequence(true, true)`，与普通战走同一条结算链路（延迟阶段无 Hurt，逃跑 Level Sequence 仍在点击继续后播放）。同步 GDD v0.34。
+20. 编译通过（常规构建 20s）。
+21. 新需求：教学战进入结算链路的条件改为"我方死亡 或 敌方血量 ≤ 逃跑线"（`ApplyDamageTo` 扣血后立即判定，不再等回合结束/两个教学点完成）；`ShouldTriggerFlee` 移除教学点完成门槛，15 回合上限仍作兜底。
+22. 附加需求：战胜敌人后清除敌人实例——`FinishVictoryCleanup` 在 `RestoreExplorationState` 之后调用 `DestroyDefeatedEnemy` 销毁 Boss 敌人（教学逃跑同样销毁；失败重开不销毁）。同步 GDD v0.35。
+23. 编译通过（常规构建 17s）。
+24. 新需求：教学战配置集中化——新增 15 号表 `DT_TutorialConfig`（`FTutorialConfigRow`，单行 Default）：教学敌人 ID、玩家先制、锁血值、逃跑血量阈值、逃跑回合兜底、碰撞慢放、教学点 A/B 触发层数与最早回合、首次白攻强制碰撞、五条引导文案；`RunAwayHPThreshold`/`ClashTimeDilation` 从 `DT_CombatParams` 迁出。`UTutorialDirectorComponent` 在 BeginPlay 加载配置副本（含 EnemyID 自动启用与全部提示回退）；`UBattleComponent::ApplyTutorialConfig` 缓存敌人 ID/先制/锁血/慢放；`IsTutorialBattle` 改用配置中的敌人 ID。同步 GDD v0.36 / DataTable_Spec v0.26 / 脚本（15 号表 + CombatParams 脚本同步移除已删字段）。
+25. 编译通过（常规构建 27s）。
+26. 需求：教学逃跑 Level Sequence（`FleeSequence`）从 `DT_SettlementConfig` 迁入 `DT_TutorialConfig`（教学战配置全部集中）；`FSettlementConfigRow` 移除该字段，`FTutorialConfigRow` 新增；`ApplyTutorialConfig` 负责加载。同步 GDD v0.37 / DataTable_Spec v0.27 / 脚本。
+27. 编译通过（常规构建 9s）。
+28. 新需求：新增可调参数 `TimeStopEarlyTime`（时停提早时间，默认 0.15s，0=关闭）——直接攻击（蓝/白攻）的致命一击在命中帧前提前冻结世界，命中帧由真实时间驱动结算伤害；`StartDeathSequence` 检测提前冻结后跳过 `FreezeDelay` 阶段直接保持冻结。实现：`FPendingEarlyTimeStop` 双侧预排 + `RegisterSideHit` 注册后按 `GetNotifyRealTime` 调度；满蓄强化蓝攻/蓝vs红/碰撞攻击不走此路径。同步 GDD v0.38 / DataTable_Spec v0.28 / 脚本。
+29. 编译通过（常规构建 26s）。
+30. 需求修订：撤销"时停提早时间"（`TimeStopEarlyTime`）全部实现；改为"时缓提早时间"（`TimeSlowEarlyTime`，默认 0.15s，0=关闭）——致命一击命中帧前提前进入慢放，时缓流速复用 `DT_TutorialConfig.ClashTimeDilation`（默认 0.05），命中帧由真实时间驱动结算，死亡序列 `RestoreTimeDilation` 恢复时间后走原链路。实现：`FPendingEarlyTimeSlow` 双侧预排 + `RegisterSideHit` 调度；满蓄强化蓝攻/蓝vs红/碰撞攻击不走此路径。同步 GDD v0.39 / DataTable_Spec v0.29 / 脚本。
+31. 编译通过（常规构建 12s）。
+32. 需求修订（归属修正）：用户确认"时缓"指 `DT_TutorialConfig` 中的碰撞慢放逻辑，`DT_SettlementConfig` 保留原本时停（冻结）链路——撤销前两轮在 Settlement 中添加的"时停提早时间/时缓提早时间"全部实现（代码/表/文档）；`TimeSlowEarlyTime`（时缓提早时间，默认 0.15s）移入 `DT_TutorialConfig`，控制教学战碰撞慢放比命中点提前开始：慢放起点 = `ClashHitTime − max(min(格挡窗, 闪避窗), TimeSlowEarlyTime)`，非教学战保持原窗口起点。同步 GDD v0.40 / DataTable_Spec v0.30 / 脚本。
+33. 编译通过（常规构建 18s）。
+34. Bug修复：调整 `TimeSlowEarlyTime` 无效果——上一版公式与窗口取 `max`，参数小于 `min(格挡窗 0.25, 闪避窗 0.35)` 时被窗口值覆盖。修复：教学战慢放起点改为 `ClashHitTime − TimeSlowEarlyTime`（参数直接生效）；值 ≤ min(窗口) 时慢放出现时两个输入窗口均已开放，立即点击仍按原判定成功。同步 GDD v0.41 / DataTable_Spec v0.31。
+35. 编译通过（常规构建 14s）。
+36. 新需求：背景音乐系统——新增 16 号表 `DT_AreaBGMConfig`（非战斗/探索 BGM，按区域行：6 区域 + Default）与 17 号表 `DT_EnemyBGMConfig`（战斗 BGM，按敌人行：8 敌人 + Default），共用 `FBGMConfigRow`（Music 软引用 USoundBase/Volume/bLoop/FadeInTime/FadeOutTime）；新增 `UBGMComponent`（挂在 BP_Dale）监听 `UBattleComponent::OnBattleStateChanged`：非战斗播探索 BGM，进入战斗按敌人 ID 播战斗 BGM，结束淡出切回；资产自身不循环时组件手动循环。同步 GDD v0.42 / DataTable_Spec v0.32 / 脚本。
+37. 编译通过（常规构建 4s）。
+38. 新需求：Level Sequence 独立音乐——所有序列自带独立音乐，播放期间 `UBGMComponent` 静音。`UBossIntroComponent` 新增 `OnIntroStateChanged` 状态广播（Playing=静音）；`UBattleComponent` 新增 `OnTutorialFleeSequenceStateChanged`（教学逃跑序列播放/结束）；BGM 组件用 `SequenceMuteCount` 计数静音，序列结束恢复当前状态 BGM；其它序列可调用 `UBGMComponent::SetSequencePlaying`。同步 GDD v0.43。
+39. 编译通过（常规构建 27s）。
+40. Bug修复：Level Sequence 播放期间 BGM 重新插入——静音时 `MusicPlayer->Stop()` 触发 `OnAudioFinished`，而手动循环重播开关仍开启，BGM 被"循环重播"插回。修复：静音前先置 `bMusicFinishedReplayEnabled=false`（两处：`SetSequenceMuteCountDelta` 与 `UpdateMusic` 的静音分支）。
+41. 编译通过（常规构建 9s）。
+
+**结果/解决方案：** C++ 已落地并编译通过；PIE 待验证：胜利/失败横幅两态文字、胜利两栏奖励显示、点击屏幕继续/失败重开、教学逃跑显示"战斗胜利"、教学提示整场各出现一次、死亡时延迟 1s（Hurt 正常播放）→冻结并镜头转动→停留→结算界面链路且**冻结保持到点击继续**、`DT_SettlementConfig` 参数生效、教学逃跑 Level Sequence 播放/跳过。
+
+**经验教训：** 结算流程从"计时器自动收尾"改为"玩家输入驱动"后，必须保留 WBP 缺失时的兜底计时器，避免编辑器测试软锁；奖励栏位先以可选控件 + 空数据占位，掉落系统接入时再填充；"画面完全暂停"用世界时间冻结实现时，后续链路必须用真实帧时间驱动，不能依赖世界计时器/DeltaTime。
+
+### 2026-08-10 | 策划 ⚡
+
+**问题/事项：** 技能获取与烟定位设计修正——战斗技能也需要交给博士提炼；技能树应同时包含主动技能与被动增益；部分烟是可以直接使用的道具烟。
+
+**处理过程：**
+1. 定案：战斗技能不再由击败敌人后自动转化，改为原生烟交博士提炼，在技能树主动节点解锁；技能树 = 主动技能节点 + 被动增益节点。
+2. 定案：新增"道具烟"概念——部分烟可直接作为道具使用（消耗烟本身，如治愈之烟直接回复烟储备），不进入烟储备。
+3. 同步 GDD v0.27：§5.2.6 技能获取路径、§5.3.2 道具烟、§5.3.5 使用汇总、§5.3.6/§6.1 成长路径、§6.2 技能树（标题与节点类型）、§7.4 获取方式、§14.4 烟的经济流、§19.5 修订记录。
+4. 同步 DataTable_Spec v0.21：`FSmokeConfigRow` 新增 `bUsableAsItem`/`DirectUseItemID`（替代 `CanDirectHealSmokeReserve`/`DirectHealAmount`），`bConvertToSkill` 语义改为博士提炼解锁；`FSkillTreeConfigRow` 新增 `NodeType`/`UnlockSkillID`；§16.1 外键关系更新。
+
+**结果/解决方案：** 文档已同步；后续待办：C++ USTRUCT 增改字段（`SmokeConfigTable.h` / `SkillTreeConfigTable.h`）、编辑器数据表资产（DT_SmokeConfig / DT_SkillTreeConfig）、博士提炼流程与技能树 UI（主动节点）落地。
+
+**经验教训：** 烟≠货币体系下仍需区分三条烟的使用路径——直接使用（道具烟）、博士提炼（主动技能/被动增益）、经济兑换（货币），避免实现时把道具烟误做成自动转化或让技能获取绕过博士。
+
 ### 2026-08-09 | 策划 ⚡
 
 **问题/事项：** 设计序章教学敌人（新手教程单场战斗），替代原"教学1+教学2"双教学结构。
@@ -68,6 +133,8 @@
 23. 需求（2026-08-10）：教学提示文案分段——开场总提示、教学点 A/B、碰撞提示的文案用 `\n` 拆成多行（段落之间如需空行用 `\n\n`）；配合 WBP 自动换行 + 面板固定宽度显示；编译通过（-NoUba）。
 24. 需求（2026-08-10）：提示文案术语调整（用户手动修改）——"蓝攻/白攻/红防"改为教学向表述"蓄力攻击/普通攻击/防御"，段落间用 `\n\n` 空行分段；重新编译通过（-NoUba）。
 25. 架构重构（2026-08-10）：教学系统独立为 `UTutorialDirectorComponent`（UActorComponent，挂在教学怪上，EnemyID 自动启用）——教学决策（教学点触发/敌方行动覆盖/蓄力锁定/提示文案/必逃判定/首次白攻碰撞）全部迁入导演；`UBattleComponent` 瘦身为"调用 + 执行"（锁血/逃跑/提示转发），保留 `bTutorialFleeTriggered` 防重入；行为与重构前一致；编译通过（-NoUba）。
+26. Bug修复（2026-08-11）：①先制污染——`StartBattle` 用 `bEnemyFirstStrike = false` 直接改写持久属性，教学战后同一 BattleComponent 打 Satan 仍是玩家先制。修复：先制改为 `EnterBattle` 内局部计算（`IsTutorialBattle() ? false : bEnemyFirstStrike`），不再改动属性，Boss 战恢复敌方先制。②蓝攻 vs 红防伤害泄漏——`PlayResolutionAnimations` 调用 `RegisterBlueVsRedHit(true, Resolution.PlayerDamageTaken, ...)` 传错参数，把"玩家将吃的金反击伤害"当作"蓝攻打中敌方的伤害"，导致敌方先吃到反击数值的伤害再反击。修复：改传 `Resolution.EnemyDamageTaken`（被克制时=0），敌方不再先受伤；编译通过（-NoUba）。
+27. Bug修复（2026-08-11）：碰撞提示每次碰撞都出现——`UTutorialDirectorComponent::GetTutorialHintText` 对每次 Clash 都返回碰撞文案。修复：新增 `bClashHintEverShown` / `bClashHintActive`，碰撞提示整场战斗只展示一次（首次碰撞显示，当前提示保持到碰撞结束；之后的碰撞不再显示），失败重开重置；编译通过（-NoUba）。
 
 **结果/解决方案：** 教学引导重构为"开场总提示一次 + 两个条件教学点（蓄力 1 层/敌方红防 → 满蓄破防；蓄力 0 层/敌方白攻 → 抵抗+额外回合）+ 首次白攻必定白白碰撞 + 碰撞提示"，玩家自由出招、敌方随机 AI；`apprentice_cave`（Tutorial/180HP/BaseDamageScale 0.4/无掉落/SpawnAreas=hole）；教学锁血 1；必逃在两个教学点完成后按血量阈值触发，15 回合兜底。C++ 侧全部落地并通过编译；编辑器侧资产（DT 行、BP_Apprentice/BP_Apprentice_Cave/ABP、蒙太奇、WBP 绑定、Level Sequence）由用户手动完成。
 

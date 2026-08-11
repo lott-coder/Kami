@@ -13,6 +13,10 @@ TABLES = [
     "DT_ConsumableConfig", "DT_EconomyConfig",
     "DT_BattleStage",
     "DT_CombatAnimConfig",
+    "DT_SettlementConfig",
+    "DT_TutorialConfig",
+    "DT_AreaBGMConfig",
+    "DT_EnemyBGMConfig",
 ]
 
 

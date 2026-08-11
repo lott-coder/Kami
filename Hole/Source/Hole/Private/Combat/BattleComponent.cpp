@@ -15,10 +15,15 @@
 #include "Subsystem/CombatFormulaSubsystem.h"
 #include "DataTable/CombatParamsTable.h"
 #include "DataTable/CombatStageTable.h"
+#include "DataTable/SettlementConfigTable.h"
+#include "DataTable/TutorialConfigTable.h"
 #include "Engine/GameInstance.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "LevelSequence.h"
+#include "LevelSequenceActor.h"
+#include "LevelSequencePlayer.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/BaseCharacterAnimInstance.h"
@@ -36,7 +41,9 @@
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
+#include "Misc/App.h"
 #include "TimerManager.h"
+#include "UObject/Class.h"
 #include "UObject/ConstructorHelpers.h"
 
 UBattleComponent::UBattleComponent()
@@ -68,6 +75,9 @@ UBattleComponent::UBattleComponent()
 
 	static ConstructorHelpers::FObjectFinder<UInputAction> Dodge(TEXT("/Game/Input/IA_CombatDodge"));
 	if (Dodge.Succeeded()) DodgeAction = Dodge.Object;
+
+	static ConstructorHelpers::FObjectFinder<UInputAction> FleeSkip(TEXT("/Game/Input/IA_Skip"));
+	if (FleeSkip.Succeeded()) TutorialFleeSkipAction = FleeSkip.Object;
 }
 
 void UBattleComponent::BeginPlay()
@@ -104,6 +114,7 @@ void UBattleComponent::BeginPlay()
 void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearClashTimers();
+	RestoreTimeDilation();
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EndDelayTimer);
@@ -114,11 +125,8 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	EndHitStop();
 	UnbindCombatInput();
 	RemoveCombatMapping();
-	if (ResultHUD.IsValid())
-	{
-		ResultHUD->RemoveFromParent();
-		ResultHUD.Reset();
-	}
+	StopTutorialFleeSequence();
+	HideResultHUD();
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -126,6 +134,14 @@ void UBattleComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void UBattleComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// 死亡结算链路：世界时间已冻结为 0，用真实帧时间驱动（停帧 → 镜头转动 → 结算界面）
+	if (bDeathSequenceActive)
+	{
+		TickDeathSequence();
+		return;
+	}
+
 	if (!bHitStopActive)
 	{
 		return;
@@ -165,13 +181,6 @@ void UBattleComponent::StartBattle()
 
 	EnemyAI = BossEnemy->FindComponentByClass<UEnemyCombatAIComponent>();
 	TutorialDirector = BossEnemy->FindComponentByClass<UTutorialDirectorComponent>();
-
-	// 序章教学战：主角突袭魔法师 → 玩家先制（与敌方先制效果一致：先制方开局 1 层蓄力，无其它效果）
-	if (IsTutorialBattle())
-	{
-		bEnemyFirstStrike = false;
-		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartBattle - 序章教学战：玩家先制（玩家 1 层 / 敌方 0 层）"));
-	}
 	EnterBattle();
 }
 
@@ -183,6 +192,7 @@ void UBattleComponent::EndBattle()
 	}
 
 	ClearClashTimers();
+	StopTutorialFleeSequence();
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
@@ -192,6 +202,7 @@ void UBattleComponent::EndBattle()
 	UnbindCombatInput();
 	RemoveCombatMapping();
 	HideResultHUD();
+	RestoreTimeDilation();
 	SheathePlayerWeapon();
 	HideHUD();
 	RestoreExplorationState();
@@ -306,13 +317,18 @@ AEnemy* UBattleComponent::GetBossEnemy() const
 
 bool UBattleComponent::IsTutorialBattle() const
 {
-	return BossEnemy.IsValid() && BossEnemy->EnemyID == FName(TEXT("apprentice_cave"));
+	return BossEnemy.IsValid() && BossEnemy->EnemyID == TutorialEnemyID;
 }
 
 FText UBattleComponent::GetTutorialHintText() const
 {
 	return TutorialDirector.IsValid()
-		? TutorialDirector->GetTutorialHintText(Phase, bClashResolved, bPlayerChoseAction, bPlayerExtraTurnPending)
+		? TutorialDirector->GetTutorialHintText(
+			Phase,
+			bClashResolved,
+			bPlayerChoseAction,
+			bPlayerExtraTurnPending,
+			IsPlayerExtraTurn() && !HasPlayerChosenAction())
 		: FText::GetEmpty();
 }
 
@@ -333,7 +349,7 @@ bool UBattleComponent::ShouldTriggerTutorialFlee() const
 		return false;
 	}
 	return TutorialDirector->ShouldTriggerFlee(
-		RoundNumber, BossEnemy->CurrentHealth, BossEnemy->GetMaxHealth(), GetRunAwayHPThreshold());
+		RoundNumber, BossEnemy->CurrentHealth, BossEnemy->GetMaxHealth());
 }
 
 // ==================== 内部流程（Task 6/7/8 补全） ====================
@@ -377,10 +393,19 @@ void UBattleComponent::HandleIntroFinished(AActor* FinishedEnemy)
 
 void UBattleComponent::EnterBattle()
 {
+	ApplyTutorialConfig();
+	ApplySettlementConfig();
 	PositionBattleActors();
-	// 先制攻击效果：开场拥有一层蓄力（默认敌方先制 → 敌方 1 层、我方 0 层）
-	PlayerChargeStacks = bEnemyFirstStrike ? 0 : 1;
-	EnemyChargeStacks = bEnemyFirstStrike ? 1 : 0;
+	// 先制攻击效果：开场拥有一层蓄力（默认敌方先制 → 敌方 1 层、我方 0 层）。
+	// 序章教学战例外：玩家先制（玩家 1 层、敌方 0 层）——仅本场局部生效，
+	// 不得改写 bEnemyFirstStrike 持久属性（否则教学战后所有 Boss 战都会变成玩家先制）。
+	const bool bEnemyFirstStrikeSide = IsTutorialBattle() ? !bTutorialPlayerFirstStrike : bEnemyFirstStrike;
+	if (IsTutorialBattle())
+	{
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::EnterBattle - 序章教学战：玩家先制（玩家 1 层 / 敌方 0 层）"));
+	}
+	PlayerChargeStacks = bEnemyFirstStrikeSide ? 0 : 1;
+	EnemyChargeStacks = bEnemyFirstStrikeSide ? 1 : 0;
 	LockPlayer();
 	AddCombatMapping();
 	SetupCombatInput();
@@ -417,6 +442,42 @@ void UBattleComponent::EnterBattle()
 		}
 	}
 	StartNewRound();
+}
+
+void UBattleComponent::ApplySettlementConfig()
+{
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	const FSettlementConfigRow* Row = Subsystem ? Subsystem->GetSettlementConfigRow() : nullptr;
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ApplySettlementConfig - 结算配置不可用，使用结构体默认值"));
+	}
+	const FSettlementConfigRow Defaults;
+	const FSettlementConfigRow& S = Row ? *Row : Defaults;
+
+	DeathSequenceFreezeDelay = S.FreezeDelay;
+	DeathSequenceCameraDuration = S.CameraDuration;
+	DeathSequenceHoldDuration = S.HoldDuration;
+	DeathCameraYawOffset = S.CameraYawOffset;
+	DeathCameraPitchOffset = S.CameraPitchOffset;
+}
+
+void UBattleComponent::ApplyTutorialConfig()
+{
+	UCombatFormulaSubsystem* Subsystem = GetCombatSubsystem();
+	const FTutorialConfigRow* Row = Subsystem ? Subsystem->GetTutorialConfigRow() : nullptr;
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ApplyTutorialConfig - 教学配置不可用，使用结构体默认值"));
+	}
+	const FTutorialConfigRow Defaults;
+	const FTutorialConfigRow& T = Row ? *Row : Defaults;
+	TutorialEnemyID = T.TutorialEnemyID;
+	bTutorialPlayerFirstStrike = T.bPlayerFirstStrike;
+	TutorialLockHP = T.LockHP;
+	TutorialClashTimeDilation = T.ClashTimeDilation;
+	TutorialTimeSlowEarlyTime = T.TimeSlowEarlyTime;
+	TutorialFleeSequence = T.FleeSequence;
 }
 
 void UBattleComponent::StartNewRound()
@@ -796,13 +857,22 @@ void UBattleComponent::ApplyDamageTo(ABaseCharacter* Target, float Amount, AActo
 	// 教学敌人锁血 1：必逃设计，避免魔法师在逃跑剧情前被击杀
 	if (IsTutorialBattle() && Target == BossEnemy.Get() && Target->IsDead())
 	{
-		Target->CurrentHealth = 1.0f;
-		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ApplyDamageTo - 教学敌人锁血 1（保证必逃）"));
+		Target->CurrentHealth = TutorialLockHP;
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ApplyDamageTo - 教学敌人锁血 %.1f（保证必逃）"), TutorialLockHP);
+	}
+
+	// 教学必逃：敌方血量到达逃跑线后立即进入结算链路（不再等回合结束/教学点完成）
+	if (IsTutorialBattle() && Target == BossEnemy.Get() && !bTutorialFleeTriggered
+		&& ShouldTriggerTutorialFlee())
+	{
+		bTutorialFleeTriggered = true;
+		StartDeathSequence(true, true);
+		return;
 	}
 
 	if (Target->IsDead())
 	{
-		FinishBattle(Target == BossEnemy.Get());
+		StartDeathSequence(Target == BossEnemy.Get());
 	}
 }
 
@@ -848,7 +918,8 @@ void UBattleComponent::EndTurnAndAdvance()
 	if (ShouldTriggerTutorialFlee())
 	{
 		bTutorialFleeTriggered = true;
-		FinishBattle(true, true);
+		// 教学战结算与普通战一致：同样走结算链路（延迟 → 冻结 → 镜头转动 → 结算界面）
+		StartDeathSequence(true, true);
 		return;
 	}
 
@@ -959,9 +1030,15 @@ void UBattleComponent::StartClash(EClashType ClashType)
 
 	const float BlockWindow = GetBlockWindow();
 	const float DodgeWindow = GetDodgeWindow();
-	// 慢放起点 = 两个窗口中较晚打开的那个（min）：慢放一出现，格挡/闪避窗口均已开放，
-	// 立即点击按原 Elapsed 窗口判定即为成功，无需修改输入逻辑
-	const float OpenDelay = FMath::Max(0.0f, ClashHitTime - FMath::Min(BlockWindow, DodgeWindow));
+	const float WindowLead = FMath::Min(BlockWindow, DodgeWindow);
+	// 普通战斗：慢放起点 = 两个窗口中较晚打开的那个（min）——慢放一出现，格挡/闪避窗口均已开放，
+	// 立即点击按原 Elapsed 窗口判定即为成功。
+	// 教学战：时缓提早时间 = 慢放比命中点提前开始的时间，参数直接生效；
+	// 值 ≤ min(格挡窗, 闪避窗) 时慢放出现时两个输入窗口均已开放，立即点击仍按原判定成功
+	const float SlowLead = IsTutorialBattle()
+		? FMath::Max(0.0f, TutorialTimeSlowEarlyTime)
+		: WindowLead;
+	const float OpenDelay = FMath::Max(0.0f, ClashHitTime - SlowLead);
 
 	GetWorld()->GetTimerManager().SetTimer(ClashOpenTimer, this, &UBattleComponent::OpenClashWindow, OpenDelay, false);
 	GetWorld()->GetTimerManager().SetTimer(ClashImpactTimer, this, &UBattleComponent::OnClashImpact, ClashHitTime, false);
@@ -1010,6 +1087,7 @@ void UBattleComponent::ResolveClash(EClashResult Result)
 	}
 	bClashResolved = true;
 	ClearClashTimers();
+	RestoreTimeDilation();
 	SetPlayerClashReady(false);
 
 	float Incoming = PendingIncomingDamage;
@@ -1120,7 +1198,6 @@ void UBattleComponent::ClearClashTimers()
 		GetWorld()->GetTimerManager().ClearTimer(ClashImpactTimer);
 	}
 	bClashWindowOpen = false;
-	RestoreTimeDilation();
 }
 
 void UBattleComponent::OnBlockPressed()
@@ -1484,34 +1561,61 @@ void UBattleComponent::HideHUD()
 	}
 }
 
-void UBattleComponent::ShowResultHUD(const FText& Text)
+bool UBattleComponent::ShowResultHUD(const FText& Text, bool bVictory, const FText& ItemRewards, const FText& EquipmentRewards)
 {
 	if (ResultHUD.IsValid())
 	{
-		ResultHUD->ShowResult(Text);
-		return;
+		if (bVictory)
+		{
+			ResultHUD->ShowVictoryResult(Text, ItemRewards, EquipmentRewards);
+		}
+		else
+		{
+			ResultHUD->ShowResult(Text);
+		}
+		return true;
 	}
-	if (!BattleResultHUDClass || !GetWorld())
+	if (!GetWorld())
+	{
+		return false;
+	}
+	if (!BattleResultHUDClass)
+	{
+		// 资产可能在编辑器启动后才创建：构造期 FClassFinder 找不到时，运行时再尝试加载一次
+		BattleResultHUDClass = LoadClass<UBattleResultHUDWidget>(nullptr, TEXT("/Game/UI/HUD/WBP_BattleResult"));
+	}
+	if (!BattleResultHUDClass)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ShowResultHUD - 未配置 WBP_BattleResult"));
-		return;
+		return false;
 	}
 
 	ResultHUD = CreateWidget<UBattleResultHUDWidget>(GetWorld(), BattleResultHUDClass);
 	if (!ResultHUD.IsValid())
 	{
 		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::ShowResultHUD - 创建 WBP_BattleResult 失败"));
-		return;
+		return false;
 	}
 
 	ResultHUD->AddToViewport(20);
-	ResultHUD->ShowResult(Text);
+	ResultHUD->OnContinueClicked.AddDynamic(this, &UBattleComponent::HandleResultContinue);
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::ShowResultHUD - 显示结算界面 %s"), *ResultHUD->GetClass()->GetName());
+	if (bVictory)
+	{
+		ResultHUD->ShowVictoryResult(Text, ItemRewards, EquipmentRewards);
+	}
+	else
+	{
+		ResultHUD->ShowResult(Text);
+	}
+	return true;
 }
 
 void UBattleComponent::HideResultHUD()
 {
 	if (ResultHUD.IsValid())
 	{
+		ResultHUD->OnContinueClicked.RemoveDynamic(this, &UBattleComponent::HandleResultContinue);
 		ResultHUD->RemoveFromParent();
 		ResultHUD.Reset();
 	}
@@ -1803,7 +1907,8 @@ void UBattleComponent::ApplyPendingHitNow(bool bPlayerAttacker)
 	if (Target && Amount > 0.0f)
 	{
 		ApplyDamageTo(Target, Amount, Causer);
-		if (!Target->IsDead() && !HitReaction.Montage.IsNull())
+		// 死亡也正常播放受击反应（Hurt）：结算链路先延迟 1s（策划可调）再冻结画面
+		if (!HitReaction.Montage.IsNull())
 		{
 			UAnimMontage* HitMontage = HitReaction.Montage.LoadSynchronous();
 
@@ -1984,7 +2089,9 @@ void UBattleComponent::PlayResolutionAnimations(const FTurnResolution& Resolutio
 	}
 	if (EnemyAction == EBattleAction::RedDefense && PlayerAction == EBattleAction::BlueAttack)
 	{
-		RegisterBlueVsRedHit(true, Resolution.PlayerDamageTaken, Resolution.EnemyDamageTaken <= 0.0f);
+		// IncomingAmount = 蓝攻打中敌方（防御方）的伤害：被克制时 EnemyDamageTaken 为 0；
+		// 传 PlayerDamageTaken（玩家将吃的金反击伤害）会导致敌方先吃到反击数值的伤害。
+		RegisterBlueVsRedHit(true, Resolution.EnemyDamageTaken, Resolution.EnemyDamageTaken <= 0.0f);
 		return;
 	}
 
@@ -2445,18 +2552,107 @@ void UBattleComponent::OnActionMontageEnded(UAnimMontage* Montage, bool bInterru
 	TryAdvanceTurnIfGateDone();
 }
 
-void UBattleComponent::PlayDeathAnimations(bool bPlayerWon)
+void UBattleComponent::StartDeathSequence(bool bPlayerWon, bool bFlee)
 {
-	if (const FCombatAnimRow* LoserRow = GetCombatAnimRow(!bPlayerWon))
+	if (bDeathSequenceActive || Phase == EBattlePhase::Ended)
 	{
-		ABaseCharacter* Loser = bPlayerWon ? Cast<ABaseCharacter>(BossEnemy.Get()) : Cast<ABaseCharacter>(PlayerRole.Get());
-		PlayCombatAnim(Loser, LoserRow->Death);
+		return;
 	}
-	if (const FCombatAnimRow* WinnerRow = GetCombatAnimRow(bPlayerWon))
+
+	// 死亡即进入结算链路：先收掉战斗输入与碰撞定时器，再冻结画面
+	SetPhase(EBattlePhase::Ended);
+	ClearClashTimers();
+	UnbindCombatInput();
+	RemoveCombatMapping();
+
+	bDeathSequencePlayerWon = bPlayerWon;
+	bDeathSequenceActive = true;
+	bDeathSequenceFrozen = false;
+	DeathSequenceElapsed = 0.0f;
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
-		ABaseCharacter* Winner = bPlayerWon ? Cast<ABaseCharacter>(PlayerRole.Get()) : Cast<ABaseCharacter>(BossEnemy.Get());
-		PlayCombatAnim(Winner, WinnerRow->Victory);
+		DeathStartControlRotation = PC->GetControlRotation();
 	}
+	if (PlayerRole.IsValid() && PlayerRole->SpringArm)
+	{
+		// 世界时间冻结期间旋转滞后不会推进，临时关闭滞后，保证镜头转动立即生效
+		bDeathSequenceCameraLagWasEnabled = PlayerRole->SpringArm->bEnableCameraRotationLag;
+		PlayerRole->SpringArm->bEnableCameraRotationLag = false;
+	}
+
+	// 先恢复可能存在的碰撞慢放；冻结延迟到 FreezeDelay 之后（延迟阶段世界时间正常，Hurt 正常播放）
+	RestoreTimeDilation();
+	SetComponentTickEnabled(true);
+	OnBattleStateChanged.Broadcast();
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartDeathSequence - %s，结算链路开始（延迟 %.2fs → 冻结并镜头转动 %.2fs → 停留 %.2fs）"),
+		bFlee ? TEXT("教学逃跑") : (bPlayerWon ? TEXT("敌方死亡") : TEXT("玩家死亡")),
+		DeathSequenceFreezeDelay, DeathSequenceCameraDuration, DeathSequenceHoldDuration);
+}
+
+void UBattleComponent::TickDeathSequence()
+{
+	// 世界时间已冻结：用真实帧时间推进结算链路，避免计时器/DeltaTime 为 0 卡死
+	DeathSequenceElapsed += FApp::GetDeltaTime();
+
+	// 延迟阶段（HP 清空后 FreezeDelay 秒内）：世界时间正常，受击方正常播放 Hurt；到点后冻结画面
+	if (!bDeathSequenceFrozen)
+	{
+		if (DeathSequenceElapsed < DeathSequenceFreezeDelay)
+		{
+			return;
+		}
+		bDeathSequenceFrozen = true;
+		if (UWorld* World = GetWorld())
+		{
+			if (AWorldSettings* Settings = World->GetWorldSettings())
+			{
+				Settings->SetTimeDilation(0.0f);
+				OriginalTimeDilation = 1.0f;
+				bTimeDilationApplied = true;
+			}
+		}
+		UE_LOG(LogTemp, Log, TEXT("UBattleComponent::TickDeathSequence - 画面冻结"));
+	}
+
+	// 冻结后立即按平滑曲线转动到目标角度（FreezeDuration 已删除，不再额外停顿）
+	float CameraAlpha = 0.0f;
+	if (DeathSequenceElapsed >= DeathSequenceFreezeDelay && DeathSequenceCameraDuration > 0.0f)
+	{
+		CameraAlpha = FMath::Clamp(
+			(DeathSequenceElapsed - DeathSequenceFreezeDelay) / DeathSequenceCameraDuration,
+			0.0f, 1.0f);
+		CameraAlpha = FMath::InterpEaseInOut(0.0f, 1.0f, CameraAlpha, 2.0f);
+	}
+	if (CameraAlpha > 0.0f)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			const FRotator TargetRotation = DeathStartControlRotation
+				+ FRotator(DeathCameraPitchOffset * CameraAlpha, DeathCameraYawOffset * CameraAlpha, 0.0f);
+			PC->SetControlRotation(TargetRotation);
+		}
+	}
+
+	const float TotalDuration = DeathSequenceFreezeDelay + DeathSequenceCameraDuration + DeathSequenceHoldDuration;
+	if (DeathSequenceElapsed >= TotalDuration)
+	{
+		EndDeathSequence();
+	}
+}
+
+void UBattleComponent::EndDeathSequence()
+{
+	bDeathSequenceActive = false;
+	bDeathSequenceFrozen = false;
+	if (PlayerRole.IsValid() && PlayerRole->SpringArm)
+	{
+		PlayerRole->SpringArm->bEnableCameraRotationLag = bDeathSequenceCameraLagWasEnabled;
+	}
+	if (!bHitStopActive)
+	{
+		SetComponentTickEnabled(false);
+	}
+	FinishBattle(bDeathSequencePlayerWon);
 }
 
 void UBattleComponent::SheathePlayerWeapon()
@@ -2485,19 +2681,10 @@ void UBattleComponent::SheathePlayerWeapon()
 	}
 }
 
-void UBattleComponent::FinishBattle(bool bPlayerWon, bool bFlee)
+void UBattleComponent::FinishBattle(bool bPlayerWon)
 {
-	if (Phase == EBattlePhase::Ended)
-	{
-		return;
-	}
-
 	SetPhase(EBattlePhase::Ended);
 	ClearClashTimers();
-	if (!bFlee)
-	{
-		PlayDeathAnimations(bPlayerWon);
-	}
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(EntryDelayTimer);
@@ -2506,22 +2693,46 @@ void UBattleComponent::FinishBattle(bool bPlayerWon, bool bFlee)
 	}
 	UnbindCombatInput();
 	RemoveCombatMapping();
-	FText ResultText = bPlayerWon ? FText::FromString(TEXT("战斗胜利")) : FText::FromString(TEXT("战斗失败"));
-	if (bFlee)
-	{
-		ResultText = FText::FromString(TEXT("敌方逃跑了"));
-	}
-	ShowResultHUD(ResultText);
+
+	// 结算横幅只有胜利/失败两态文字（教学逃跑归为胜利）
+	const FText ResultText = bPlayerWon
+		? FText::FromString(TEXT("战斗胜利"))
+		: FText::FromString(TEXT("战斗失败"));
+
+	// 胜利结算：道具栏（烟+道具）与装备栏两个栏位；
+	// v1 暂无掉落/奖励系统，先留空占位，后续由掉落系统填充
+	const FText ItemRewards = FText::GetEmpty();
+	const FText EquipmentRewards = FText::GetEmpty();
+
+	bResultContinueIsVictory = bPlayerWon;
+	const bool bResultShown = ShowResultHUD(ResultText, bPlayerWon, ItemRewards, EquipmentRewards);
 	OnBattleStateChanged.Broadcast();
 
-	const float Delay = (bPlayerWon || bFlee) ? 2.0f : DefeatRestartDelay;
-	if (bPlayerWon || bFlee)
+	// 正常流程：结算界面等待玩家点击屏幕继续（右下角"继续前进"提示）；
+	// 仅在 WBP_BattleResult 未配置/创建失败时兜底自动收尾，避免软锁
+	if (!bResultShown)
 	{
-		GetWorld()->GetTimerManager().SetTimer(EndDelayTimer, this, &UBattleComponent::HandleVictoryCleanup, Delay, false);
+		// 死亡结算链路下画面已冻结：兜底计时器依赖世界时间，先恢复时间流速
+		RestoreTimeDilation();
+		const float FallbackDelay = bPlayerWon ? 2.0f : DefeatRestartDelay;
+		GetWorld()->GetTimerManager().SetTimer(
+			EndDelayTimer,
+			this,
+			bPlayerWon ? &UBattleComponent::HandleVictoryCleanup : &UBattleComponent::HandleDefeatRestart,
+			FallbackDelay,
+			false);
+	}
+}
+
+void UBattleComponent::HandleResultContinue()
+{
+	if (bResultContinueIsVictory)
+	{
+		HandleVictoryCleanup();
 	}
 	else
 	{
-		GetWorld()->GetTimerManager().SetTimer(EndDelayTimer, this, &UBattleComponent::HandleDefeatRestart, Delay, false);
+		HandleDefeatRestart();
 	}
 }
 
@@ -2529,12 +2740,157 @@ void UBattleComponent::HandleVictoryCleanup()
 {
 	bBossDefeated = true;
 	HideResultHUD();
+	// 结算完成（点击继续）后才取消画面冻结
+	RestoreTimeDilation();
+	// 教学战：结算后播放逃跑 Level Sequence（DT_TutorialConfig.FleeSequence，暂空 = 直接收尾）
+	if (bTutorialFleeTriggered && !TutorialFleeSequence.IsNull())
+	{
+		StartTutorialFleeSequence();
+		return;
+	}
+	FinishVictoryCleanup();
+}
+
+void UBattleComponent::FinishVictoryCleanup()
+{
 	SheathePlayerWeapon();
 	HideHUD();
 	RestoreExplorationState();
 	UnlockPlayer();
+	// 战胜敌人后清除敌人实例（教学逃跑的敌人同样销毁）
+	DestroyDefeatedEnemy();
 	SetPhase(EBattlePhase::Idle);
 	OnBattleStateChanged.Broadcast();
+}
+
+void UBattleComponent::DestroyDefeatedEnemy()
+{
+	if (!BossEnemy.IsValid())
+	{
+		return;
+	}
+	AEnemy* Enemy = BossEnemy.Get();
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::DestroyDefeatedEnemy - 销毁敌人 %s"), *GetNameSafe(Enemy));
+	BossEnemy.Reset();
+	Enemy->Destroy();
+}
+
+void UBattleComponent::StartTutorialFleeSequence()
+{
+	if (bTutorialFleeSequencePlaying || !GetWorld())
+	{
+		FinishVictoryCleanup();
+		return;
+	}
+
+	ULevelSequence* Sequence = TutorialFleeSequence.LoadSynchronous();
+	if (!Sequence)
+	{
+		FinishVictoryCleanup();
+		return;
+	}
+
+	// 播放机制与 Boss 开场动画一致：创建 Level Sequence Player + 动态 Actor + 镜头混合 + 跳过输入
+	FMovieSceneSequencePlaybackSettings Settings;
+	Settings.bPauseAtEnd = true;
+	Settings.bHidePlayer = false;
+	Settings.bHideHud = false;
+	Settings.bDisableMovementInput = false;
+	Settings.bDisableLookAtInput = false;
+
+	ALevelSequenceActor* TempActor = nullptr;
+	TutorialFleePlayer = ULevelSequencePlayer::CreateLevelSequencePlayer(
+		GetWorld(), Sequence, Settings, TempActor);
+	TutorialFleeActor = TempActor;
+	if (!TutorialFleePlayer)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UBattleComponent::StartTutorialFleeSequence - 创建 LevelSequencePlayer 失败"));
+		StopTutorialFleeSequence();
+		FinishVictoryCleanup();
+		return;
+	}
+
+	TutorialFleePlayer->OnFinished.AddDynamic(this, &UBattleComponent::OnTutorialFleeSequenceFinished);
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		TutorialFleePreviousViewTarget = PC->GetViewTarget();
+		PC->SetViewTargetWithBlend(TutorialFleeActor, 0.5f, EViewTargetBlendFunction::VTBlend_Cubic);
+	}
+	if (PlayerRole.IsValid())
+	{
+		PlayerRole->SetCinematicLocked(true);
+	}
+	BindTutorialFleeSkipInput();
+	bTutorialFleeSequencePlaying = true;
+	TutorialFleePlayer->Play();
+	OnTutorialFleeSequenceStateChanged.Broadcast(true);
+	UE_LOG(LogTemp, Log, TEXT("UBattleComponent::StartTutorialFleeSequence - 教学敌人播放逃跑序列 %s"), *Sequence->GetName());
+}
+
+void UBattleComponent::StopTutorialFleeSequence()
+{
+	if (TutorialFleePlayer)
+	{
+		TutorialFleePlayer->Stop();
+	}
+	if (TutorialFleeActor)
+	{
+		TutorialFleeActor->Destroy();
+	}
+	TutorialFleePlayer = nullptr;
+	TutorialFleeActor = nullptr;
+	bTutorialFleeSequencePlaying = false;
+	UnbindTutorialFleeSkipInput();
+	OnTutorialFleeSequenceStateChanged.Broadcast(false);
+
+	if (APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr)
+	{
+		if (AActor* Prev = TutorialFleePreviousViewTarget.Get())
+		{
+			PC->SetViewTargetWithBlend(Prev, 0.3f, EViewTargetBlendFunction::VTBlend_EaseOut);
+		}
+	}
+	TutorialFleePreviousViewTarget = nullptr;
+}
+
+void UBattleComponent::OnTutorialFleeSequenceFinished()
+{
+	StopTutorialFleeSequence();
+	FinishVictoryCleanup();
+}
+
+void UBattleComponent::OnTutorialFleeSkipPressed()
+{
+	if (!bTutorialFleeSequencePlaying)
+	{
+		return;
+	}
+	StopTutorialFleeSequence();
+	FinishVictoryCleanup();
+}
+
+void UBattleComponent::BindTutorialFleeSkipInput()
+{
+	if (!TutorialFleeSkipAction || !PlayerRole.IsValid() || !PlayerRole->InputComponent)
+	{
+		return;
+	}
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerRole->InputComponent))
+	{
+		EIC->BindAction(TutorialFleeSkipAction, ETriggerEvent::Triggered, this, &UBattleComponent::OnTutorialFleeSkipPressed);
+	}
+}
+
+void UBattleComponent::UnbindTutorialFleeSkipInput()
+{
+	if (!PlayerRole.IsValid() || !PlayerRole->InputComponent)
+	{
+		return;
+	}
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerRole->InputComponent))
+	{
+		EIC->ClearBindingsForObject(this);
+	}
 }
 
 void UBattleComponent::HandleDefeatRestart()
@@ -2562,6 +2918,10 @@ void UBattleComponent::HandleDefeatRestart()
 
 void UBattleComponent::ResetForRetry()
 {
+	StopTutorialFleeSequence();
+	bResultContinueIsVictory = false;
+	bDeathSequenceActive = false;
+	bDeathSequenceFrozen = false;
 	if (PlayerRole.IsValid())
 	{
 		PlayerRole->CurrentHealth = PlayerRole->GetMaxHealth();
@@ -2700,20 +3060,10 @@ float UBattleComponent::GetBlockFailLockout() const
 	return P.BlockFailLockoutSeconds;
 }
 
-float UBattleComponent::GetRunAwayHPThreshold() const
-{
-	const FCombatParamsRow Defaults;
-	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
-	const FCombatParamsRow& P = Params ? *Params : Defaults;
-	return P.RunAwayHPThreshold;
-}
-
 float UBattleComponent::GetClashTimeDilation() const
 {
-	const FCombatParamsRow Defaults;
-	const FCombatParamsRow* Params = GetCombatSubsystem() ? GetCombatSubsystem()->GetCombatParams() : nullptr;
-	const FCombatParamsRow& P = Params ? *Params : Defaults;
-	return P.ClashTimeDilation;
+	// 教学战专用配置（DT_TutorialConfig）
+	return TutorialClashTimeDilation;
 }
 
 void UBattleComponent::ApplyClashTimeDilation()

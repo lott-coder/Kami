@@ -6,6 +6,9 @@
 #include "DataTable/CombatParamsTable.h"
 #include "DataTable/CombatStageTable.h"
 #include "DataTable/CombatAnimConfigTable.h"
+#include "DataTable/SettlementConfigTable.h"
+#include "DataTable/TutorialConfigTable.h"
+#include "DataTable/MusicConfigTable.h"
 #include "DataTable/EnemyConfigTable.h"
 #include "DataTable/MaskConfigTable.h"
 #include "DataTable/WeaponConfigTable.h"
@@ -60,6 +63,98 @@ const FCombatAnimRow* UCombatFormulaSubsystem::GetCombatAnimRow(FName EntityID) 
 {
 	UDataTable* Table = GetTable(CombatAnimTable, TEXT("/Game/DataTable/DT_CombatAnimConfig"));
 	return Table ? Table->FindRow<FCombatAnimRow>(EntityID, TEXT("CombatFormula::CombatAnim")) : nullptr;
+}
+
+const FSettlementConfigRow* UCombatFormulaSubsystem::GetSettlementConfigRow() const
+{
+	UDataTable* Table = GetTable(SettlementTable, TEXT("/Game/DataTable/DT_SettlementConfig"));
+	if (!Table)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UCombatFormulaSubsystem::GetSettlementConfigRow - 未找到 DT_SettlementConfig，结算参数回退默认值"));
+		return nullptr;
+	}
+	if (const FSettlementConfigRow* Row = Table->FindRow<FSettlementConfigRow>(
+		FName(TEXT("Default")), TEXT("CombatFormula::Settlement"), false))
+	{
+		return Row;
+	}
+	// 兼容行名不是 "Default"（如编辑器新建时默认 NewRow）：取第一行，避免策划调参静默失效
+	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+	{
+		UE_LOG(LogTemp, Log, TEXT("UCombatFormulaSubsystem::GetSettlementConfigRow - 未找到 Default 行，使用第一行 %s"), *Pair.Key.ToString());
+		return reinterpret_cast<const FSettlementConfigRow*>(Pair.Value);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("UCombatFormulaSubsystem::GetSettlementConfigRow - DT_SettlementConfig 没有任何数据行，结算参数回退默认值"));
+	return nullptr;
+}
+
+const FTutorialConfigRow* UCombatFormulaSubsystem::GetTutorialConfigRow() const
+{
+	UDataTable* Table = GetTable(TutorialTable, TEXT("/Game/DataTable/DT_TutorialConfig"));
+	if (!Table)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UCombatFormulaSubsystem::GetTutorialConfigRow - 未找到 DT_TutorialConfig，教学配置回退默认值"));
+		return nullptr;
+	}
+	if (const FTutorialConfigRow* Row = Table->FindRow<FTutorialConfigRow>(
+		FName(TEXT("Default")), TEXT("CombatFormula::Tutorial"), false))
+	{
+		return Row;
+	}
+	// 兼容行名不是 "Default"（如编辑器新建时默认 NewRow）：取第一行
+	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+	{
+		UE_LOG(LogTemp, Log, TEXT("UCombatFormulaSubsystem::GetTutorialConfigRow - 未找到 Default 行，使用第一行 %s"), *Pair.Key.ToString());
+		return reinterpret_cast<const FTutorialConfigRow*>(Pair.Value);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("UCombatFormulaSubsystem::GetTutorialConfigRow - DT_TutorialConfig 没有任何数据行，教学配置回退默认值"));
+	return nullptr;
+}
+
+const FBGMConfigRow* UCombatFormulaSubsystem::GetAreaBGMConfigRow(FName AreaID) const
+{
+	UDataTable* Table = GetTable(AreaBGMTable, TEXT("/Game/DataTable/DT_AreaBGMConfig"));
+	if (!Table)
+	{
+		return nullptr;
+	}
+	if (const FBGMConfigRow* Row = Table->FindRow<FBGMConfigRow>(AreaID, TEXT("CombatFormula::AreaBGM"), false))
+	{
+		return Row;
+	}
+	if (const FBGMConfigRow* Row = Table->FindRow<FBGMConfigRow>(
+		FName(TEXT("Default")), TEXT("CombatFormula::AreaBGM"), false))
+	{
+		return Row;
+	}
+	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+	{
+		return reinterpret_cast<const FBGMConfigRow*>(Pair.Value);
+	}
+	return nullptr;
+}
+
+const FBGMConfigRow* UCombatFormulaSubsystem::GetEnemyBGMConfigRow(FName EnemyID) const
+{
+	UDataTable* Table = GetTable(EnemyBGMTable, TEXT("/Game/DataTable/DT_EnemyBGMConfig"));
+	if (!Table)
+	{
+		return nullptr;
+	}
+	if (const FBGMConfigRow* Row = Table->FindRow<FBGMConfigRow>(EnemyID, TEXT("CombatFormula::EnemyBGM"), false))
+	{
+		return Row;
+	}
+	if (const FBGMConfigRow* Row = Table->FindRow<FBGMConfigRow>(
+		FName(TEXT("Default")), TEXT("CombatFormula::EnemyBGM"), false))
+	{
+		return Row;
+	}
+	for (const TPair<FName, uint8*>& Pair : Table->GetRowMap())
+	{
+		return reinterpret_cast<const FBGMConfigRow*>(Pair.Value);
+	}
+	return nullptr;
 }
 
 TMap<FName, float> UCombatFormulaSubsystem::BuildCharacterAttributes(FName CharacterID) const

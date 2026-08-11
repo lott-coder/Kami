@@ -80,11 +80,11 @@ COMBATPARAMS_HEADERS = [
     "WhiteAttackDamageMin", "WhiteAttackDamageMax", "BlueAttackDamageMin_0Charge",
     "BlueAttackDamageMax_0Charge", "ChargeDamageMultiplier_1", "ChargeDamageMultiplier_2",
     "MaxChargeStacks", "WhiteInterruptChargeDamageScale", "BlockWindowSeconds",
-    "DodgeWindowSeconds", "DodgeFailDamageScale", "FirstStrikeDisableChargeTurns",
+    "DodgeWindowSeconds", "DodgeFailDamageScale",
     "ClashInputCooldown", "RedDefenseLeadTime", "HitStopDuration",
-    "RunAwayHPThreshold", "PlayerDefaultHP", "Movement_BackwardSpeedScale",
+    "PlayerDefaultHP", "Movement_BackwardSpeedScale",
     "CritDamageMultiplier", "DodgeBuffDamageScale", "DodgeBuffTurns",
-    "FirstStrikeDamageScale", "GoldAttackDamageMin", "GoldAttackDamageMax",
+    "GoldAttackDamageMin", "GoldAttackDamageMax",
 ]
 combat_params = [
     ("Default", {
@@ -93,12 +93,12 @@ combat_params = [
         "ChargeDamageMultiplier_1": 1.5, "ChargeDamageMultiplier_2": 2.25,
         "MaxChargeStacks": 2, "WhiteInterruptChargeDamageScale": 0.3,
         "BlockWindowSeconds": 0.25, "DodgeWindowSeconds": 0.35,
-        "DodgeFailDamageScale": 1.2, "FirstStrikeDisableChargeTurns": 1,
+        "DodgeFailDamageScale": 1.2,
         "ClashInputCooldown": 0.15, "RedDefenseLeadTime": 0.3, "HitStopDuration": 0.12,
-        "RunAwayHPThreshold": 0.3, "PlayerDefaultHP": 100.0,
+        "PlayerDefaultHP": 100.0,
         "Movement_BackwardSpeedScale": 0.6,
         "CritDamageMultiplier": 1.5, "DodgeBuffDamageScale": 1.2, "DodgeBuffTurns": 1,
-        "FirstStrikeDamageScale": 0.3, "GoldAttackDamageMin": 25.0, "GoldAttackDamageMax": 35.0,
+        "GoldAttackDamageMin": 25.0, "GoldAttackDamageMax": 35.0,
     }),
 ]
 
@@ -570,8 +570,8 @@ economy = [
 # ---------------------------------------------------------------------------
 ANIM_COLUMNS = [
     "Entry", "Sheathe", "RedDefense", "GoldCounter", "BlueAttack", "WhiteAttack",
-    "Charge", "ChargeInterrupted", "BlockedReaction", "Hurt", "BlockSuccess", "BlockFail",
-    "DodgeSuccess", "DodgeFail", "Death", "Victory", "Skill",
+    "Charge", "ChargeInterrupted", "BlockedReaction", "Hurt", "Block",
+    "DodgeSuccess", "DodgeFail", "Skill",
     "ClashReady", "ClashAttackBlue", "ClashAttackWhite",
 ]
 
@@ -622,6 +622,88 @@ for row in combat_anims:
     row[1]["ClashAttackWhiteSections"] = ""
 
 # ---------------------------------------------------------------------------
+# 14 - DT_SettlementConfig
+# ---------------------------------------------------------------------------
+SETTLEMENT_HEADERS = [
+    "FreezeDelay", "CameraDuration", "HoldDuration",
+    "CameraYawOffset", "CameraPitchOffset",
+]
+settlement_config = [
+    ("Default", {
+        "FreezeDelay": 1.0, "CameraDuration": 1.0,
+        "HoldDuration": 0.5, "CameraYawOffset": 15.0, "CameraPitchOffset": -3.0,
+    }),
+]
+
+# ---------------------------------------------------------------------------
+# 15 - DT_TutorialConfig
+# ---------------------------------------------------------------------------
+TUTORIAL_HEADERS = [
+    "TutorialEnemyID", "bPlayerFirstStrike", "LockHP", "RunAwayHPThreshold",
+    "RunAwayRoundCap", "ClashTimeDilation", "TimeSlowEarlyTime", "ChargeCapTriggerStack",
+    "ChargeCapMinRound", "ChargeResistTriggerStack", "bFirstWhiteAttackForcesClash",
+    "FleeSequence", "OpeningHint", "ChargeCapHint", "ChargeResistHint", "ClashHint", "ExtraTurnHint",
+]
+tutorial_config = [
+    ("Default", {
+        "TutorialEnemyID": "apprentice_cave",
+        "bPlayerFirstStrike": True,
+        "LockHP": 1.0,
+        "RunAwayHPThreshold": 0.3,
+        "RunAwayRoundCap": 15,
+        "ClashTimeDilation": 0.05,
+        "TimeSlowEarlyTime": 0.15,
+        "ChargeCapTriggerStack": 1,
+        "ChargeCapMinRound": 2,
+        "ChargeResistTriggerStack": 0,
+        "bFirstWhiteAttackForcesClash": True,
+        "FleeSequence": "",
+        "OpeningHint": "触发先制攻击在战斗开始时直接获得一层蓄力。\n\n蓄力层数最高两层。\n\n拥有蓄力层数可以使用蓄力攻击。\n\n蓄力攻击会打断敌方的普通攻击。\n\n普通攻击无视防御。\n\n防御可以抵挡并反击蓄力攻击",
+        "ChargeCapHint": "使用蓄力使蓄力层数到达上限。\n\n若敌方此时使用防御，则会自动对敌方使用蓄力攻击",
+        "ChargeResistHint": "使用蓄力使蓄力到达一层时，\n\n若敌方使用普通攻击，则我方减少受到伤害并获得额外回合",
+        "ClashHint": "双方使用相同的攻击触发对拼。\n\n在敌方攻击将要击中的时候点击E格挡/Shift闪避。\n\n格挡成功可以造成反击",
+        "ExtraTurnHint": "额外回合：只能选择蓝攻或蓄力！",
+    }),
+]
+
+# ---------------------------------------------------------------------------
+# 16 - DT_AreaBGMConfig（非战斗/探索 BGM，按区域行）
+# 17 - DT_EnemyBGMConfig（战斗 BGM，按敌人行）
+# ---------------------------------------------------------------------------
+BGM_HEADERS = [
+    "Music", "Volume", "bLoop", "FadeInTime", "FadeOutTime",
+]
+
+
+def _bgm_row():
+    return {
+        "Music": "", "Volume": 1.0, "bLoop": True,
+        "FadeInTime": 1.0, "FadeOutTime": 1.0,
+    }
+
+
+area_bgm = [
+    ("Default", _bgm_row()),
+    ("hole", _bgm_row()),
+    ("town", _bgm_row()),
+    ("market", _bgm_row()),
+    ("mansion", _bgm_row()),
+    ("border", _bgm_row()),
+    ("hell", _bgm_row()),
+]
+enemy_bgm = [
+    ("Default", _bgm_row()),
+    ("apprentice", _bgm_row()),
+    ("apprentice_cave", _bgm_row()),
+    ("adept", _bgm_row()),
+    ("commander", _bgm_row()),
+    ("border_guard", _bgm_row()),
+    ("demon", _bgm_row()),
+    ("satan", _bgm_row()),
+    ("friendly_creature", _bgm_row()),
+]
+
+# ---------------------------------------------------------------------------
 # 12 - DT_BattleStage
 # ---------------------------------------------------------------------------
 BATTLESTAGE_HEADERS = [
@@ -661,6 +743,10 @@ def main():
         ("DT_EconomyConfig", "EconomyConfigRow", ECONOMY_HEADERS, economy),
         ("DT_BattleStage", "CombatStageRow", BATTLESTAGE_HEADERS, battle_stage),
         ("DT_CombatAnimConfig", "CombatAnimRow", COMBATANIM_HEADERS, combat_anims),
+        ("DT_SettlementConfig", "SettlementConfigRow", SETTLEMENT_HEADERS, settlement_config),
+        ("DT_TutorialConfig", "TutorialConfigRow", TUTORIAL_HEADERS, tutorial_config),
+        ("DT_AreaBGMConfig", "BGMConfigRow", BGM_HEADERS, area_bgm),
+        ("DT_EnemyBGMConfig", "BGMConfigRow", BGM_HEADERS, enemy_bgm),
     ]
     for asset_name, struct_short, headers, rows in jobs:
         try:
